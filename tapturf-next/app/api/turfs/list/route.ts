@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
-import { pageOf, parseListParams } from "@/lib/turfList/query";
+import { needsTime, pageOf, parseListParams } from "@/lib/turfList/query";
+import { istTime } from "@/lib/turfList/facts";
 import { listInputs } from "@/lib/queries/turfList";
 import { getSportBands, listWithSportBands } from "@/lib/queries/sportBands";
 
 /**
- * GET /api/turfs/list?city&sport&q&sort&lat&lng&offset&limit[&v&t]: one
- * batch of the /turfs listing, as card rows plus the total, for "Show more"
- * and for a new search, sport or sort. Same rows and the same ranking as
+ * GET /api/turfs/list?city&ps&sport&q&f&price&surface&sort&lat&lng&ist&counts&offset&limit[&v&t]:
+ * one batch of the /turfs listing (and of a city page's, `ps` for a
+ * city+sport page), as card rows plus the total, for "Show more"
+ * and for a new search, sport, sort or Filters choice. Same rows and the same ranking as
  * the page's first cards (lib/turfList/query.ts), from the process's copy
  * of the list snapshot (lib/queries/turfs.ts getCardTurfs): a route handler
  * reads Next's data cache, so a cold instance loads the parts from there
@@ -30,6 +32,17 @@ import { getSportBands, listWithSportBands } from "@/lib/queries/sportBands";
  * would serve old rows to every page of the new version for up to 15
  * minutes. Nothing here forces a fresh read, so a made-up `v` costs no
  * database read either.
+ *
+ * Every batch is ranked with each turf's filter facts (the Filters sheet's
+ * toggles, price cap and surface; lib/queries/listFacts.ts), and a first
+ * batch asked with `counts=1` (the client asks only while the sheet is
+ * open) carries the sheet's counts. "Open now" and its count are worked out
+ * at `ist`, the client's India time rounded down to a quarter hour
+ * (lib/turfList/facts.ts), so one CDN entry serves everyone in that quarter
+ * and a list's later batches ask with its first batch's time; a batch with
+ * neither "Open now" nor counts has no time in its URL, and its entry is
+ * shared all day. A request that needs the time and does not send it gets
+ * the server's, kept a minute at most.
  */
 
 const HEADERS = {
@@ -45,19 +58,22 @@ const BEHIND_HEADERS = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" 
 export async function GET(req: Request) {
   const parsed = parseListParams(new URL(req.url).searchParams);
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400, headers: BAD_HEADERS });
-  const { query, offset, limit } = parsed.req;
+  const { offset, limit, counts } = parsed.req;
   const { seen } = parsed;
-  // A sport chip: each row carries its venue's sport bands, so the card shows
-  // (and the price sorts use) only that sport's price (lib/utils/cardSport.ts).
-  // Without a chip the rows, and the answer, are as before. Read alongside
-  // the rows; it never throws.
-  const bands = query.sport ? getSportBands() : null;
+  // The time "Open now" needs and the request did not name: the server's, and the answer kept a minute at most.
+  const ownTime = !parsed.req.query.ist && needsTime(parsed.req.query, offset, counts);
+  const query = ownTime ? { ...parsed.req.query, ist: istTime(new Date()) } : parsed.req.query;
+  // A sport chip or a sport page: each row carries its venue's sport bands,
+  // so the card shows (and the price sorts and cap use) only that sport's
+  // price (lib/utils/cardSport.ts). Without one the rows are as before.
+  // Read alongside the rows; it never throws.
+  const bands = query.sport || query.pageSport ? getSportBands() : null;
   try {
-    const { v, stale, turfs, trending } = await listInputs(query.city);
+    const { v, stale, turfs, trending, facts } = await listInputs(query.city, { facts: true });
     const rows = bands ? listWithSportBands(turfs, await bands) : turfs;
-    const page = pageOf(rows, query, trending, offset, limit, v);
+    const page = pageOf(rows, query, trending, offset, limit, v, facts, { counts });
     const behind = (seen.v != null && page.v < seen.v) || (seen.t != null && page.t !== seen.t);
-    return NextResponse.json(page, { headers: behind ? BEHIND_HEADERS : stale ? STALE_HEADERS : HEADERS });
+    return NextResponse.json(page, { headers: behind ? BEHIND_HEADERS : stale || ownTime ? STALE_HEADERS : HEADERS });
   } catch (e) {
     console.error("turfs/list: no rows to answer with", e instanceof Error ? e.message : e);
     return NextResponse.json({ error: "unavailable" }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "10" } });

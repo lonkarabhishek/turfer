@@ -6,13 +6,18 @@ import {
   MAX_LIMIT,
   NEAR_KM,
   exactNearest,
+  extrasKey,
+  extrasOf,
   normalizeQ,
   sportFromSlug,
   sportSlug,
+  withExtras,
+  type ListCounts,
   type ListFilters,
   type ListItem,
   type ListPage,
 } from "./query";
+import { istParam, istTime } from "./facts";
 
 /**
  * The /turfs listing's state in the browser, as pure functions
@@ -56,11 +61,28 @@ export type ListState = {
   end: boolean;
   /** Cards to show: FIRST_PAGE, then grown by nextBatch() per tap. */
   target: number;
+  /** The India time the first batch was ranked at (ListPage.ist): later batches of an "Open now" list ask with it. */
+  ist: string | null;
+  /** The Filters sheet's numbers for this list (its first batch from the route), or null (the server's own first cards). */
+  counts: ListCounts | null;
 };
 
-export function listKey(city: string | null, f: ListFilters, rounded: Coords | null): string {
+/**
+ * Which list this is. The first part is the scope: the city, then a
+ * sport page's sport after "/" and the Filters sheet's choices after ";"
+ * (extrasKey), each only when there is one, so a plain list's key is the
+ * one it always was.
+ */
+export function listKey(city: string | null, f: ListFilters, rounded: Coords | null, pageSport: string | null = null): string {
   const sort = f.sort === "nearby" && !rounded ? "rating" : f.sort;
-  return [city ?? "", f.sport ? sportSlug(f.sport) : "", normalizeQ(f.q).toLowerCase(), sort, rounded ? `${rounded.lat.toFixed(2)},${rounded.lng.toFixed(2)}` : ""].join("|");
+  const extras = extrasKey(f);
+  const scope = `${city ?? ""}${pageSport ? `/${pageSport}` : ""}${extras ? `;${extras}` : ""}`;
+  return [scope, f.sport ? sportSlug(f.sport) : "", normalizeQ(f.q).toLowerCase(), sort, rounded ? `${rounded.lat.toFixed(2)},${rounded.lng.toFixed(2)}` : ""].join("|");
+}
+
+/** The India time for a first batch now, as the route's `ist` param. */
+export function istNow(now: Date = new Date()): string {
+  return istParam(istTime(now));
 }
 
 /**
@@ -91,7 +113,15 @@ export function nearbyFrom(key: string): Coords | null {
 
 export function startState(key: string, page: ListPage, target = FIRST_PAGE): ListState {
   const t = typeof page.t === "string" ? page.t : "";
-  return addBatch({ key, v: page.v, t, total: page.total, near: page.near, nearAt: null, items: [], next: 0, end: false, target }, page);
+  const ist = typeof page.ist === "string" ? page.ist : null;
+  const counts = page.counts && typeof page.counts === "object" ? page.counts : null;
+  return addBatch({ key, v: page.v, t, total: page.total, near: page.near, nearAt: null, items: [], next: 0, end: false, target, ist, counts }, page);
+}
+
+/** True when the list's key has "Open now" on: its answer depends on the time it was asked at. */
+export function isTimedKey(key: string): boolean {
+  const f = /;f=([^;|]*)/.exec(key.split("|")[0] ?? "");
+  return !!f && f[1].split(",").includes("open");
 }
 
 export function addBatch(s: ListState, page: ListPage): ListState {
@@ -212,15 +242,23 @@ export function fromSaved(raw: string | null, url: string, scope: string, now: n
   if (!st.items.every((i) => i && i.turf && typeof i.turf.id === "string" && typeof i.turf.name === "string")) return null;
   if (![st.v, st.total, st.next, st.target].every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0)) return null;
   if (!s.filters || typeof s.filters.q !== "string" || typeof s.filters.sort !== "string") return null;
-  return { ...s, state: { ...st, t: typeof st.t === "string" ? st.t : "", nearAt: null }, y: typeof s.y === "number" && Number.isFinite(s.y) ? s.y : 0 };
+  const ist = typeof st.ist === "string" ? st.ist : null;
+  // "Open now" as it was a quarter of an hour ago is not what is open now: fetched again.
+  if (isTimedKey(st.key) && ist !== istNow(new Date(now))) return null;
+  const filters = withExtras({ q: s.filters.q, sport: s.filters.sport ?? null, sort: s.filters.sort }, extrasOf(s.filters));
+  const counts = st.counts && typeof st.counts === "object" ? st.counts : null;
+  return { ...s, filters, state: { ...st, t: typeof st.t === "string" ? st.t : "", nearAt: null, ist, counts }, y: typeof s.y === "number" && Number.isFinite(s.y) ? s.y : 0 };
 }
 
 /**
  * Runs while the HTML is parsed, before the first paint: a URL with a
- * search, sport or sort (a shared link, /turfs?q=, Back) gets cards the
- * server could not render (the page is static), so the server's default
- * cards are dimmed (html[data-tt-list="wait"], globals.css) until the
- * listing has fetched the right ones and takes over. Gives up after 8 s,
- * so a page whose scripts never run is never left dimmed. ES5.
+ * search, sport, sort or Filters choice (a shared link, /turfs?q=, Back)
+ * gets cards the server could not render (the page is static), so the
+ * server's default cards are dimmed (html[data-tt-list="wait"],
+ * globals.css) until the listing has fetched the right ones and takes
+ * over. A Filters choice also holds the room its pills will take
+ * (html[data-tt-pills], #tt-pills), so the cards do not move down when
+ * they appear. Gives up after 8 s, so a page whose scripts never run is
+ * never left dimmed. ES5.
  */
-export const LIST_PREPAINT_JS = `(function(){try{var d=document.documentElement;if(/[?&](q|search|sport|sort)=[^&]/.test(location.search)){d.setAttribute("data-tt-list","wait");setTimeout(function(){d.removeAttribute("data-tt-list")},8000)}}catch(e){}})();`;
+export const LIST_PREPAINT_JS = `(function(){try{var d=document.documentElement,s=location.search;if(/[?&](q|search|sport|sort|f|price|surface)=[^&]/.test(s)){d.setAttribute("data-tt-list","wait");if(/[?&](f|price|surface)=[^&]/.test(s))d.setAttribute("data-tt-pills","");setTimeout(function(){d.removeAttribute("data-tt-list");d.removeAttribute("data-tt-pills")},8000)}}catch(e){}})();`;

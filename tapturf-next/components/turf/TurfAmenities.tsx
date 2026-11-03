@@ -26,6 +26,8 @@ export function TurfAmenities({ turf }: { turf: Turf }) {
   const amenities: { icon: React.ReactNode; label: string }[] = [];
 
   if (turf.is_covered) amenities.push({ icon: <Umbrella className="w-5 h-5" />, label: "Covered / netted" });
+  // The owner's own answer on myTapturf (turfs.roof): a roof over part of the ground.
+  else if (turf.roof === "partly") amenities.push({ icon: <Umbrella className="w-5 h-5" />, label: "Partly covered" });
   if (turf.has_floodlights) amenities.push({ icon: <Lightbulb className="w-5 h-5" />, label: "Floodlights" });
   if (turf.parking_available) amenities.push({ icon: <Car className="w-5 h-5" />, label: "Free parking on premises" });
   if (turf.washroom_available) amenities.push({ icon: <Bath className="w-5 h-5" />, label: "Washroom available" });

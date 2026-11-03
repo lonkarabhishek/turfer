@@ -12,6 +12,8 @@ import {
   firstBatch,
   fromSaved,
   isGeoKey,
+  isTimedKey,
+  istNow,
   listKey,
   nearCount,
   nearbyFrom,
@@ -72,6 +74,23 @@ test("show more: 10, then 10, 20, 40, 80, 80 more, one request each, in the rout
 function DEFAULT_QUERY() {
   return { q: "", sport: null, sort: "rating" as const, at: null };
 }
+
+test("a sport page's 24 server cards: all shown, nothing fetched, Show more continues at 24", () => {
+  const fetch = route();
+  // As TurfListingClient starts it: every card the server rendered is on screen.
+  const first = fetch(0, 24);
+  let s = startState(listKey("pune", DEFAULT, null, "football"), first, Math.max(FIRST_PAGE, first.items.length));
+  assert.equal(shownCards(s, null).length, 24);
+  assert.equal(wantBatch(s, 24), null);
+  const calls: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    s = { ...s, target: s.target + nextBatch(s.target) };
+    const r = settle(s, (o, l) => (calls.push(`${o}+${l}`), fetch(o, l)));
+    s = r.s;
+  }
+  assert.deepEqual(calls, ["24+24", "48+48", "96+80"]);
+  assert.deepEqual(shownCards(s, null).map((c) => c.item.turf.id), pageOf(turfs, DEFAULT_QUERY(), none, 0, 176, 1).items.map((i) => i.turf.id));
+});
 
 test("a batch from a newer version: appended after the server's offset, repeats dropped, newest total", () => {
   const s = startState("k|", route()(0, 10));
@@ -218,4 +237,79 @@ test("pre-paint: dims the server's cards only when the URL asks for other ones",
   assert.equal(prePaint(""), null);
   assert.equal(prePaint("?q="), null);
   assert.equal(prePaint("?utm_source=sport"), null);
+});
+
+test("listKey with Filters choices and a sport page: the scope part says them; a plain list's key is the one it was", () => {
+  const f: ListFilters = { q: " Kick ", sport: "Box Cricket", sort: "reviews", facets: ["parking", "open"], price: 1000, surface: "natural" };
+  const key = listKey("pune", f, null, "football");
+  assert.equal(key, "pune/football;f=open,parking;p=1000;s=natural|box-cricket|kick|reviews|");
+  assert.equal(listKey("pune", { ...DEFAULT, facets: [], price: null }, null), "pune|||rating|");
+  // The chip, the location and Back's rules still read the key.
+  assert.equal(sportOfKey(key), "Box Cricket");
+  assert.equal(isGeoKey(key), false);
+  const geo = listKey(null, { ...DEFAULT, sort: "nearby", facets: ["lights"] }, { lat: 18.52, lng: 73.86 });
+  assert.deepEqual(nearbyFrom(geo), { lat: 18.52, lng: 73.86 });
+  assert.equal(isGeoKey(geo), true);
+  // Another order of the same choices is the same list.
+  assert.equal(listKey("pune", { ...DEFAULT, facets: ["open", "parking"] }, null), listKey("pune", { ...DEFAULT, facets: ["parking", "open"] }, null));
+  assert.equal(isTimedKey(listKey("pune", { ...DEFAULT, facets: ["parking", "open"] }, null)), true);
+  assert.equal(isTimedKey(listKey("pune", { ...DEFAULT, facets: ["parking"] }, null)), false);
+  assert.equal(isTimedKey(listKey("pune", { ...DEFAULT, q: ";f=open" }, null)), false, "a search for the words is not the toggle");
+});
+
+test("a list's first batch keeps its numbers and time; later batches keep them", () => {
+  const facts = new Map();
+  const query = { q: "", sport: null, sort: "rating" as const, at: null, ist: { day: 1, minute: 600 } };
+  const s = startState("pune||||", pageOf(turfs, query, none, 0, 10, 1, facts, { counts: true }));
+  assert.ok(s.counts);
+  assert.equal(s.ist, "1.600");
+  const t = addBatch({ ...s, target: 20 }, pageOf(turfs, query, none, 10, 10, 1, facts));
+  assert.equal(t.counts, s.counts);
+  assert.equal(t.ist, "1.600");
+  // The server's own first cards: no numbers, no time.
+  const plain = startState("pune||||", pageOf(turfs, { q: "", sport: null, sort: "rating", at: null }, none, 0, 10, 1));
+  assert.equal(plain.counts, null);
+  assert.equal(plain.ist, null);
+});
+
+test("Back: an \"Open now\" list comes back only within its quarter hour; old saved filters read as plain ones", () => {
+  const now = Date.parse("2026-11-04T15:05:00Z"); // 8:35 PM in India, Wednesday
+  const ist = istNow(new Date(now));
+  assert.equal(ist, "2.1230");
+  const f: ListFilters = { ...DEFAULT, facets: ["open"] };
+  const key = listKey("pune", f, null);
+  const s = { ...startState(key, route()(0, 10)), ist };
+  const raw = toSaved("/pune?f=open", "pune", f, s, 0, now)!;
+  assert.ok(fromSaved(raw, "/pune?f=open", "pune", now + 5 * 60_000));
+  assert.equal(fromSaved(raw, "/pune?f=open", "pune", now + 15 * 60_000), null, "8:50 PM is another quarter");
+  // Saved before the Filters existed: no extras, no numbers, no time.
+  const old = JSON.parse(toSaved("/pune", "pune", DEFAULT, startState("pune||||", route()(0, 10)), 0, now)!);
+  delete old.state.counts;
+  delete old.state.ist;
+  const back = fromSaved(JSON.stringify(old), "/pune", "pune", now);
+  assert.ok(back);
+  assert.deepEqual(back.filters, DEFAULT);
+  assert.equal(back.state.counts, null);
+  assert.equal(back.state.ist, null);
+  // Unknown choices in a saved list are dropped, as in a URL.
+  const odd = JSON.parse(raw);
+  odd.filters = { ...odd.filters, facets: ["nope"], price: 7 };
+  assert.deepEqual(fromSaved(JSON.stringify(odd), "/pune?f=open", "pune", now)?.filters, DEFAULT);
+});
+
+function prePaintAttrs(search: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  const documentElement = { setAttribute: (k: string, v: string) => (attrs[k] = v), removeAttribute: (k: string) => delete attrs[k] };
+  runInNewContext(LIST_PREPAINT_JS, { document: { documentElement }, location: { search }, setTimeout: () => 0 });
+  return attrs;
+}
+
+test("pre-paint: a Filters choice dims the cards and holds the pills' room; a search or sort alone holds none", () => {
+  assert.deepEqual(prePaintAttrs("?f=open,lights"), { "data-tt-list": "wait", "data-tt-pills": "" });
+  assert.deepEqual(prePaintAttrs("?utm_source=x&price=1000"), { "data-tt-list": "wait", "data-tt-pills": "" });
+  assert.deepEqual(prePaintAttrs("?surface=natural"), { "data-tt-list": "wait", "data-tt-pills": "" });
+  assert.deepEqual(prePaintAttrs("?sort=reviews"), { "data-tt-list": "wait" });
+  assert.deepEqual(prePaintAttrs("?search=kick"), { "data-tt-list": "wait" });
+  assert.deepEqual(prePaintAttrs("?ref=x&f="), {});
+  assert.deepEqual(prePaintAttrs(""), {});
 });

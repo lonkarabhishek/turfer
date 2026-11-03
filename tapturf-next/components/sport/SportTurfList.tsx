@@ -9,8 +9,8 @@ import type { CardSport } from "@/lib/utils/cardSport";
 import { withSportBands, type SportBandMap } from "@/lib/queries/sportBands";
 import { turfPath } from "@/lib/utils/turfPath";
 
-/** How many turfs get a full photo card; the rest are a plain list. */
-const CARD_LIMIT = 24;
+/** How many turfs get a full photo card; the rest are a plain list. Also a city+sport page's first cards. */
+export const CARD_LIMIT = 24;
 
 /**
  * Turf list for sport pages. The first CARD_LIMIT turfs render as
@@ -48,42 +48,64 @@ export function SportTurfList({
         ))}
       </div>
 
-      {rest.length > 0 && (
-        <section className="mt-12">
-          <h2 className="text-[20px] font-display text-primary-900 mb-4">
-            {rest.length} more {rest.length === 1 ? venues.replace(/s$/, "") : venues} in {placeLabel}
-          </h2>
-          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 divide-y divide-primary-100 sm:divide-y-0">
-            {rest.map((t) => {
-              const area = areaFor(t);
-              const where = [area, showCity && isCity(t.city) ? labelFor(t.city) : null]
-                .filter(Boolean)
-                .join(", ");
-              return (
-                <li key={t.id}>
-                  <Link
-                    href={turfPath(t)}
-                    className="flex items-center justify-between gap-3 py-3 group"
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-[15px] font-medium text-primary-900 group-hover:text-accent-600 truncate">
-                        {t.name}
-                      </span>
-                      {where && <span className="block text-[13px] text-primary-500 truncate">{where}</span>}
-                    </span>
-                    {t.rating > 0 && t.total_reviews > 0 && (
-                      <span className="shrink-0 inline-flex items-center gap-1 text-[13px] text-primary-700">
-                        <Star className="w-3.5 h-3.5 fill-current" />
-                        {t.rating.toFixed(1)}
-                      </span>
-                    )}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
+      <SportTurfRest turfs={rest} venues={venues} placeLabel={placeLabel} showCity={showCity} />
     </>
+  );
+}
+
+/**
+ * The turfs after the photo cards, as light text links ("31 more football
+ * turfs in Pune"): every turf stays linked in the server HTML. Also under a
+ * city+sport page's list, for the turfs its first cards leave out.
+ */
+export function SportTurfRest({
+  turfs: rest,
+  venues,
+  placeLabel,
+  showCity = false,
+}: {
+  turfs: Turf[];
+  /** Lowercase plural, e.g. "football turfs" or "pickleball courts". */
+  venues: string;
+  placeLabel: string;
+  /** Show the city next to each name (all-cities pages). */
+  showCity?: boolean;
+}) {
+  if (rest.length === 0) return null;
+  return (
+    <section className="mt-12">
+      <h2 className="text-[20px] font-display text-primary-900 mb-4">
+        {rest.length} more {rest.length === 1 ? venues.replace(/s$/, "") : venues} in {placeLabel}
+      </h2>
+      <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 divide-y divide-primary-100 sm:divide-y-0">
+        {rest.map((t) => {
+          const area = areaFor(t);
+          const where = [area, showCity && isCity(t.city) ? labelFor(t.city) : null]
+            .filter(Boolean)
+            .join(", ");
+          return (
+            <li key={t.id}>
+              <Link
+                href={turfPath(t)}
+                className="flex items-center justify-between gap-3 py-3 group"
+              >
+                <span className="min-w-0">
+                  <span className="block text-[15px] font-medium text-primary-900 group-hover:text-accent-600 truncate">
+                    {t.name}
+                  </span>
+                  {where && <span className="block text-[13px] text-primary-500 truncate">{where}</span>}
+                </span>
+                {t.rating > 0 && t.total_reviews > 0 && (
+                  <span className="shrink-0 inline-flex items-center gap-1 text-[13px] text-primary-700">
+                    <Star className="w-3.5 h-3.5 fill-current" />
+                    {t.rating.toFixed(1)}
+                  </span>
+                )}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

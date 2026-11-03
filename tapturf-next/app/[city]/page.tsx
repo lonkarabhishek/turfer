@@ -3,11 +3,12 @@ import { compareTopRated, hasEnoughReviews } from "@/lib/utils/ranking";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowUpRight, MapPin } from "lucide-react";
-import { TurfCard } from "@/components/turf/TurfCard";
-import { getAllActiveTurfs } from "@/lib/queries/turfs";
-import { getTrendingPick, toSpotlights } from "@/lib/queries/trending";
-import { forCard } from "@/lib/utils/cardTurf";
-import { TrendingSpotlight } from "@/components/turf/TrendingSpotlight";
+import { getAllActiveTurfs, getCardTurfs } from "@/lib/queries/turfs";
+import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
+import { trendingFor } from "@/lib/queries/turfList";
+import { TurfListingClient } from "@/components/search/TurfListingClient";
+import { DEFAULT_FILTERS, FIRST_PAGE, availableSports, pageOf } from "@/lib/turfList/query";
+import { LIST_PREPAINT_JS } from "@/lib/turfList/client";
 import { MakeMyCity } from "@/components/city/MakeMyCity";
 import { AskPageContext } from "@/components/ask/AskPageContext";
 import { citySportLinks, venueWord } from "@/lib/sports";
@@ -82,20 +83,26 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
   const cityId = city as CityId;
   const label = labelFor(cityId);
 
-  const [turfs, trendingPick, liveCities] = await Promise.all([
+  // The card rows and picks are the ones /turfs and GET /api/turfs/list rank
+  // (same rows as getAllActiveTurfs, one read per render).
+  const [turfs, picks, liveCities, cards] = await Promise.all([
     getAllActiveTurfs(cityId),
-    getTrendingPick(cityId),
+    getTrendingPicks(),
     getLiveCities(),
+    getCardTurfs(cityId),
   ]);
+  const trendingPick = picks[cityId] ?? null;
   // Cross-links to other city pages: the twelve nearest (curated or not:
   // each placed by its curated centroid, else its turfs' median), plus the
   // home cities, nearest first.
   const otherCities = pickOtherCities(liveCities, cityId, cityPointsOf(liveCities));
   const spotlight = trendingPick ? toSpotlights({ [cityId]: trendingPick }, turfs) : [];
-  const trendingId = spotlight[0]?.turfId ?? null;
   const sportCounts = citySportLinks(cityId, turfs);
-  // "Top-rated" block: only turfs with enough reviews to trust the score.
+  // Turfs with enough reviews to trust the score: the list is "Popular" when there are some.
   const featured = [...turfs].filter(hasEnoughReviews).sort(compareTopRated).slice(0, 6);
+  // The list's first cards: /turfs's default list for this city (top rated, the trending
+  // pick first), so every "Popular" turf the page showed is among them, in the same order.
+  const first = pageOf(cards.turfs, { ...DEFAULT_FILTERS, at: null }, trendingFor(cityId, picks), 0, FIRST_PAGE, cards.v);
 
   // JSON-LD: ItemList of turfs, a SportsActivityLocation per turf
   const jsonLd = {
@@ -191,37 +198,45 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
         </section>
       )}
 
-      {/* This week's Most Trending Turf in this city */}
-      <TrendingSpotlight picks={spotlight} className="max-w-7xl mx-auto px-4 sm:px-6 mt-10" />
-
-      {/* Featured grid */}
-      {featured.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 mt-10">
-          <div className="flex items-end justify-between mb-6">
-            <div>
+      {/* Every turf in this city, as on /turfs: search, sport chips, Filters,
+          sorts and "Show more" (lib/turfList/query.ts ranks the server's first
+          cards and every batch of GET /api/turfs/list). Its default sort is
+          Top rated, so it is the "Popular" list it replaces: the server
+          renders its first 10 cards, which hold every turf the old Popular
+          grid showed (its 6 best rated with 15 reviews or more), top rated
+          first as there, with the week's trending pick (framed in gold there
+          too) leading, as on /turfs. This week's Most Trending Turf card
+          sits under its controls, until a search or filter. */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 mt-10">
+        <div className="flex items-end justify-between mb-6">
+          <div>
+            {featured.length > 0 && (
               <p className="text-[11px] font-mono text-accent-500 mb-2">
                 Top-rated
               </p>
-              <h2 className="font-display text-3xl md:text-4xl text-primary-800 leading-[0.92] tracking-tight">
-                Popular in {label}
-              </h2>
-            </div>
-            {turfs.length > featured.length && (
-              <Link
-                href="#all-turfs"
-                className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-accent-600 hover:text-accent-700"
-              >
-                All {turfs.length} <ArrowUpRight className="w-4 h-4" />
-              </Link>
             )}
+            <h2 className="font-display text-3xl md:text-4xl text-primary-800 leading-[0.92] tracking-tight">
+              {featured.length > 0 ? <>Popular in {label}</> : <>Find a turf in {label}</>}
+            </h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-            {featured.map((turf, i) => (
-              <TurfCard key={turf.id} turf={forCard(turf)} priority={i < 3} trending={turf.id === trendingId} />
-            ))}
-          </div>
-        </section>
-      )}
+          {turfs.length > featured.length && (
+            <Link
+              href="#all-turfs"
+              className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-accent-600 hover:text-accent-700"
+            >
+              All {turfs.length} <ArrowUpRight className="w-4 h-4" />
+            </Link>
+          )}
+        </div>
+        {/* Before the first paint: a URL with a search, sport, sort or Filters choice dims these cards until the right ones arrive. */}
+        <script dangerouslySetInnerHTML={{ __html: LIST_PREPAINT_JS }} />
+        <TurfListingClient
+          initial={first}
+          sports={availableSports(cards.turfs)}
+          scope={{ kind: "city", id: cityId, label, requested: null }}
+          spotlight={spotlight[0] ?? null}
+        />
+      </section>
 
       {/* Every turf, whenever the Top-rated grid does not show them all:
           the ItemList above marks up only turfs a visitor can see. */}

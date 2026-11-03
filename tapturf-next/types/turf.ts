@@ -63,7 +63,9 @@ export interface Turf {
   // (migration add_turf_trust_provenance_fields_20260925). All nullable.
   surface_type: string | null;                    // e.g. "artificial grass"
   ground_format: string | null;                   // e.g. "5-a-side, 6-a-side"
-  is_covered: boolean | null;                     // true or NULL (false is never written)
+  is_covered: boolean | null;                     // true, false or NULL (owners answer on myTapturf since 3 Nov)
+  /** What the owner says is over the ground (myTapturf, 20261103_turf_facts.sql); is_covered follows it. Turf pages only, and only when said. */
+  roof?: "covered" | "partly" | "open" | null;
   has_floodlights: boolean | null;                // true or NULL
   has_drinking_water: boolean | null;             // true or NULL
   has_cafeteria: boolean | null;                  // true or NULL
