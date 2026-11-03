@@ -10,7 +10,8 @@ import {
   ExternalLink,
 } from "lucide-react";
 import type { Turf } from "@/types/turf";
-import { normaliseOpeningHours, istWeekdayName, formatSpan } from "@/lib/utils/hours";
+import { normaliseOpeningHours, formatSpan } from "@/lib/utils/hours";
+import { HoursList } from "@/components/turf/HoursList";
 import { formatLabel } from "@/lib/utils/formats";
 import { publicLink, scrubBookingApps } from "@/lib/utils/bookingApps";
 
@@ -20,7 +21,6 @@ export function TurfDetails({ turf }: { turf: Turf }) {
     end_time: turf.end_time,
     is_24x7: turf.is_24x7,
   });
-  const today = istWeekdayName();
 
   const details: { icon: React.ReactNode; label: string; value: string }[] = [];
 
@@ -186,44 +186,16 @@ export function TurfDetails({ turf }: { turf: Turf }) {
               <span className="ml-auto text-xs font-medium text-hot-600">Closed {closedDays}</span>
             )}
           </div>
-          <ul className="rounded-2xl border border-cream-300 divide-y divide-cream-200 overflow-hidden">
-            {hoursRows.map((row) => {
-              const isToday = row.day === today;
+          <HoursList
+            rows={hoursRows.map((row) => {
               const closed = row.closed || isClosedDay(row.day);
-              return (
-                <li
-                  key={row.day}
-                  className={`flex items-center justify-between px-4 py-2.5 text-sm ${
-                    isToday ? "bg-accent-50/60" : "bg-white"
-                  }`}
-                >
-                  <span
-                    className={`font-medium ${
-                      isToday ? "text-accent-700" : "text-primary-700"
-                    }`}
-                  >
-                    {row.day}
-                    {isToday && (
-                      <span className="ml-2 text-[10px] text-accent-600">
-                        Today
-                      </span>
-                    )}
-                  </span>
-                  <span
-                    className={`tabular-nums ${
-                      closed ? "text-primary-400 italic" : "text-primary-800"
-                    }`}
-                  >
-                    {closed
-                      ? "Closed"
-                      : row.spans.length
-                        ? row.spans.map(formatSpan).join(", ")
-                        : row.raw}
-                  </span>
-                </li>
-              );
+              return {
+                day: row.day,
+                closed,
+                text: closed ? "Closed" : row.spans.length ? row.spans.map(formatSpan).join(", ") : row.raw,
+              };
             })}
-          </ul>
+          />
         </div>
       )}
     </div>
