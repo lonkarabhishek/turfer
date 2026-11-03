@@ -15,6 +15,7 @@ import {
   getSeries,
   postSeries,
   stopSeries,
+  forgetVenuesReady,
 } from "./server";
 import { dbProfile, googleSession, installNet, net, phoneToken, req, testEnv } from "../account/testkit";
 
@@ -452,4 +453,110 @@ test("fallback only for a missing function: a failing database or a wrong key is
   net.rpc.notifications_unread = () => ({ r: "unavailable" });
   assert.equal((await getNotifications(req("/api/notifications?count=unread", { token: phoneToken() }))).status, 503);
   assert.equal(net.restCalls.length, 0);
+});
+
+/* ---------------- a venue not on TapTurf (20261103_game_other_venue.sql) ---------------- */
+
+const { turf_id: _turf, ...NO_TURF } = BODY;
+void _turf;
+const VENUE_BODY = { ...NO_TURF, venue_name: " Shivaji  Maidan ", venue_address: "Behind Ganesh Temple, Baner Road", venue_city: "Pune", venue_area: "", venue_maps_url: "https://maps.app.goo.gl/Ab1" };
+const VENUE_CLEAN = { ...NO_TURF, venue_name: "Shivaji Maidan", venue_address: "Behind Ganesh Temple, Baner Road", venue_city: "pune", venue_area: null, venue_maps_url: "https://maps.app.goo.gl/Ab1" };
+/** PostgREST's answer for a select naming a column the table doesn't have yet. */
+const noColumn = () => Response.json({ code: "42703", message: "column games.venue_name does not exist" }, { status: 400 });
+
+test("create at a typed venue: checked and cleaned here, then the database's call; asked once whether it takes venues", async () => {
+  signedIn();
+  forgetVenuesReady();
+  net.rest = restDb({ games: [] });
+  net.rpc.game_create = () => ({ r: "ok", game: { id: GAME, turf_id: null } });
+  const res = await postGame(req("/api/games", { method: "POST", token: phoneToken(), body: VENUE_BODY }));
+  assert.equal(res.status, 200);
+  assert.deepEqual(net.calls("game_create")[0].args.p_game, VENUE_CLEAN, "the words collapsed, the city as an id, the empty area null, no turf");
+  assert.deepEqual(net.restCalls.map((c) => [c.method, c.table, /venue_name/.test(c.search)]), [["GET", "games", true]], "one look that games have venue_name");
+  await postGame(req("/api/games", { method: "POST", token: phoneToken(), body: VENUE_BODY }));
+  await postGame(req("/api/games", { method: "POST", token: phoneToken(), body: BODY }));
+  assert.equal(net.restCalls.length, 1, "once seen, not asked again; a turf game never asks");
+  for (const [body, field] of [
+    [{ ...VENUE_BODY, turf_id: TURF }, "venue_name"],
+    [{ ...VENUE_BODY, venue_name: "Shivaji 98220 12345" }, "venue_name"],
+    [{ ...VENUE_BODY, venue_maps_url: "javascript:alert(1)" }, "venue_maps_url"],
+    [{ ...NO_TURF, venue_name: "Shivaji Maidan" }, "venue_address"],
+    [NO_TURF, "turf_id"],
+  ] as const) {
+    const bad = await postGame(req("/api/games", { method: "POST", token: phoneToken(), body }));
+    assert.deepEqual([bad.status, await json(bad)], [400, { field, error: "bad" }], JSON.stringify(body));
+  }
+  assert.equal(net.calls("game_create").length, 3, "the bad ones never reached the database");
+  // The biggest a typed venue gets, in Devanagari (3 bytes a letter), with a full note: inside what the route reads.
+  const big = { ...VENUE_BODY, venue_name: "श".repeat(80), venue_address: "श".repeat(200), venue_area: "श".repeat(60), venue_city: "श".repeat(60), description: "श".repeat(500) };
+  assert.equal((await postGame(req("/api/games", { method: "POST", token: phoneToken(), body: big }))).status, 200);
+});
+
+test("a repeat at a typed venue: the same venue goes on with it", async () => {
+  signedIn();
+  forgetVenuesReady();
+  net.rest = restDb({ games: [] });
+  net.rpc.game_series_create = () => ({ r: "ok", series: { id: SERIES, turf_id: null }, games: [{ id: GAME }], made: 1 });
+  const res = await postSeries(req("/api/game-series", { method: "POST", token: phoneToken(), body: { game: VENUE_BODY, repeat: REPEAT } }));
+  assert.equal(res.status, 200);
+  assert.deepEqual(net.calls("game_series_create")[0].args.p_game, VENUE_CLEAN);
+});
+
+test("a database without typed venues yet: a venue is refused plainly (venue_off), turf games go on as before", async () => {
+  signedIn();
+  forgetVenuesReady();
+  net.rest = noColumn;
+  net.rpc.game_create = () => ({ r: "ok", game: { id: GAME } });
+  net.rpc.game_series_create = () => ({ r: "ok", series: { id: SERIES }, games: [], made: 0 });
+  net.rpc.game_update = () => ({ r: "ok", game: { id: GAME }, notified: 0 });
+  const made = await postGame(req("/api/games", { method: "POST", token: phoneToken(), body: VENUE_BODY }));
+  assert.deepEqual([made.status, await json(made)], [503, { reason: "venue_off", error: "unavailable" }]);
+  const series = await postSeries(req("/api/game-series", { method: "POST", token: phoneToken(), body: { game: VENUE_BODY, repeat: REPEAT } }));
+  assert.deepEqual([series.status, (await json(series)).reason], [503, "venue_off"]);
+  const moved = await patchGame(req(`/api/games/${GAME}`, { method: "PATCH", token: phoneToken(), body: { venue_name: "Shivaji Maidan", venue_address: "Baner Road", venue_city: "pune" } }), GAME);
+  assert.deepEqual([moved.status, (await json(moved)).reason], [503, "venue_off"]);
+  assert.equal(net.rpcCalls.filter((c) => c.fn !== "account_resolve").length, 0, "no function was called for them");
+  assert.equal(net.restCalls.length, 1, "asked once (again a minute on)");
+  const turf = await postGame(req("/api/games", { method: "POST", token: phoneToken(), body: BODY }));
+  assert.equal(turf.status, 200, "a turf game is made");
+  assert.deepEqual(net.calls("game_create")[0].args.p_game, BODY, "exactly as before");
+  net.rest = restDb({ games: [{ id: GAME, host_name: "Asha", sport: "football", date: day(2), turf_id: TURF }], turfs: [{ id: TURF2, name: "Dribble Den" }] });
+  assert.equal((await patchGame(req(`/api/games/${GAME}`, { method: "PATCH", token: phoneToken(), body: { turf_id: TURF2 } }), GAME)).status, 200, "and a turf move");
+});
+
+test("before the game functions too (the fallback): a typed venue is venue_off, a turf game is made", async () => {
+  signedIn();
+  forgetVenuesReady();
+  const tables: Record<string, Row[]> = {
+    users: [{ id: "acc-1", name: "Asha Rao", profile_image_url: null }],
+    turfs: [{ id: TURF, is_active: true }],
+    games: [],
+    game_participants: [],
+  };
+  net.rest = restDb(tables);
+  net.rpc.game_create = missing;
+  net.rpc.game_update = missing;
+  const venue = await postGame(req("/api/games", { method: "POST", token: phoneToken(), body: VENUE_BODY }));
+  assert.deepEqual([venue.status, await json(venue)], [503, { reason: "venue_off", error: "unavailable" }]);
+  assert.equal(tables.games.length, 0, "nothing written");
+  const edit = await patchGame(req(`/api/games/${GAME}`, { method: "PATCH", token: phoneToken(), body: { venue_name: "Shivaji Maidan", venue_address: "Baner Road", venue_city: "pune" } }), GAME);
+  assert.deepEqual([edit.status, (await json(edit)).reason], [503, "venue_off"]);
+  const turf = await postGame(req("/api/games", { method: "POST", token: phoneToken(), body: BODY }));
+  assert.equal(turf.status, 200);
+  assert.deepEqual([tables.games.length, tables.games[0].turf_id, tables.games[0].creator_id], [1, TURF, "acc-1"], "the turf game, as before");
+});
+
+test("move to a typed venue: the notice in its own words; the database decides it is a move", async () => {
+  signedIn();
+  forgetVenuesReady();
+  net.rest = restDb({ games: [{ id: GAME, host_name: "Asha Rao", sport: "football", date: "2026-11-07", turf_id: TURF }] });
+  net.rpc.game_update = () => ({ r: "ok", game: { id: GAME, turf_id: null }, notified: 2 });
+  const res = await patchGame(
+    req(`/api/games/${GAME}`, { method: "PATCH", token: phoneToken(), body: { venue_name: " Shivaji Maidan", venue_address: "Baner Road", venue_city: "Pune", venue_area: "Baner", turf_booked: false } }),
+    GAME,
+  );
+  assert.equal((await json(res)).notified, 2);
+  const args = net.calls("game_update")[0].args;
+  assert.deepEqual(args.p_changes, { turf_booked: false, venue_name: "Shivaji Maidan", venue_address: "Baner Road", venue_city: "pune", venue_area: "Baner", venue_maps_url: null });
+  assert.deepEqual(args.p_move_notice, { title: "Venue changed", message: "Asha moved Football on Sat 7 Nov to Shivaji Maidan, Baner" });
 });

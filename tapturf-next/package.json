@@ -25,7 +25,7 @@
     "test:photos": "tsc -p tsconfig.test-photos.json && node --test .test-out/photos/lib/my/photoMath.test.js .test-out/photos/lib/my/photoCheck.test.js",
     "test:my": "tsc -p tsconfig.test-my.json && node --test .test-out/my/lib/my/numbers.test.js .test-out/my/lib/my/groundSizes.test.js",
     "test:reviews": "tsc -p tsconfig.test-reviews.json && node --test .test-out/reviews/lib/reviews/reviews.test.js .test-out/reviews/lib/reviews/routes.test.js .test-out/reviews/lib/reviews/policy.test.js .test-out/reviews/lib/reviews/trust.test.js .test-out/reviews/lib/reviews/photoRoutes.test.js",
-    "test:games": "tsc -p tsconfig.test-games.json && node --test .test-out/games/lib/games/payload.test.js .test-out/games/lib/games/routes.test.js .test-out/games/lib/games/repeat.test.js",
+    "test:games": "tsc -p tsconfig.test-games.json && node --test .test-out/games/lib/games/payload.test.js .test-out/games/lib/games/routes.test.js .test-out/games/lib/games/repeat.test.js .test-out/games/lib/games/otherVenue.test.js",
     "test:toss":"tsc -p tsconfig.test-toss.json && node --test .test-out/toss/lib/tools/tossSim.test.js .test-out/toss/lib/tools/usage.test.js .test-out/toss/lib/tools/users.test.js",
     "test:push": "tsc -p tsconfig.test-push.json && node --test .test-out/push/lib/push/payload.test.js .test-out/push/lib/push/routes.test.js .test-out/push/lib/push/sw.test.js",
     "test:ui": "tsc -p tsconfig.test-ui.json && node --test .test-out/ui/lib/ui/viewport.test.js",

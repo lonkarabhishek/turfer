@@ -4,7 +4,7 @@ import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { getLiveCities } from "@/lib/queries/cities";
 import { readTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { loadOpenGames } from "@/lib/ai/games";
-import { sortGamesByDateTime } from "@/lib/utils/game";
+import { gameVenue, sortGamesByDateTime } from "@/lib/utils/game";
 import { CITIES, cityInfo, guessCityFromAddress, isCity } from "@/lib/city";
 import { SPORT_PAGES, sportPageForLabel, turfPlaysSport } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
@@ -72,14 +72,16 @@ export function toHomeGame(g: Game): HomeGame {
   const when = Number.isNaN(dt.getTime()) ? g.date : `${WEEKDAYS[dt.getUTCDay()]} ${d} ${MONTHS[m - 1]}`;
   const sp = sportPageForLabel(g.sport ?? "");
   const address = g.turfs?.address ?? null;
+  // A venue its host typed (not on TapTurf): its own name, area and city (lib/utils/game.ts gameVenue).
+  const typed = !g.turfs ? gameVenue(g) : null;
   return {
     id: g.id,
     sport: sp?.name ?? titleCase(g.sport ?? "Game"),
     when,
     time: formatTime12(g.start_time),
-    turfName: g.turfs?.name ?? null,
-    place: address?.split(",")[0]?.trim() || null,
-    city: g.turfs?.city ?? guessCityFromAddress(address),
+    turfName: typed ? typed.name : (g.turfs?.name ?? null),
+    place: typed ? typed.area || typed.address.split(",")[0]?.trim() || null : address?.split(",")[0]?.trim() || null,
+    city: typed ? typed.city : (g.turfs?.city ?? guessCityFromAddress(address)),
     spotsLeft: Math.max(0, (g.max_players ?? 0) - (g.current_players ?? 0)),
     price: Number(g.price_per_player) || 0,
   };

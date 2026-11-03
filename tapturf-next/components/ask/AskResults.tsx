@@ -11,7 +11,7 @@ import { cardPhotoSrc, turfPhotos } from "@/lib/utils/images";
 import { summarisePrice, type PriceSummary } from "@/lib/utils/prices";
 import { areaFor } from "@/lib/utils/area";
 import { formatDistance } from "@/lib/utils/location";
-import { formatDate, formatTimeSlot } from "@/lib/utils/game";
+import { formatDate, formatTimeSlot, gameVenue } from "@/lib/utils/game";
 import { labelFor, isCity } from "@/lib/city";
 import { citySportHref, sportBySlug } from "@/lib/sports";
 import type { Turf } from "@/types/turf";
@@ -105,6 +105,8 @@ export function TurfMiniCard({
 
 export function GameMiniCard({ game }: { game: Game & { distanceKm?: number } }) {
   const spots = Math.max(0, game.max_players - game.current_players);
+  // A venue its host typed (not on TapTurf): its own name and city.
+  const typed = !game.turfs ? gameVenue(game) : null;
   return (
     <Link
       href={`/game/${game.id}`}
@@ -116,13 +118,13 @@ export function GameMiniCard({ game }: { game: Game & { distanceKm?: number } })
           {spots === 0 ? "Full" : `${spots} spot${spots === 1 ? "" : "s"} left`}
         </span>
       </div>
-      <p className="mt-1.5 text-[14px] font-semibold text-primary-900 leading-tight truncate">{game.turfs?.name ?? game.title}</p>
+      <p className="mt-1.5 text-[14px] font-semibold text-primary-900 leading-tight truncate">{game.turfs?.name ?? typed?.name ?? game.title}</p>
       <p className="mt-1.5 text-[12px] text-primary-600 inline-flex items-center gap-1.5">
         <Clock className="w-3.5 h-3.5 text-primary-400" /> {formatDate(game.date)} · {formatTimeSlot(game.start_time, game.end_time)}
       </p>
       <p className="mt-1 text-[12px] text-primary-500 inline-flex items-center gap-1.5 w-full">
         <MapPin className="w-3.5 h-3.5 text-primary-400 shrink-0" />
-        <span className="truncate">{game.turfs?.city && isCity(game.turfs.city) ? labelFor(game.turfs.city) : game.turfs?.address ?? ""}</span>
+        <span className="truncate">{typed ? typed.cityLabel || typed.address : game.turfs?.city && isCity(game.turfs.city) ? labelFor(game.turfs.city) : game.turfs?.address ?? ""}</span>
         {game.distanceKm != null && <span className="ml-auto shrink-0 text-primary-400">{formatDistance(game.distanceKm)}</span>}
       </p>
       <p className="mt-1.5 text-[12px] text-primary-600 inline-flex items-center gap-1.5">

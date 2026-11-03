@@ -33,6 +33,9 @@ export type GameRow = {
   creator_id: string | null;
   created_at: string;
   turf_id: string | null;
+  /** A venue its host typed (no turf; 20261103_game_other_venue.sql): absent before that file. */
+  venue_name?: string | null;
+  venue_city?: string | null;
 };
 
 export type RequestRow = { game_id: string; user_id: string | null; status: string | null; created_at: string | null };
@@ -79,9 +82,12 @@ function sortCounts(counts: Map<string, number>): CountByLabel[] {
     .sort((a, b) => b.count - a.count || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
 }
 
-/** Games by their turf's city (lowercased; "unknown" without a turf or a city). */
-export function gamesByCity(games: readonly { turf_id: string | null }[], cityByTurf: ReadonlyMap<string, string | null>): CountByLabel[] {
-  return countByLabel(games.map((g) => (g.turf_id ? cityByTurf.get(g.turf_id) : null)), "unknown");
+/**
+ * Games by their turf's city, or a typed venue's own city (as stored: an
+ * id, or the host's words); lowercased, "unknown" without either.
+ */
+export function gamesByCity(games: readonly { turf_id: string | null; venue_city?: string | null }[], cityByTurf: ReadonlyMap<string, string | null>): CountByLabel[] {
+  return countByLabel(games.map((g) => (g.turf_id ? cityByTurf.get(g.turf_id) : (g.venue_city?.trim() || null))), "unknown");
 }
 
 /**

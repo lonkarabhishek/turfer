@@ -237,6 +237,19 @@ test("passport: stamps, numbers, reviewed and review more, from played games onl
   assert.equal(publicPassport(empty).medals.length, 0);
 });
 
+test("passport: a game at a venue its host typed (no turf) counts as a game played; turf stamps stay TapTurf's", () => {
+  const games = [
+    game("2026-10-12", { turf_id: "t1", sport: "Football" }),
+    game("2026-10-19", { turf_id: null, sport: "Football", creator_id: ME }),
+    game("2026-10-26", { turf_id: null, sport: "Cricket" }),
+  ];
+  const p = buildPassport({ userId: ME, games, turfs: TURFS, reviews: [], since: null, now: NOW });
+  assert.deepEqual([p.numbers.games, p.numbers.hosted, p.numbers.turfs, p.numbers.sports], [3, 1, 1, 2], "three played, one hosted, one turf, two sports");
+  assert.deepEqual(p.stamps.turfs.map((s) => s.name), ["Turf One"], "a stamp for the TapTurf turf only");
+  assert.deepEqual(p.reviewMore.map((s) => s.name), ["Turf One"], "nothing to review at a venue TapTurf doesn't list");
+  assert.equal(p.streak.current, 3, "and its weeks count for the streak (three weeks in a row)");
+});
+
 test("passport: a sport's formats are one sport, by its sport page", () => {
   const football = buildPassport({
     userId: ME,

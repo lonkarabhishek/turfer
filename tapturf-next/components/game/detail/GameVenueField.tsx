@@ -1,13 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, MapPin, Search, Undo2 } from "lucide-react";
+import { Loader2, MapPin, Plus, Search, Undo2 } from "lucide-react";
 import { nearbyTurfsForSport, searchTurfs } from "@/lib/queries/users";
+import { otherVenueReady } from "@/lib/queries/games";
 import { sportVenues } from "@/lib/sports";
 import { gamePlace } from "@/lib/utils/game";
-import { NEARBY_MAX_KM, gameSportPage, nearbyVenues, venueDistance, venueLine, type VenueOption } from "@/lib/utils/gameVenue";
+import { NEARBY_MAX_KM, gameSportPage, nearbyVenues, typedVenueOption, venueDistance, venueLine, type VenueOption } from "@/lib/utils/gameVenue";
+import type { TypedVenue } from "@/types/game";
+import { OtherVenueForm, venueDraft, type VenueDraft } from "../OtherVenueForm";
 
-type Current = { id: string; name: string; area?: string | null; city?: string | null; address?: string | null; lat?: number | null; lng?: number | null };
+/** The game's venue now: a TapTurf turf (its id), or one the host typed (no id, typed set). */
+type Current = {
+  id?: string | null;
+  name: string;
+  area?: string | null;
+  city?: string | null;
+  address?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  typed?: TypedVenue | null;
+};
 type Hit = { id: string; name: string; address: string; area?: string | null; city?: string | null };
 
 /**
@@ -26,7 +39,10 @@ function liftToTop(el: HTMLElement | null) {
  * flow (searchTurfs: active turfs, cleaned names) and, so the host need
  * not know a name, the nearest other venues that list the game's sport.
  * A pick only stages the move: Undo puts the old turf back, and nothing
- * is saved (or anyone told) until Save changes.
+ * is saved (or anyone told) until Save changes. A venue that isn't on
+ * TapTurf can be typed too (the create flow's form, OtherVenueForm), once
+ * the database takes them; a game at a typed venue shows it here, and can
+ * move to a TapTurf turf (the server clears the typed venue).
  */
 export function GameVenueField({
   current,
@@ -54,11 +70,23 @@ export function GameVenueField({
   const [nearby, setNearby] = useState<VenueOption[] | null>(null);
   // The nearby list could not be read: said so (not "none within 25 km"), with Try again.
   const [nearbyFailed, setNearbyFailed] = useState(false);
+  // The typed venue's form (null: closed), and whether the database takes typed venues.
+  const [typing, setTyping] = useState<VenueDraft | null>(null);
+  const [typedOn, setTypedOn] = useState<boolean | null>(null);
   const page = gameSportPage(sport);
   const lat = current?.lat;
   const lng = current?.lng;
-  const currentId = current?.id;
+  const currentId = current?.id ?? undefined;
   const q = query.trim();
+
+  useEffect(() => {
+    if (!open || typedOn !== null) return;
+    let alive = true;
+    void otherVenueReady().then((on) => alive && setTypedOn(on ?? true));
+    return () => {
+      alive = false;
+    };
+  }, [open, typedOn]);
 
   // As in the create flow: 2 letters, then a search 300 ms after the last key.
   useEffect(() => {
@@ -94,10 +122,12 @@ export function GameVenueField({
   }, [found]);
 
   const choose = (v: VenueOption) => {
-    onPick(v.id === currentId ? null : v);
+    onPick(v.id && v.id === currentId ? null : v);
     setOpen(false);
     setQuery("");
+    setTyping(null);
   };
+  const typeVenue = (seed: string) => setTyping(current?.typed && !seed.trim() ? venueDraft("", current.typed) : venueDraft(seed));
 
   const shown = picked ?? current;
   const place = shown ? gamePlace(shown) : "";
@@ -113,6 +143,7 @@ export function GameVenueField({
             {picked && <p className="text-[12px] font-semibold uppercase tracking-wide text-accent-700">New venue</p>}
             <p className="text-[16px] font-semibold text-primary-900 leading-snug [overflow-wrap:anywhere]">{shown?.name ?? "No venue"}</p>
             {place && <p className="text-[14px] text-primary-500 leading-snug">{place}</p>}
+            {(picked ? picked.typed : current?.typed) && <p className="text-[13px] text-primary-500 leading-snug">Not on TapTurf</p>}
             {picked && current && (
               <p className="mt-1 text-[13px] text-primary-500 leading-snug [overflow-wrap:anywhere]">Was {venueLine(current)}</p>
             )}
@@ -132,6 +163,7 @@ export function GameVenueField({
               onClick={() => {
                 setOpen(!open);
                 setQuery("");
+                setTyping(null);
               }}
               aria-expanded={open}
               aria-controls="edit-venue-panel"
@@ -169,11 +201,17 @@ export function GameVenueField({
               </button>
             ))}
           </div>
-          <p className="mt-1 text-[13px] text-primary-500">A booking at the old turf doesn&apos;t move with the game.</p>
+          <p className="mt-1 text-[13px] text-primary-500">A booking at the old {current?.typed ? "venue" : "turf"} doesn&apos;t move with the game.</p>
         </div>
       )}
 
-      {open && !picked && (
+      {open && !picked && typing && (
+        <div id="edit-venue-panel" className="mt-2 rounded-xl border border-primary-200 bg-white">
+          <OtherVenueForm draft={typing} onDraft={setTyping} onUse={(v) => choose(typedVenueOption(v))} onCancel={() => setTyping(null)} />
+        </div>
+      )}
+
+      {open && !picked && !typing && (
         <div id="edit-venue-panel" className="mt-2 rounded-xl border border-primary-200 bg-white">
           <div ref={row} className="flex items-center gap-2 border-b border-primary-100 px-4">
             <Search className="w-4 h-4 shrink-0 text-primary-400" aria-hidden />
@@ -200,7 +238,19 @@ export function GameVenueField({
                   Searching…
                 </p>
               ) : hits.length === 0 ? (
-                <p className="px-4 py-3 text-[14px] text-primary-500">No turfs found. Try a different name</p>
+                <div className="px-4 py-3">
+                  <p className="text-[14px] text-primary-500 [overflow-wrap:anywhere]">No turfs found. Try a different name{typedOn ? ", or add it yourself." : "."}</p>
+                  {typedOn && (
+                    <button
+                      type="button"
+                      onClick={() => typeVenue(q)}
+                      className="mt-2 w-full min-h-11 inline-flex items-center justify-center gap-1.5 rounded-full border-2 border-accent-500 px-3 text-[14px] font-bold text-accent-700 hover:bg-accent-50 [overflow-wrap:anywhere]"
+                    >
+                      <Plus className="w-4 h-4 shrink-0" aria-hidden />
+                      Add &ldquo;{q}&rdquo; as the venue
+                    </button>
+                  )}
+                </div>
               ) : (
                 <ul className="max-h-64 overflow-y-auto overscroll-contain">
                   {hits.map((t) => (
@@ -262,6 +312,18 @@ export function GameVenueField({
             </div>
           ) : (
             <p className="px-4 py-3 text-[14px] text-primary-500">Search for the turf you&apos;re moving to.</p>
+          )}
+          {typedOn && (
+            <button
+              type="button"
+              onClick={() => typeVenue(q)}
+              className="w-full flex items-center gap-3 border-t border-primary-100 px-4 py-3 min-h-12 text-left rounded-b-xl hover:bg-accent-50"
+            >
+              <Plus className="w-4 h-4 shrink-0 text-accent-700" aria-hidden />
+              <span className="text-[15px] font-semibold text-primary-900">
+                {current?.typed ? "Change the venue's name or address" : "Not on TapTurf? Add the venue"}
+              </span>
+            </button>
           )}
         </div>
       )}

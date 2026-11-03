@@ -5,6 +5,7 @@ import { createdSince, gameState, istMinute, latestGames, requestsByGame, type G
 import { isVerified, userCity, type Confirmed, type UserCity } from "@/lib/admin/people";
 import { both, okSection, readAllPages, rowsOf, type Section } from "@/lib/admin/section";
 import { isCity } from "@/lib/city";
+import { missingVenueColumn } from "@/lib/games/otherVenue";
 import { toGroundSizes } from "@/lib/turfSize/sizes";
 
 /**
@@ -35,6 +36,9 @@ export interface AdminGame {
   status: string | null;
   host_name: string | null;
   host_phone: string | null;
+  /** A venue its host typed (no turf; turf is then null). */
+  venue_name?: string | null;
+  venue_city?: string | null;
   creator_id: string | null;
   created_at: string;
   turf: TurfBrief | null;
@@ -211,7 +215,7 @@ type RequestListRow = {
   created_at: string;
   responded_at: string | null;
 };
-type RequestGame = { id: string; sport: string; date: string; start_time: string; host_name: string | null; turf_id: string | null };
+type RequestGame = { id: string; sport: string; date: string; start_time: string; host_name: string | null; turf_id: string | null; venue_name?: string | null };
 
 /**
  * The newest 500 join requests (withdrawn ones too, under All) with their
@@ -240,16 +244,53 @@ export async function getAdminRequests(filter: RequestFilter = "all") {
   return anonRead("join requests' games", async (s, signal) => {
     const rows = listed.data;
     const gameIds = [...new Set(rows.map((r) => r.game_id))];
-    const games = gameIds.length ? rowsOf<RequestGame>(await s.from("games").select("id, sport, date, start_time, host_name, turf_id").in("id", gameIds).abortSignal(signal), "games") : [];
+    // A typed venue's name too (20261103_game_other_venue.sql); before it, the read without it.
+    const readGames = async (cols: string) => s.from("games").select(cols).in("id", gameIds).abortSignal(signal);
+    let gamesRes = gameIds.length ? await readGames("id, sport, date, start_time, host_name, turf_id, venue_name") : null;
+    if (gamesRes && missingVenueColumn(gamesRes.error)) gamesRes = await readGames("id, sport, date, start_time, host_name, turf_id");
+    const games = gamesRes ? rowsOf<RequestGame>(gamesRes as unknown as { data: RequestGame[] | null; error: unknown }, "games") : [];
     const turfIds = [...new Set(games.map((g) => g.turf_id).filter(Boolean))] as string[];
     const turfs = turfIds.length ? rowsOf<{ id: string; name: string }>(await s.from("turfs").select("id, name").in("id", turfIds).abortSignal(signal), "turfs") : [];
     const gameMap = new Map(games.map((g) => [g.id, g]));
     const turfMap = new Map(turfs.map((t) => [t.id, t.name]));
     return rows.map((r) => {
       const g = gameMap.get(r.game_id);
-      return { ...r, game: g ? { ...g, turfName: g.turf_id ? (turfMap.get(g.turf_id) ?? null) : null } : null };
+      return {
+        ...r,
+        game: g ? { ...g, turfName: g.turf_id ? (turfMap.get(g.turf_id) ?? null) : g.venue_name ? `${g.venue_name} (not on TapTurf)` : null } : null,
+      };
     });
   });
+}
+
+// ── Venues hosts typed ──────────────────────────────────
+
+/** A venue hosts typed because it isn't on TapTurf: as most of its games spell it, how many games and hosts, and when. Nothing about anyone. */
+export type TypedVenueRow = {
+  venue_name: string;
+  venue_area: string | null;
+  /** A city id, or the host's words. */
+  venue_city: string | null;
+  games: number;
+  hosts: number;
+  /** The latest game's day (YYYY-MM-DD). */
+  last_day: string | null;
+  last_posted: string | null;
+};
+
+/**
+ * The venues hosts typed, the most used first (admin_typed_venues, the
+ * site owner only; not_set_up before 20261103_game_other_venue.sql), so
+ * popular ones can be added to TapTurf.
+ */
+export async function getAdminTypedVenues(): Promise<Section<TypedVenueRow[]>> {
+  return ownerRead("admin_typed_venues", async ({ supabase, token }, signal) =>
+    rowsOf<TypedVenueRow>(await supabase.rpc("admin_typed_venues", { p_firebase_token: token }).abortSignal(signal), "admin_typed_venues").map((r) => ({
+      ...r,
+      games: Number(r.games) || 0,
+      hosts: Number(r.hosts) || 0,
+    })),
+  );
 }
 
 // ── Turfs ───────────────────────────────────────────────

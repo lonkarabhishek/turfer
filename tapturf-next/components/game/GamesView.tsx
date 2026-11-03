@@ -1,15 +1,17 @@
 import { getOpenGamesCached } from "@/lib/queries/games.server";
 import { AskPageContext } from "@/components/ask/AskPageContext";
 import { getLiveCities } from "@/lib/queries/cities";
-import { guessCityFromAddress, resolveCityScope } from "@/lib/city";
+import { resolveCityScope } from "@/lib/city";
 import { cityLineFor } from "@/lib/cityLine";
 import { gamesJsonLd } from "@/lib/seo/pageMetadata";
+import { gameCity } from "@/lib/utils/game";
 import { GamesListingClient } from "./GamesListingClient";
 import type { Game } from "@/types/game";
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
 
+/** Its turf's city, or a typed venue's own (lib/utils/game.ts gameCity). */
 function cityOf(g: Game): string | null {
-  return g.turfs?.city ?? guessCityFromAddress(g.turfs?.address);
+  return gameCity(g);
 }
 
 /**
@@ -28,7 +30,8 @@ export async function GamesView({ requested }: { requested: string | null }) {
   const others = id
     ? games.filter((g) => {
         const c = cityOf(g);
-        return Boolean(c && c !== id);
+        // A typed venue in a town TapTurf has no city for still shows, with the other cities' games.
+        return c ? c !== id : !g.turf_id && !!g.venue_name;
       })
     : [];
 

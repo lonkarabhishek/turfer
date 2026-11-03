@@ -19,6 +19,7 @@ import {
   updateGame,
 } from "@/lib/queries/games";
 import { repeatLabel } from "@/lib/games/repeat";
+import { isMapsUrl } from "@/lib/games/otherVenue";
 import type { SeriesInfo } from "@/lib/games/types";
 import {
   durationLabel,
@@ -27,13 +28,14 @@ import {
   formatGameDay,
   formatPrice,
   formatTimeRange,
-  gamePlace,
+  gameVenue,
   getGameStatus,
   hostNote,
   skillInfo,
   speakTimeRange,
   spotsInfo,
   turfInfo,
+  venuePlace,
 } from "@/lib/utils/game";
 import { canRequest, canSeeHostNumber, ctaState, heroChip, waNumber } from "@/lib/utils/gameState";
 import { sportFamily, sportLabel } from "@/lib/utils/sport";
@@ -249,7 +251,12 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
     // Which game, where and when (lib/utils/gameShare.ts), the link last and inside the text: a share
     // sheet's Copy (and some apps) takes only the text, so a separate url would be lost.
     const closed = game.status === "cancelled" ? "cancelled" : status === "expired" || game.status === "completed" ? "ended" : undefined;
-    const text = gameShareText(game, { host: isHost, closed, url, repeat: repeat?.info?.active ? repeatLabel(repeat.info.rule) : null });
+    // Where: its turf, or the venue its host typed.
+    const at = gameVenue(game);
+    const text = gameShareText(
+      { ...game, turfs: game.turfs ?? (at ? { name: at.name, area: at.area, city: at.city ?? at.cityLabel } : null), listed: at ? at.listed : true },
+      { host: isHost, closed, url, repeat: repeat?.info?.active ? repeatLabel(repeat.info.rule) : null },
+    );
     if (navigator.share) {
       try {
         await navigator.share({ title: text.split("\n")[0], text });
@@ -303,8 +310,13 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
     if (!game || !user) return;
     setSaving(true);
     setSaveError("");
-    const moved = newVenue && newVenue.id !== game.turf_id ? newVenue : null;
-    // A move is part of the same save: the server tells the players.
+    const moved = newVenue && (newVenue.typed || newVenue.id !== game.turf_id) ? newVenue : null;
+    // A move is part of the same save: the server tells the players. A typed venue goes as its words, a turf as its id.
+    const move = moved?.typed
+      ? { venue_name: moved.typed.name, venue_address: moved.typed.address, venue_area: moved.typed.area, venue_city: moved.typed.city, venue_maps_url: moved.typed.mapsUrl }
+      : moved
+        ? { turf_id: moved.id }
+        : {};
     const { error } = await updateGame(getToken, game.id, {
       date: editData.date,
       start_time: editData.start_time,
@@ -314,7 +326,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
       description: editData.description || undefined,
       turf_booked: editData.turf_booked,
       skill_level: editData.skill_level as Game["skill_level"],
-      ...(moved ? { turf_id: moved.id } : {}),
+      ...move,
     });
     setSaving(false);
     if (error) {
@@ -361,7 +373,10 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   const hostFirst = firstName(game.host_name);
   const phone = game.host_phone?.trim() || null;
   const showNumber = !isHost && canSeeHostNumber({ isHost, isParticipant: isParticipant || mine?.status === "accepted", signedIn: !!user });
-  const venue = game.turfs?.name || `${sportName} game`;
+  // Its TapTurf turf, or the venue its host typed (not on TapTurf: no turf page, photos or pin).
+  const where = gameVenue(game);
+  const venue = where?.name || `${sportName} game`;
+  const listed = where?.listed ?? true;
   const chip: HeroChip = heroChip({ isHost, status: game.status, timing: status, spotsLeft });
   const note = cta === "cancelled" || cta === "ended" || cta === "full" ? cta : null;
 
@@ -387,8 +402,17 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
   };
 
   // A frame-able map only: the stored link is usually a /maps/place/ URL,
-  // which Google refuses to frame (an empty white box).
-  const mapSrc = mapEmbedSrc({ embedLink: game.turfs?.["Gmap Embed link"], lat: game.turfs?.lat, lng: game.turfs?.lng, address: game.turfs?.address });
+  // which Google refuses to frame (an empty white box). A typed venue with
+  // the host's own Maps link has no map here (it can't be framed, and a
+  // search could pin another place of that name): Open in Maps is the
+  // host's pin. Without one, the map is a search for its name, address and
+  // city, said to be approximate.
+  const hostPin = !listed && isMapsUrl(game.venue_maps_url);
+  const mapSrc = listed
+    ? mapEmbedSrc({ embedLink: game.turfs?.["Gmap Embed link"], lat: game.turfs?.lat, lng: game.turfs?.lng, address: game.turfs?.address })
+    : where && !hostPin
+      ? mapEmbedSrc({ address: [where.name, where.address, where.cityLabel].filter(Boolean).join(", ") })
+      : null;
 
   return (
     <div className="md:max-w-2xl lg:max-w-6xl mx-auto sm:px-6 sm:pt-5 lg:pt-6">
@@ -404,7 +428,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
       <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-10">
         <div className="min-w-0">
           <GameHero
-            photos={game.turfs?.photos}
+            photos={where?.photos}
             family={family}
             sport={game.sport}
             sportName={sportName}
@@ -417,7 +441,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
             <GameTitle
               venue={venue}
               sportName={sportName}
-              place={gamePlace(game.turfs)}
+              place={venuePlace(where)}
               hostName={game.host_name}
               hostPhoto={game.host_profile_image_url}
               hostId={game.creator_id}
@@ -441,7 +465,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
               price={{ free, label: price }}
               spots={spots}
               skill={skillInfo(game.skill_level)}
-              turf={turfInfo(game.turf_booked)}
+              turf={turfInfo(game.turf_booked, listed)}
             />
 
             {repeat?.info && <GameRepeat info={repeat.info} others={repeat.others} isHost={isHost} onStop={() => setStopOpen(true)} />}
@@ -476,7 +500,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
               shared={shared}
             />
 
-            {game.turfs?.id && (
+            {game.turfs?.id ? (
               <GameWhere
                 href={turfPath(game.turfs)}
                 name={game.turfs.name}
@@ -488,10 +512,24 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                 mapSrc={mapSrc}
                 mapHref={mapsSearchUrl({ lat: game.turfs.lat, lng: game.turfs.lng, name: game.turfs.name, address: game.turfs.address })}
               />
-            )}
+            ) : where && !where.listed ? (
+              // A venue its host typed: no turf page to link; Open in Maps goes to the host's own Google Maps link, else a search for it.
+              <GameWhere
+                name={where.name}
+                address={where.address}
+                place={venuePlace(where)}
+                photos={undefined}
+                family={family}
+                lat={null}
+                lng={null}
+                mapSrc={mapSrc}
+                mapNote={mapSrc ? "Approximate: Google's match for the address the host typed." : undefined}
+                mapHref={where.mapsHref}
+              />
+            ) : null}
 
             {/* Cricket or any sport the Live Scoreboard knows; renders nothing for the rest. */}
-            {status !== "expired" && <LiveScorerPromo sport={game.sport} variant="game" venue={game.turfs?.name} live={status === "live"} liveLinks={liveLinks} />}
+            {status !== "expired" && <LiveScorerPromo sport={game.sport} variant="game" venue={where?.name} live={status === "live"} liveLinks={liveLinks} />}
 
             {/* Last and quiet, as on live score links: a game that is spam,
                 fake or unsafe comes to us by email. Not for its own host. */}
@@ -608,7 +646,17 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
               {/* Moving a game that is over or cancelled tells nobody anything useful. */}
               {!ended && game.status !== "cancelled" && game.status !== "completed" && (
                 <GameVenueField
-                  current={game.turfs}
+                  current={
+                    listed
+                      ? game.turfs
+                      : where && {
+                          name: where.name,
+                          area: where.area,
+                          city: where.city ?? where.cityLabel,
+                          address: where.address,
+                          typed: { name: where.name, address: where.address, area: where.area, city: game.venue_city ?? where.cityLabel, mapsUrl: game.venue_maps_url ?? null },
+                        }
+                  }
                   sport={game.sport}
                   picked={newVenue}
                   onPick={pickVenue}
@@ -693,7 +741,7 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
                   className="size-5 rounded border-primary-300 accent-accent-600"
                 />
                 <span>
-                  <span className="block text-[15px] font-medium text-primary-900">Turf booked</span>
+                  <span className="block text-[15px] font-medium text-primary-900">{(newVenue ? newVenue.typed : !listed) ? "Venue booked" : "Turf booked"}</span>
                   <span id="edit-booked-hint" className="block text-[13px] text-primary-500">Players see this on the game page</span>
                 </span>
               </label>

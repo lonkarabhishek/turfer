@@ -66,8 +66,58 @@ test("edit: only the sheet's fields; a move is a turf id", () => {
   }
   assert.deepEqual(parseChanges({}), { bad: "body" });
   assert.deepEqual(parseChanges({ max_players: 0 }), { bad: "max_players" });
-  assert.deepEqual([...CHANGE_FIELDS].sort(), ["date", "description", "end_time", "max_players", "price_per_player", "skill_level", "start_time", "turf_booked", "turf_id"]);
+  assert.deepEqual([...CHANGE_FIELDS].sort(), [
+    "date", "description", "end_time", "max_players", "price_per_player", "skill_level", "start_time", "turf_booked", "turf_id",
+    "venue_address", "venue_area", "venue_city", "venue_maps_url", "venue_name",
+  ]);
   assert.equal(fieldProblem([], CHANGE_FIELDS), "body");
+});
+
+/* ---------------- a venue not on TapTurf (lib/games/otherVenue.ts) ---------------- */
+
+const { turf_id: _turf, ...NO_TURF } = GAME;
+void _turf;
+const VENUE = { venue_name: "  Shivaji   Maidan ", venue_address: "Behind Ganesh Temple,  Baner Road", venue_city: "Pune" };
+
+test("create at a typed venue: its words collapsed, the city as an id, no turf", () => {
+  assert.deepEqual(parseCreate({ ...NO_TURF, ...VENUE, venue_area: " ", venue_maps_url: "" }, TODAY), {
+    ok: { ...NO_TURF, venue_name: "Shivaji Maidan", venue_address: "Behind Ganesh Temple, Baner Road", venue_area: null, venue_city: "pune", venue_maps_url: null },
+  });
+  const full = parseCreate({ ...NO_TURF, ...VENUE, venue_city: "Wai", venue_area: "Ganpati Ali", venue_maps_url: " https://maps.app.goo.gl/Ab1 " }, TODAY);
+  assert.ok("ok" in full);
+  assert.deepEqual([full.ok.venue_city, full.ok.venue_area, full.ok.venue_maps_url, "turf_id" in full.ok], ["Wai", "Ganpati Ali", "https://maps.app.goo.gl/Ab1", false]);
+  const bad: [Record<string, unknown>, string][] = [
+    [NO_TURF, "turf_id"],
+    [{ ...GAME, ...VENUE }, "venue_name"],
+    [{ ...NO_TURF, venue_address: "Baner Road", venue_city: "pune" }, "venue_name"],
+    [{ ...NO_TURF, venue_name: "Shivaji Maidan", venue_city: "pune" }, "venue_address"],
+    [{ ...NO_TURF, venue_name: "Shivaji Maidan", venue_address: "Baner Road" }, "venue_city"],
+    [{ ...NO_TURF, venue_area: "Baner" }, "venue_name"],
+    [{ ...NO_TURF, ...VENUE, venue_name: "Shivaji 98220 12345" }, "venue_name"],
+    [{ ...NO_TURF, ...VENUE, venue_address: "www.shivaji.in" }, "venue_address"],
+    [{ ...NO_TURF, ...VENUE, venue_area: "a@b.co" }, "venue_area"],
+    [{ ...NO_TURF, ...VENUE, venue_maps_url: "javascript:alert(1)" }, "venue_maps_url"],
+    [{ ...NO_TURF, ...VENUE, venue_maps_url: "http://maps.app.goo.gl/x" }, "venue_maps_url"],
+    [{ ...NO_TURF, ...VENUE, venue_city: null }, "venue_city"],
+    [{ ...NO_TURF, ...VENUE, date: "2026-10-29" }, "date"],
+  ];
+  for (const [b, field] of bad) assert.deepEqual(parseCreate(b, TODAY), { bad: field }, JSON.stringify(b));
+  // A repeat takes the same venue.
+  const repeat = { rule: { freq: "weekly", interval: 1, days: [0] }, ends: { type: "never" } };
+  const s = parseSeries({ game: { ...NO_TURF, ...VENUE }, repeat }, TODAY);
+  assert.ok("ok" in s);
+  assert.deepEqual([s.ok.game.venue_name, s.ok.game.venue_city, s.ok.game.turf_id], ["Shivaji Maidan", "pune", undefined]);
+  assert.deepEqual(parseSeries({ game: { ...GAME, ...VENUE }, repeat }, TODAY), { bad: "venue_name" });
+});
+
+test("edit to a typed venue: all of it at once, never with a turf; a turf move is as before", () => {
+  assert.deepEqual(parseChanges({ ...VENUE, turf_booked: false }), {
+    ok: { turf_booked: false, venue_name: "Shivaji Maidan", venue_address: "Behind Ganesh Temple, Baner Road", venue_area: null, venue_city: "pune", venue_maps_url: null },
+  });
+  assert.deepEqual(parseChanges({ venue_name: "Shivaji Maidan" }), { bad: "venue_address" });
+  assert.deepEqual(parseChanges({ ...VENUE, turf_id: TURF }), { bad: "venue_name" });
+  assert.deepEqual(parseChanges({ ...VENUE, venue_maps_url: "https://evil.example" }), { bad: "venue_maps_url" });
+  assert.deepEqual(parseChanges({ turf_id: TURF }), { ok: { turf_id: TURF } });
 });
 
 test("a repeat: the game as a create checks it, its date the first day; the repeat as the database checks it", () => {
@@ -128,4 +178,8 @@ test("what the page says when the server says no", () => {
   assert.equal(no(409, { error: "not_allowed", reason: "many" }), "You have 3 repeating games running. Stop one from the Me tab to start another.");
   assert.equal(no(503, { error: "unavailable", reason: "not_ready" }), "Repeating games aren't on yet. Post this as a single game for now.");
   assert.equal(no(400, { error: "bad", field: "days" }), "Pick at least one day of the week.");
+  assert.equal(no(503, { error: "unavailable", reason: "venue_off" }), "Venues that aren't on TapTurf can't be added just yet. Pick a TapTurf turf for now.");
+  for (const f of ["venue_name", "venue_address", "venue_area", "venue_city", "venue_maps_url"]) {
+    assert.notEqual(no(400, { error: "bad", field: f }), "Something there doesn't look right. Check it and try again.", f);
+  }
 });

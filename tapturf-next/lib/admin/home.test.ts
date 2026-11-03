@@ -56,6 +56,12 @@ test("gamesByCity: through the game's turf; no turf or no city is unknown", () =
     { label: "unknown", count: 3 },
     { label: "pune", count: 2 },
   ]);
+  // A game at a venue its host typed: no turf, its own city.
+  assert.deepEqual(gamesByCity([{ turf_id: "t1" }, { turf_id: null, venue_city: "pune" }, { turf_id: null, venue_city: "Wai" }, { turf_id: null, venue_city: null }], cities), [
+    { label: "pune", count: 2 },
+    { label: "unknown", count: 1 },
+    { label: "wai", count: 1 },
+  ]);
 });
 
 test("turfsByCity: the view's rows lowercased and merged, plus the active turfs with no city", () => {

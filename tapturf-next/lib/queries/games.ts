@@ -18,7 +18,8 @@ import {
   type GetToken,
 } from "@/lib/games/client";
 import type { Repeat } from "@/lib/games/repeat";
-import type { GameChanges, GameSeries, SeriesInfo } from "@/lib/games/types";
+import { missingVenueColumn } from "@/lib/games/otherVenue";
+import type { CreateGameBody, GameChanges, GameSeries, SeriesInfo } from "@/lib/games/types";
 import type { Game, GameRequest, GameParticipant, CreateGameData } from "@/types/game";
 
 // Public reads (games, lineups, turfs) use the anon key, as the pages
@@ -189,10 +190,14 @@ export async function getUserJoinedGames(userId: string) {
   return { data: (games as Game[]) || [], error: gamesError?.message || null };
 }
 
-/** The create flow's game as the API takes it. */
-function createBody(gameData: CreateGameData, hostPhone: string) {
+/** The create flow's game as the API takes it: at its turf, or at the venue the host typed (lib/games/otherVenue.ts). */
+function createBody(gameData: CreateGameData, hostPhone: string): CreateGameBody {
+  const v = gameData.venue;
+  const place = v
+    ? { venue_name: v.name, venue_address: v.address, venue_area: v.area, venue_city: v.city, venue_maps_url: v.mapsUrl }
+    : { turf_id: gameData.turfId };
   return {
-    turf_id: gameData.turfId,
+    ...place,
     sport: gameData.sport,
     skill_level: gameData.skillLevel,
     max_players: gameData.maxPlayers,
@@ -322,19 +327,41 @@ export type GameLine = Pick<Game, "id" | "creator_id" | "turf_id" | "sport" | "d
   venue: string | null;
 };
 
-/** These games, for a list that names them (the Me tab's requests sent): sport, time, host and venue. */
+const LINE_COLUMNS = "id, creator_id, turf_id, sport, date, start_time, end_time, host_name, host_profile_image_url";
+
+/** These games, for a list that names them (the Me tab's requests sent): sport, time, host and venue (its turf's, or the one its host typed). */
 export async function getGameLines(ids: string[]) {
   if (ids.length === 0) return { data: [] as GameLine[], error: null };
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("games")
-    .select("id, creator_id, turf_id, sport, date, start_time, end_time, host_name, host_profile_image_url")
-    .in("id", ids);
+  const read = (cols: string) => supabase.from("games").select(cols).in("id", ids);
+  let res = await read(`${LINE_COLUMNS}, venue_name`);
+  // Before 20261103_game_other_venue.sql there is no venue_name: as before.
+  if (missingVenueColumn(res.error)) res = await read(LINE_COLUMNS);
+  const { data, error } = res as unknown as { data: (Omit<GameLine, "venue"> & { venue_name?: string | null })[] | null; error: { message: string } | null };
   if (error || !data) return { data: [] as GameLine[], error: error?.message || null };
-  const turfIds = [...new Set(data.map((g) => g.turf_id).filter(Boolean))];
+  const turfIds = [...new Set(data.map((g) => g.turf_id).filter((id): id is string => !!id))];
   const { data: turfs } = turfIds.length > 0 ? await supabase.from("turfs").select("id, name").in("id", turfIds) : { data: [] };
   const names = new Map((turfs ?? []).map((t) => [t.id as string, cleanVenueName(t.name as string)]));
-  return { data: data.map((g) => ({ ...g, venue: names.get(g.turf_id) ?? null })) as GameLine[], error: null };
+  return {
+    data: data.map(({ venue_name, ...g }) => ({ ...g, venue: (g.turf_id ? names.get(g.turf_id) : null) ?? venue_name?.trim() ?? null })) as GameLine[],
+    error: null,
+  };
+}
+
+/**
+ * Whether the database takes venues hosts type (games has venue_name,
+ * 20261103_game_other_venue.sql): the create flow offers "Add the venue"
+ * unless this says no. Null when it can't tell (offline): the server
+ * then answers for itself.
+ */
+export async function otherVenueReady(): Promise<boolean | null> {
+  try {
+    const { error } = await createClient().from("games").select("venue_name").limit(0);
+    if (!error) return true;
+    return missingVenueColumn(error) ? false : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The signed-in caller's own requests, newest first. */

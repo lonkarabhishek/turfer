@@ -88,6 +88,11 @@ const FIELD_TEXT: Record<string, string> = {
   note: "Keep the note to 300 characters.",
   host_phone: "Enter a 10-digit mobile number for players, or leave it empty.",
   turf_id: "Pick the turf again.",
+  venue_name: "Check the venue's name: 2 to 80 characters, no phone number, link or email.",
+  venue_address: "Check the address: 5 to 200 characters, no phone number, link or email.",
+  venue_area: "Check the area: up to 60 characters, no phone number, link or email.",
+  venue_city: "Check the city.",
+  venue_maps_url: "Paste the link Google Maps gives you (Share, then Copy link), or leave it empty.",
   sport: "Pick a sport.",
   repeat: "Check how it repeats.",
   rule: "Check how it repeats.",
@@ -129,6 +134,8 @@ export function gameProblem(a: GameAnswer<unknown>): string | null {
       return "You have 3 repeating games running. Stop one from the Me tab to start another.";
     case "not_ready":
       return "Repeating games aren't on yet. Post this as a single game for now.";
+    case "venue_off":
+      return "Venues that aren't on TapTurf can't be added just yet. Pick a TapTurf turf for now.";
   }
   if (b.error === "bad") return (b.field && FIELD_TEXT[b.field]) || "Something there doesn't look right. Check it and try again.";
   if (b.error === "sign_in") return "Your login ended. Please log in again.";

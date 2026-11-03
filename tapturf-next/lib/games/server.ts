@@ -5,7 +5,9 @@ import { cleanVenueName } from "../utils/bookingApps";
 import { venueMoveNotice } from "../utils/gameVenue";
 import { anonDb } from "./db";
 import { legacyRpc } from "./legacy";
+import { missingVenueColumn, storedVenueCity } from "./otherVenue";
 import { isUuid, parseChanges, parseCreate, parseNote, parseSeries } from "./payload";
+import { cityInfo } from "../city";
 import type { GameChanges } from "./types";
 
 // Games, repeats, join requests and notifications, for app/api/games,
@@ -65,9 +67,52 @@ function refusal(d: Record<string, unknown>): NextResponse {
       return accountReply({ reason: "answered", status: typeof d.status === "string" ? d.status : null }, "conflict");
     case "limit":
       return accountError("limit");
+    case "venue_off":
+      return VENUE_OFF();
     default:
       return accountError("unavailable");
   }
+}
+
+/** A typed venue while the database takes none (before 20261103_game_other_venue.sql): said plainly, turf games go on. */
+const VENUE_OFF = () => accountReply({ reason: "venue_off" }, "unavailable");
+
+let venuesSeen = false;
+let venuesMissingAt = 0;
+
+/**
+ * Whether the database takes typed venues (games.venue_name is there):
+ * once seen, always; a "no" is asked again a minute on. A read that fails
+ * for another reason says yes, and the function answers for itself.
+ */
+export async function venuesReady(): Promise<boolean> {
+  if (venuesSeen) return true;
+  if (venuesMissingAt && Date.now() - venuesMissingAt < 60_000) return false;
+  try {
+    const { error } = await anonDb().from("games").select("venue_name").limit(0);
+    if (!error) {
+      venuesSeen = true;
+      return true;
+    }
+    if (missingVenueColumn(error)) {
+      venuesMissingAt = Date.now();
+      return false;
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+/** For the route tests: forget what venuesReady saw. */
+export function forgetVenuesReady(): void {
+  venuesSeen = false;
+  venuesMissingAt = 0;
+}
+
+/** A body with a typed venue, while the database takes none: the refusal to send, else null. */
+async function venueOff(b: { venue_name?: unknown }): Promise<NextResponse | null> {
+  return typeof b.venue_name === "string" && !(await venuesReady()) ? VENUE_OFF() : null;
 }
 
 /** One call: the function's ok answer as `ok` makes it, else its refusal. */
@@ -102,8 +147,11 @@ function mineOf(x: unknown): { id: string; status: string } | null {
 export async function postGame(req: Request): Promise<NextResponse> {
   const w = await who(req, allowWrite);
   if ("reply" in w) return w.reply;
-  const p = parseCreate(await readSmallJson(req, 4_000));
+  // Bytes, not characters: a 200-character address in Devanagari is 600.
+  const p = parseCreate(await readSmallJson(req, 8_000));
   if ("bad" in p) return accountReply({ field: p.bad }, "bad");
+  const off = await venueOff(p.ok);
+  if (off) return off;
   return run("game_create", { p_user_id: w.userId, p_game: p.ok }, (d) => ({ r: "ok", game: d.game }));
 }
 
@@ -111,10 +159,25 @@ export async function postGame(req: Request): Promise<NextResponse> {
  * What the players are told when the host moves the game: "Asha moved
  * Football on Sat 7 Nov to Dribble Den, Begur", from the public game and
  * turf rows (lib/utils/gameVenue.ts venueMoveNotice), the day the save
- * sets. Null when it isn't a move or the rows can't be read: the
- * database then says it plainly. Who hears it is the database's call.
+ * sets; for a typed venue, from its own words. Null when it isn't a move
+ * or the rows can't be read: the database then says it plainly. Who hears
+ * it, and whether a typed venue's change is a move, is the database's call.
  */
 export async function moveNotice(gameId: string, changes: GameChanges): Promise<{ title: string; message: string } | null> {
+  if (typeof changes.venue_name === "string") {
+    try {
+      const g = await anonDb().from("games").select("host_name, sport, date").eq("id", gameId).limit(1);
+      const game = g.data?.[0] as { host_name: string | null; sport: string | null; date: string | null } | undefined;
+      if (g.error || !game) return null;
+      const city = storedVenueCity(changes.venue_city);
+      return venueMoveNotice(
+        { ...game, date: changes.date ?? game.date },
+        { name: changes.venue_name, area: changes.venue_area ?? null, city: city ? cityInfo(city).label : (changes.venue_city ?? null), address: changes.venue_address ?? null },
+      );
+    } catch {
+      return null;
+    }
+  }
   if (!changes.turf_id) return null;
   try {
     const db = anonDb();
@@ -136,8 +199,10 @@ export async function patchGame(req: Request, gameId: string): Promise<NextRespo
   const w = await who(req, allowWrite);
   if ("reply" in w) return w.reply;
   if (!isUuid(gameId)) return accountError("bad");
-  const p = parseChanges(await readSmallJson(req, 4_000));
+  const p = parseChanges(await readSmallJson(req, 8_000));
   if ("bad" in p) return accountReply({ field: p.bad }, "bad");
+  const off = await venueOff(p.ok);
+  if (off) return off;
   const notice = await moveNotice(gameId.toLowerCase(), p.ok);
   return run("game_update", { p_user_id: w.userId, p_game_id: gameId.toLowerCase(), p_changes: p.ok, p_move_notice: notice }, (d) => ({
     r: "ok",
@@ -177,8 +242,10 @@ async function runSeries(fn: string, args: Record<string, unknown>, ok: (d: Reco
 export async function postSeries(req: Request): Promise<NextResponse> {
   const w = await who(req, allowWrite);
   if ("reply" in w) return w.reply;
-  const p = parseSeries(await readSmallJson(req, 6_000));
+  const p = parseSeries(await readSmallJson(req, 10_000));
   if ("bad" in p) return accountReply({ field: p.bad }, "bad");
+  const off = await venueOff(p.ok.game);
+  if (off) return off;
   return runSeries("game_series_create", { p_user_id: w.userId, p_game: p.ok.game, p_repeat: p.ok.repeat }, (d) => ({
     r: "ok",
     series: d.series,

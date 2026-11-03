@@ -2,6 +2,7 @@ import { SPORT_PAGES, sportPageForLabel, turfPlaysSport, type SportPage } from "
 import { formatDistance, haversineKm } from "./location";
 import { firstName, formatGameDay, gamePlace } from "./game";
 import { sportLabel } from "./sport";
+import type { TypedVenue } from "../../types/game";
 
 /**
  * The host moves a game to another turf from the edit sheet (the booked
@@ -12,6 +13,7 @@ import { sportLabel } from "./sport";
 
 /** A turf the host can move the game to, as the sheet lists it. */
 export type VenueOption = {
+  /** The turf's id; "" for a venue the host typed (typed then has its words). */
   id: string;
   name: string;
   area?: string | null;
@@ -19,7 +21,14 @@ export type VenueOption = {
   address?: string | null;
   /** Straight-line distance from the game's current turf; null when either has no coordinates. */
   km?: number | null;
+  /** A venue not on TapTurf, as the host typed it (lib/games/otherVenue.ts): the move saves these words, not a turf. */
+  typed?: TypedVenue;
 };
+
+/** A typed venue as the sheet stages it: no turf id, its words. */
+export function typedVenueOption(v: TypedVenue): VenueOption {
+  return { id: "", name: v.name, area: v.area, city: v.city, address: v.address, typed: v };
+}
 
 /** A row of the nearest-turfs list (/api/turfs/near): only what the suggestions read. */
 export type VenueRow = VenueOption & {
@@ -123,6 +132,7 @@ export function venueProblem(
   active: { id: string } | null,
   unread = false,
 ): string | null {
+  // A typed venue has no listing to check (the server checks its words).
   if (!pick?.id || pick.id === current) return null;
   if (unread) return "Couldn't check that venue. Check your connection and try again.";
   if (!active || active.id !== pick.id) return "That venue isn't listed on TapTurf any more. Pick another one.";

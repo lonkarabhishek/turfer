@@ -22,6 +22,8 @@ export type ShareGame = {
   skill_level?: string | null;
   turf_booked?: boolean | null;
   turfs?: { name?: string | null; area?: string | null; city?: string | null } | null;
+  /** False for a venue its host typed (not on TapTurf): "Venue booked", as its page says. */
+  listed?: boolean | null;
 };
 
 const NBSP = / /g;
@@ -69,7 +71,7 @@ export function shareDetails(g: ShareGame): string | null {
     const price = formatPrice(g.price_per_player);
     parts.push(price === "Free" ? "Free to join" : `${price} per player`);
   }
-  if (g.turf_booked) parts.push("Turf booked");
+  if (g.turf_booked) parts.push(g.listed === false ? "Venue booked" : "Turf booked");
   return parts.length ? parts.join(" · ") : null;
 }
 
