@@ -36,3 +36,9 @@ test("turf near me by city: the city page from 3 turfs, else counted at the end"
   assert.deepEqual(got.rest, { cities: 2, venues: 3 });
   assert.deepEqual(cityPageLinks([], MIN), { links: [], rest: { cities: 0, venues: 0 } });
 });
+
+test("turf near me by city with min 1 (every live city's page is indexable): every city linked, a reserved slug or an empty city never", () => {
+  const got = cityPageLinks([c("latur", 2), c("hyderabad", 520), c("nanded", 1), c("blog", 4), c("goa", 0)], 1);
+  assert.deepEqual(got.links.map((l) => [l.href, l.count]), [["/hyderabad", 520], ["/latur", 2], ["/nanded", 1]]);
+  assert.deepEqual(got.rest, { cities: 1, venues: 4 });
+});

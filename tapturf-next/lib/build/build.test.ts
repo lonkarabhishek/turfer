@@ -11,7 +11,7 @@ import { buildTripwire, createGuardedFetch } from "../supabase/guard";
 import { unusable, type ListMeta } from "../cache/rowStore";
 import { runBuildData, StepFailed, UNREACHABLE } from "../../scripts/build-data";
 import { TURF_UUID, turfIdMap, turfIdTarget } from "../turfIds";
-import { TURF_IDS_FILE, writeTurfIds } from "./turfIds";
+import { resetTurfIds, TURF_IDS_EMPTY, TURF_IDS_FILE, turfIdsDigest, writeTurfIds } from "./turfIds";
 
 type Row = Record<string, unknown>;
 const DB = "http://db.test";
@@ -827,30 +827,61 @@ test("old id links: the map comes from the step's own sitemap read (no request o
     const calls = r.s.calls.length;
     const file = join(project, TURF_IDS_FILE);
     mkdirSync(join(project, "lib"), { recursive: true });
-    writeFileSync(file, "{}\n");
+    // A map an earlier, killed build left: this build's restore still puts {} back.
+    writeFileSync(file, `{"${ID(1)}":"left-by-a-killed-build"}\n`);
     const got = writeTurfIds(r.dir, project);
     // 1,200 active turfs in the fake database, turf 7 without a slug.
     assert.equal(got.count, 1199);
+    assert.equal(got.leftOut, 0);
     const text = readFileSync(file, "utf8");
     const map = JSON.parse(text) as Record<string, string>;
     assert.equal(map[r.s.rows[0].id as string], "turf-0");
     assert.equal(map[r.s.rows[7].id as string], undefined);
     assert.equal(got.bytes, Buffer.byteLength(text));
+    assert.equal(got.md5, turfIdsDigest(map));
     assert.equal(r.s.calls.length, calls, "no database request");
     got.restore();
-    assert.equal(readFileSync(file, "utf8"), "{}\n");
+    assert.equal(readFileSync(file, "utf8"), TURF_IDS_EMPTY);
     got.restore();
-    assert.equal(readFileSync(file, "utf8"), "{}\n");
+    assert.equal(readFileSync(file, "utf8"), TURF_IDS_EMPTY);
   } finally {
     rmSync(project, { recursive: true, force: true });
     r.cleanup();
   }
 });
 
-test("old id links: the map in the project (the proxy's import) is a JSON object of ids to slugs", () => {
-  const map = JSON.parse(readFileSync(join(process.cwd(), TURF_IDS_FILE), "utf8")) as unknown;
-  assert.ok(map && typeof map === "object" && !Array.isArray(map));
-  for (const [k, v] of Object.entries(map as Record<string, unknown>)) {
-    assert.ok(TURF_UUID.test(k) && typeof v === "string" && !TURF_UUID.test(v), k);
+test("old id links: the md5 is the database's: id,slug lines in id order (the owner's query, run on Postgres for these rows)", () => {
+  // select md5(string_agg(id::text || ',' || slug, E'\n' order by id)) from turfs where is_active and slug is not null,
+  // run on PGlite with these four rows plus one without a slug and one switched off.
+  const map = turfIdMap([
+    { id: ID(3), slug: "turf-up-hinjewadi" },
+    { id: "f0000000-aaaa-4bbb-8ccc-000000000001", slug: "last-by-id" },
+    { id: ID(1), slug: "kick-off-arena-baner" },
+    { id: "A0000000-AAAA-4BBB-8CCC-000000000001", slug: "a-before-f" },
+  ]);
+  assert.equal(turfIdsDigest(map), "d059d9cb8f77482afdec882df320cac1");
+  // The order of the keys does not matter.
+  assert.equal(turfIdsDigest(Object.fromEntries(Object.entries(map).reverse())), "d059d9cb8f77482afdec882df320cac1");
+});
+
+test("old id links: a build first puts {} back when a killed build left its map in the project", () => {
+  const project = mkdtempSync(join(tmpdir(), "tapturf-ids-test-"));
+  try {
+    const file = join(project, TURF_IDS_FILE);
+    mkdirSync(join(project, "lib"), { recursive: true });
+    writeFileSync(file, `{"${ID(1)}":"left-by-a-killed-build"}\n`);
+    assert.equal(resetTurfIds(project), true);
+    assert.equal(readFileSync(file, "utf8"), TURF_IDS_EMPTY);
+    assert.equal(resetTurfIds(project), false);
+    assert.equal(readFileSync(file, "utf8"), TURF_IDS_EMPTY);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
   }
+});
+
+test("old id links: the map in the project (the proxy's import) is the committed {}, not one a build left", () => {
+  // npm run build writes the real map just before `next build` and puts {} back after; a
+  // map here means a build was stopped before it could (the next npm run build puts {} back).
+  assert.equal(readFileSync(join(process.cwd(), TURF_IDS_FILE), "utf8"), TURF_IDS_EMPTY);
+  assert.deepEqual(JSON.parse(TURF_IDS_EMPTY), {});
 });

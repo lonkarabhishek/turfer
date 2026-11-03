@@ -12,7 +12,6 @@ import { forCard } from "@/lib/utils/cardTurf";
 import { NearMeFinder } from "@/components/near/NearMeFinder";
 import { ByCityLinks } from "@/components/sport/ByCityLinks";
 import { cityPageLinks } from "@/lib/byCity";
-import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 import type { Turf } from "@/types/turf";
 import { turfUrl } from "@/lib/utils/turfPath";
 import { plural } from "@/lib/home/format";
@@ -39,6 +38,10 @@ const CARDS_PER_CITY = 8;
 // cards (54 then) made this page 4.2 MB with 392 sliders, and on a phone
 // the photos could not be swiped until all of it had loaded (20 Oct).
 const CARD_CITIES = 6;
+// "Turfs by city" links every live city's page, one turf or 500: each is
+// indexable and in the sitemap (app/[city]/page.tsx noindexes only a city
+// with no active turf), and until 3 Nov each had its own section here.
+const CITY_PAGE_MIN = 1;
 
 type CityBlock = {
   id: CityId;
@@ -145,9 +148,10 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function TurfNearMePage() {
   const { blocks, total, floodlit, areaCount, footballCount, boxCricketCount } = await load();
   const cities = cityLine(blocks);
-  // The cities shown with cards, and every city's page where it is indexable.
+  // The cities shown with cards, and every city's page.
   const cardBlocks = blocks.slice(0, CARD_CITIES);
-  const byCity = cityPageLinks(blocks.map((b) => ({ id: b.id, label: b.label, count: b.turfs.length })), MIN_TURFS_TO_INDEX);
+  const byCity = cityPageLinks(blocks.map((b) => ({ id: b.id, label: b.label, count: b.turfs.length })), CITY_PAGE_MIN);
+  const byCityCount = byCity.links.length + byCity.rest.cities;
   const topAreas = blocks
     .flatMap((b) => b.areas.slice(0, 2).map((a) => `${a.area} (${b.label})`))
     .slice(0, 6);
@@ -286,7 +290,7 @@ export default async function TurfNearMePage() {
               href="#turfs-by-city"
               className="shrink-0 h-10 px-4 inline-flex items-center rounded-full ring-1 ring-primary-200 hover:bg-primary-50 text-[14px] font-medium text-primary-700"
             >
-              All {plural(blocks.length, "city", "cities")}
+              All {plural(byCityCount, "city", "cities")}
             </a>
           )}
         </div>

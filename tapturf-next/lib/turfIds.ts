@@ -14,6 +14,13 @@
  * not in the map (a turf without a slug, an inactive one, a new one) is
  * left to the page, as before.
  *
+ * The map is as of the deploy. Slugs never change on rename, but a slug
+ * edited by hand in the database, or a turf switched off, after a deploy
+ * needs a redeploy for its old link to be exact: until then the proxy sends
+ * the id to the old slug (a 404, noindex). The build log prints the map's
+ * md5 (lib/build/turfIds.ts turfIdsDigest); the database query there gives
+ * the same md5 while the map is current.
+ *
  * No imports, so the proxy and the unit tests (test:build) use it on their own.
  */
 

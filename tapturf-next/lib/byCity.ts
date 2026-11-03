@@ -6,9 +6,10 @@
  * so they now show their top turfs as cards and link each city's own page,
  * which lists every turf there: one link per city instead of one per turf.
  *
- * A link goes only to a page that is worth indexing (`min` venues, the
- * caller passes MIN_TURFS_TO_INDEX from lib/sportCity.ts): a thin city is
- * counted in `rest` ("and 9 more cities") with no link.
+ * A link goes only to a page that is worth indexing (`min` venues: the sport
+ * pages pass MIN_TURFS_TO_INDEX from lib/sportCity.ts; /turf-near-me passes
+ * 1, as every live city's page is indexable): a thin city is counted in
+ * `rest` ("and 9 more cities") with no link.
  *
  * Pure (relative imports only), so node --test runs it (test:seo).
  */

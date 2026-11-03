@@ -13,8 +13,10 @@
  *   production keeps the last deploy.
  * - From the step's sitemap read, the proxy's map of old id links
  *   (/turf/<uuid> -> /turf/<slug>) is written into lib/turfIds.json for
- *   `next build` to bundle (lib/build/turfIds.ts), and the committed file is
- *   put back when the build ends, as the folder is removed.
+ *   `next build` to bundle (lib/build/turfIds.ts), and the committed file
+ *   ({}) is put back when the build ends, as the folder is removed (and at
+ *   the start, should a killed build have left its map there). The log
+ *   prints the map's md5, the same as the database's for its active turfs.
  * - TAPTURF_BUILD_DATA=off skips the step: `next build` reads the database
  *   itself, as before (a local build without a database), and the proxy's
  *   map stays empty (the turf page redirects old links itself).
@@ -25,7 +27,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadEnvConfig } from "@next/env";
 import { buildDataStrict, TRIPWIRE_FILE } from "../lib/build/env";
-import { writeTurfIds } from "../lib/build/turfIds";
+import { resetTurfIds, writeTurfIds } from "../lib/build/turfIds";
 import { runBuildData, StepFailed } from "./build-data";
 
 const SIGNALS = { SIGINT: 2, SIGTERM: 15 } as const;
@@ -79,6 +81,7 @@ function tripped(dir: string): string[] {
 async function main(): Promise<number> {
   loadEnvConfig(process.cwd(), false);
   const args = process.argv.slice(2);
+  if (resetTurfIds(process.cwd())) console.warn("build: lib/turfIds.json held a map an earlier build left (it was stopped before it could put {} back); put the committed {} back");
   if (process.env.TAPTURF_BUILD_DATA?.trim() === "off") {
     console.log("build data: off (TAPTURF_BUILD_DATA=off): next build reads the database itself");
     return nextBuild(process.env, args);
@@ -93,7 +96,11 @@ async function main(): Promise<number> {
   }
   const ids = writeTurfIds(dir, process.cwd());
   restoreTurfIds = ids.restore;
-  console.log(`build data: ${ids.count} old /turf/<id> links redirect at the proxy (${(ids.bytes / 1024).toFixed(0)} KB map)`);
+  // The md5 is the database's, while no active turf's slug changes (lib/build/turfIds.ts turfIdsDigest).
+  console.log(
+    `build data: ${ids.count} old /turf/<id> links redirect at the proxy (${(ids.bytes / 1024).toFixed(0)} KB map, md5 ${ids.md5})` +
+      (ids.leftOut > 0 ? `; ${ids.leftOut} active turfs with a slug the map cannot use are left to the page` : ""),
+  );
   const code = await nextBuild({ ...process.env, TAPTURF_BUILD_DATA: dir }, args);
   const paths = tripped(dir);
   if (paths.length) console.warn(`build: pages read the database while building from the step's files: ${paths.join(", ")}`);
