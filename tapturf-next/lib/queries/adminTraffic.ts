@@ -3,7 +3,7 @@ import { ownerRead } from "@/lib/admin/db";
 import { dataOf, type Section } from "@/lib/admin/section";
 import { toTrafficUsage, type TrafficUsage } from "@/lib/traffic/usage";
 
-/** Days in the Traffic section's chart. */
+/** Full days in the Traffic section's chart (the 30 days' totals); today comes after them. */
 const DAYS = 30;
 
 /**

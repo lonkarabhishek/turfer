@@ -3,13 +3,15 @@
 // owner check), and checks the traffic counts: only with the account key;
 // only the app's kinds and sources (the same lists as lib/traffic/traffic.ts);
 // only a page's path, never the admin's or the API's; a visit only from
-// outside the site; another site's host only for a visit from one, and only a
-// clean name; the day is India's; two at once all count; the pages and sites
-// a day are capped, the rest under '(other)'; the admin read answers only the
-// site owner, with today, yesterday, the 7 full days against the 7 before, 30
-// days, every day of the series, by source and by kind, the top pages and
-// sites; nobody reads the tables directly; nothing in the tables or the
-// answer names a person. Never touches a real database.
+// outside the site; another site's host (or another app's package, marked as
+// an app) only for a visit from one, and only a clean name; the day is
+// India's; two at once all count; the pages and sites a day are capped, the
+// rest under '(other)'; the admin read answers only the site owner, with
+// today, yesterday, the 7 full days against the 7 before, 30 days, every one
+// of the 30 full days and today in the series, and for today, 7 and 30 days:
+// by source, by kind, the top pages and sites; nobody reads the tables
+// directly; nothing in the tables or the answer names a person. Never
+// touches a real database.
 // Run: PGLITE=<pglite dist/index.js> node scripts/sql-tests/traffic.check.mjs supabase/migrations
 const { PGlite } = await import(process.env.PGLITE ?? "@electric-sql/pglite");
 import fs from "node:fs";
@@ -51,7 +53,7 @@ const ts = fs.readFileSync(path.join(M, "../../lib/traffic/traffic.ts"), "utf8")
 const list = (name) => [...new RegExp(`export const ${name} = \\[([^\\]]+)\\]`).exec(ts)[1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
 const KINDS = list("TRAFFIC_KINDS");
 const SOURCES = list("TRAFFIC_SOURCES");
-ok(KINDS.length === 19 && SOURCES.length === 11, "the app's lists read");
+ok(KINDS.length === 19 && SOURCES.length === 12 && SOURCES.includes("app"), "the app's lists read");
 const inList = (xs) => `(${xs.map((x) => `'${x}'`).join(", ")})`;
 eq(sql.split(`kind in ${inList(KINDS)}`).length - 1, 1, "the table checks the app's kinds");
 eq(sql.split(`p_kind not in ${inList(KINDS)}`).length - 1, 1, "traffic_add takes the app's kinds");
@@ -120,6 +122,16 @@ for (const h of ["10.0.0.1", "localhost", "a b.com", "https://x.com/path", "x".r
 eq(await sites(), [{ host: "reddit.com", visits: 1 }], "only the clean host of a visit, lowercased");
 eq((await days()).find((d) => d.kind === "home" && d.source === "other_site"), { kind: "home", source: "other_site", views: 6, visits: 6, signed_views: 0 }, "those visits counted all the same");
 
+// Another app (an Android app's referrer that is no known source): its package, marked as an app.
+eq(await add({ kind: "city", path: "/pune", source: "app", host: "Com.Google.Android.Gm", visit: true }), { r: "ok" }, "a visit from another app");
+eq(await add({ kind: "city", path: "/pune", source: "app", host: "com.google.android.gm", visit: false }), { r: "ok" }, "a view in that load: no package");
+eq(await add({ kind: "city", path: "/pune", source: "app", host: "com.example.my_app", visit: true }), { r: "ok" }, "a package that isn't a clean name: the visit, without it");
+eq((await q(`select host, visits::int, app from private.traffic_referrers where day = $1::date order by host`, [today])), [
+  { host: "com.google.android.gm", visits: 1, app: true },
+  { host: "reddit.com", visits: 1, app: false },
+], "the app's package, lowercased and marked as an app; a website is not");
+eq((await days()).find((d) => d.kind === "city" && d.source === "app"), { kind: "city", source: "app", views: 3, visits: 2, signed_views: 0 }, "the app's visits and views by source");
+
 // Two at once all count.
 await Promise.all([
   add({ kind: "map", path: "/map", source: "instagram", visit: true }),
@@ -130,7 +142,7 @@ await Promise.all([
 ]);
 eq((await days()).find((d) => d.kind === "map"), { kind: "map", source: "instagram", views: 3, visits: 2, signed_views: 1 }, "calls at the same time all count");
 eq((await pages()).find((p) => p.path === "/map"), { path: "/map", kind: "map", views: 3, visits: 2 }, "and the page");
-eq(await sites(), [{ host: "news.ycombinator.com", visits: 1 }, { host: "reddit.com", visits: 2 }], "and the sites");
+eq(await sites(), [{ host: "com.google.android.gm", visits: 1 }, { host: "news.ycombinator.com", visits: 1 }, { host: "reddit.com", visits: 2 }], "and the sites");
 
 // The caps: about 3000 pages and 300 sites a day; a new one past that is '(other)', one already there still counts as itself.
 await q(`insert into private.traffic_pages (day, path, kind, views, visits) select $1::date, '/turf/t' || g, 'turf', 1, 0 from generate_series(1, 3000 - (select count(*)::int from private.traffic_pages where day = $1::date)) g`, [today]);
@@ -151,6 +163,8 @@ const s2 = await sites();
 eq(s2.find((s) => s.host === "(other)"), { host: "(other)", visits: 1 }, "a new site past the cap counts under (other)");
 eq(s2.find((s) => s.host === "reddit.com"), { host: "reddit.com", visits: 3 }, "a site already in the day still counts as itself");
 ok(!s2.some((s) => s.host === "one-more.example"), "and the new one is not kept by name");
+eq(await add({ kind: "home", source: "app", host: "org.telegram.messenger", visit: true }), { r: "ok" }, "a new app past the cap");
+eq(await q(`select host, visits::int, app from private.traffic_referrers where day = $1::date and host in ('(other)', 'org.telegram.messenger')`, [today]), [{ host: "(other)", visits: 2, app: false }], "counts under (other) too, which is no one app");
 
 // The day is India's: a row is today's there.
 const [{ d: rowDay }] = await q(`select max(day)::text as d from private.traffic_days`);
@@ -173,7 +187,7 @@ const cols = (await q(`select table_name, column_name from information_schema.co
 eq(cols, [
   "traffic_days.day", "traffic_days.kind", "traffic_days.source", "traffic_days.views", "traffic_days.visits", "traffic_days.signed_views", "traffic_days.updated_at",
   "traffic_pages.day", "traffic_pages.path", "traffic_pages.kind", "traffic_pages.views", "traffic_pages.visits",
-  "traffic_referrers.day", "traffic_referrers.host", "traffic_referrers.visits",
+  "traffic_referrers.day", "traffic_referrers.host", "traffic_referrers.visits", "traffic_referrers.app",
 ], "the tables hold counts per day, page and site, and nothing about a visitor");
 // As anon, through the function only (the key still gates it).
 await db.exec(`set role anon`);
@@ -223,37 +237,50 @@ eq(n(u.totals.yesterday), { views: 80, visits: 28, signed_views: 8 }, "yesterday
 eq(n(u.totals.d7), { views: 187, visits: 85, signed_views: 18 }, "the last 7 full days: yesterday back to day 7, not today");
 eq(n(u.totals.prev7), { views: 75, visits: 40, signed_views: 6 }, "the 7 before them: days 8 to 14, not day 15");
 eq(n(u.totals.d30), { views: 1270, visits: 1133, signed_views: 33 }, "the last 30 full days: days 1 to 30, not today, day 31 or the future");
-eq(u.daily.length, 30, "every one of 30 days");
-eq(u.daily[0].day, await ago(29), "oldest first");
-eq(u.daily[29].day, today, "today last");
-eq(n({ v: u.daily[28].views, s: u.daily[28].visits, g: u.daily[28].signed_views }), { v: 80, s: 28, g: 8 }, "yesterday's numbers, every kind and source added up");
-eq(Number(u.daily[29].views), sum(todayRows, "views"), "today's so far");
-eq(u.daily.filter((d) => Number(d.views) === 0).length, 24, "a day with none is a 0 (days 1, 7, 8, 14, 15 and today have views)");
-eq((await read(90)).daily.length, 90, "up to 90 days");
-eq((await read(1000)).daily.length, 90, "never more");
-eq((await read(1)).daily.length, 7, "at least 7");
-eq((await read(null)).daily.length, 30, "30 by default");
+eq(u.daily.length, 31, "every one of the 30 full days, and today");
+eq(u.daily[0].day, await ago(30), "oldest first: day 30, the 30 days' first");
+eq(u.daily[30].day, today, "today last");
+eq(n({ v: u.daily[29].views, s: u.daily[29].visits, g: u.daily[29].signed_views }), { v: 80, s: 28, g: 8 }, "yesterday's numbers, every kind and source added up");
+eq(Number(u.daily[30].views), sum(todayRows, "views"), "today's so far");
+const full30 = u.daily.slice(0, 30);
+eq(n({ views: sum(full30.map(n), "views"), visits: sum(full30.map(n), "visits"), signed_views: sum(full30.map(n), "signed_views") }), n(u.totals.d30), "the series' 30 full days add up to the 30 days' totals (the chart and the 30 days tab are the same days)");
+eq(u.daily.filter((d) => Number(d.views) === 0).length, 24, "a day with none is a 0 (days 1, 7, 8, 14, 15, 30 and today have views)");
+eq((await read(90)).daily.length, 91, "up to 90 full days and today");
+eq((await read(1000)).daily.length, 91, "never more");
+eq((await read(1)).daily.length, 8, "at least 7 and today");
+eq((await read(null)).daily.length, 31, "30 and today by default");
 eq(u.by_source.d7.map((x) => [x.source, Number(x.visits), Number(x.views)]), [["google", 70, 140], ["whatsapp", 8, 10], ["other_site", 7, 7], ["internal", 0, 30]], "7 days by source, most visits first; internal has views only");
 eq(u.by_source.d30.map((x) => x.source), ["google", "direct", "x", "whatsapp", "other_site", "internal"], "30 days by source");
 eq(u.by_source.today.find((x) => x.source === "instagram"), { source: "instagram", visits: 2, views: 3 }, "today by source");
 eq(u.by_kind.d7.map((x) => [x.kind, Number(x.views), Number(x.visits)]), [["city", 100, 50], ["home", 40, 20], ["turf", 40, 8], ["blog", 7, 7]], "7 days by kind, most views first");
 ok(u.by_kind.today.some((x) => x.kind === "map" && Number(x.views) >= 4), "today by kind");
-eq(u.pages.map((p) => [p.path, p.kind, Number(p.views), Number(p.visits)]), [["/pune", "city", 100, 50], ["/", "home", 40, 20], ["/turf/kick-off-arena", "turf", 20, 8], ["/blog/best-turfs", "blog", 7, 7]], "the 7 days' top pages: every day of a page added up, not day 8 or today");
-eq(u.pages_total, 4, "how many pages had a view");
-eq(u.sites.map((s) => [s.host, Number(s.visits)]), [["reddit.com", 5], ["quora.com", 4]], "the 7 days' other sites by visits, not day 8 or today");
-eq(u.sites_total, 2, "how many sites");
-eq(Object.keys(u).sort(), ["by_kind", "by_source", "daily", "pages", "pages_total", "since", "sites", "sites_total", "today", "totals"], "the answer's parts, and only those");
+eq(u.pages.d7.rows.map((p) => [p.path, p.kind, Number(p.views), Number(p.visits)]), [["/pune", "city", 100, 50], ["/", "home", 40, 20], ["/turf/kick-off-arena", "turf", 20, 8], ["/blog/best-turfs", "blog", 7, 7]], "the 7 days' top pages: every day of a page added up, not day 8 or today");
+eq(u.pages.d7.total, 4, "how many pages had a view");
+eq(u.sites.d7.rows.map((s) => [s.host, Number(s.visits), s.app]), [["reddit.com", 5, false], ["quora.com", 4, false]], "the 7 days' other sites by visits, not day 8 or today");
+eq(u.sites.d7.total, 2, "how many sites");
+eq(u.pages.d30.rows.map((p) => [p.path, Number(p.views)]), [["/pune", 100], ["/hyderabad", 60], ["/", 40], ["/turf/kick-off-arena", 20], ["/blog/best-turfs", 7]], "the 30 days' top pages: day 8 in, today out");
+eq([u.pages.d30.total, u.sites.d30.total], [5, 3], "with how many");
+eq(u.sites.d30.rows.map((s) => [s.host, Number(s.visits)]), [["old.example", 50], ["reddit.com", 5], ["quora.com", 4]], "the 30 days' other sites");
+// Today's: what counting's first day shows (the 7 days are still empty then).
+const todayPaths = (await q(`select count(distinct path)::int as n, max(views)::int as top from private.traffic_pages where day = $1::date`, [today]))[0];
+eq([u.pages.today.rows.length, u.pages.today.total, Number(u.pages.today.rows[0].views)], [30, todayPaths.n, todayPaths.top], "today's top pages: 30 of the day's, most viewed first, with how many");
+ok(u.pages.today.rows.every((p, i, a) => i === 0 || Number(a[i - 1].views) >= Number(p.views)), "today's pages in order");
+eq(u.sites.today.rows.find((s) => s.host === "com.google.android.gm"), { host: "com.google.android.gm", visits: 1, app: true }, "today's other sites and apps, an app marked as one");
+eq(u.sites.today.total, (await q(`select count(*)::int as n from private.traffic_referrers where day = $1::date`, [today]))[0].n, "with how many");
+eq(Object.keys(u).sort(), ["by_kind", "by_source", "daily", "pages", "since", "sites", "today", "totals"], "the answer's parts, and only those");
+for (const part of ["pages", "sites", "by_source", "by_kind"]) eq(Object.keys(u[part]).sort(), ["d30", "d7", "today"], `${part}: today, 7 and 30 days`);
 // Top 30 pages and 20 sites at most.
 for (let i = 0; i < 40; i++) {
   await q(`insert into private.traffic_pages (day, path, kind, views, visits) values ($1::date, $2, 'turf', $3, 0)`, [await ago(3), `/turf/p${i}`, 1 + i]);
   await q(`insert into private.traffic_referrers (day, host, visits) values ($1::date, $2, $3)`, [await ago(3), `s${i}.example`, 1 + i]);
 }
 const many = await read();
-eq(many.pages.length, 30, "30 pages at most");
-eq(many.pages_total, 44, "with how many in all");
-eq(many.sites.length, 20, "20 sites at most");
-eq(many.sites_total, 42, "with how many in all");
-ok(Number(many.pages[0].views) >= Number(many.pages[29].views), "most viewed first");
+eq(many.pages.d7.rows.length, 30, "30 pages at most");
+eq(many.pages.d7.total, 44, "with how many in all");
+eq(many.sites.d7.rows.length, 20, "20 sites at most");
+eq(many.sites.d7.total, 42, "with how many in all");
+ok(Number(many.pages.d7.rows[0].views) >= Number(many.pages.d7.rows[29].views), "most viewed first");
+eq([many.pages.d30.rows.length, many.sites.d30.rows.length], [30, 20], "the 30 days too");
 ok(!/@|\+91/.test(JSON.stringify(many)), "no email or phone anywhere in the answer");
 
 // Before anything was counted: zeros, empty lists, no since.
@@ -263,6 +290,7 @@ create function private.account_key_ok(p_key text) returns boolean language sql 
 create function public._is_site_owner(p_firebase_token text default null) returns boolean language sql stable as $$ select true $$;`);
 await fresh.exec(sql);
 const e = (await fresh.query(`select public.admin_traffic(null) as u`)).rows[0].u;
-eq([e.since, e.pages, e.sites, e.pages_total, e.sites_total, n(e.totals.d7), e.daily.length, e.by_source.d7, e.by_kind.today], [null, [], [], 0, 0, { views: 0, visits: 0, signed_views: 0 }, 30, [], []], "an empty database answers zeros");
+const none = { rows: [], total: 0 };
+eq([e.since, e.pages, e.sites, n(e.totals.d7), e.daily.length, e.by_source.d7, e.by_kind.today], [null, { today: none, d7: none, d30: none }, { today: none, d7: none, d30: none }, { views: 0, visits: 0, signed_views: 0 }, 31, [], []], "an empty database answers zeros");
 
 console.log(`traffic: ${passed} checks passed`);

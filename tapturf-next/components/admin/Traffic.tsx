@@ -1,7 +1,25 @@
 import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { adminTraffic } from "@/lib/queries/adminTraffic";
-import { KIND_LABEL, SOURCE_LABEL, changeText, dayLabel, shareText, trafficLine, type KindRow, type PageRow, type SourceRow, type TrafficUsage, type TrafficWindow } from "@/lib/traffic/usage";
+import {
+  KIND_LABEL,
+  SOURCE_LABEL,
+  changeFrom,
+  dayLabel,
+  fullDaysCounted,
+  shareText,
+  siteLabel,
+  trafficLine,
+  weekChange,
+  weekWords,
+  windowNote,
+  type KindRow,
+  type PageRow,
+  type SourceRow,
+  type TopList,
+  type TrafficUsage,
+  type TrafficWindow,
+} from "@/lib/traffic/usage";
 import { reasonText } from "@/lib/admin/section";
 import { SectionError } from "./SectionStatus";
 import { TrafficChart } from "./TrafficChart";
@@ -15,10 +33,12 @@ import type { FoldSummary } from "./AdminSection";
  * (20261104_traffic.sql; lib/traffic/traffic.ts says what counts). Counted
  * by TapTurf itself, with or without cookie consent, so these are the real
  * totals, not Google Analytics' share of them. Today and the last 7 full
- * days against the 7 before, visits a day for 30 days, then by source and
- * by page for today, 7 or 30 days, the top pages and other sites. Names
- * nobody. Before the file is applied it says counting hasn't started, and
- * the glance shows nothing.
+ * days against the 7 before, visits a day for the 30 full days and today,
+ * then for today, 7 or 30 days: by source, by page kind, the top pages and
+ * the other sites and apps. In counting's first days each window says how
+ * many full days it has, and the change against the 7 days before waits
+ * for 14. Names nobody. Before the file is applied it says counting
+ * hasn't started, and the glance shows nothing.
  */
 
 const fmt = (n: number) => n.toLocaleString("en-IN");
@@ -65,10 +85,19 @@ export async function TrafficSection() {
     );
   }
   const { today, yesterday, d7, prev7, d30 } = u.totals;
-  const lists = (w: TrafficWindow) => <Lists u={u} w={w} />;
+  // Counting's first days: how much of the 7 and the 30 full days it has filled (0 on its first day).
+  const full7 = fullDaysCounted(u, 7);
+  const full30 = fullDaysCounted(u, 30);
+  const visitsChange = weekChange(u, "visits");
+  const from = changeFrom(u);
+  const panel = (w: TrafficWindow) => <Lists u={u} w={w} />;
+  const note = (w: TrafficWindow) => {
+    const t = u.totals[w];
+    return `${windowNote(u, w)}${t.views > 0 ? ` Signed in: ${shareText(t.signedViews, t.views)} of page views.` : ""}`;
+  };
   return (
     <section className="mb-4 space-y-4">
-      {/* Today so far, and the last 7 full days against the 7 before them. */}
+      {/* Today so far, and the last 7 full days against the 7 before them (fewer in counting's first week). */}
       <div className="grid grid-cols-2 gap-3">
         <div className="min-w-0 rounded-2xl border border-primary-200 bg-white p-3 sm:p-4">
           <p className="text-[12px] font-semibold text-primary-500">Today so far</p>
@@ -81,34 +110,51 @@ export async function TrafficSection() {
           </p>
         </div>
         <div className="min-w-0 rounded-2xl border border-primary-200 bg-white p-3 sm:p-4">
-          <p className="text-[12px] font-semibold text-primary-500">Last 7 days</p>
-          <p className="mt-1 font-display text-[34px] leading-none text-primary-900">{fmt(d7.visits)}</p>
-          <p className="mt-0.5 text-[13px] font-semibold text-primary-700">{d7.visits === 1 ? "visit" : "visits"}</p>
-          <p className="mt-2 flex flex-col gap-0.5 text-[12px] leading-snug text-primary-600">
-            <Change text={changeText(d7.visits, prev7.visits)} vs={`vs ${fmt(prev7.visits)} the 7 days before`} />
-            <span>
-              {plural(d7.views, "page view")} <Change text={changeText(d7.views, prev7.views)} vs="" />
-            </span>
-          </p>
+          <p className="text-[12px] font-semibold text-primary-500">{full7 === 1 ? "Yesterday" : full7 > 1 && full7 < 7 ? `Last ${full7} days` : "Last 7 days"}</p>
+          {full7 === 0 ? (
+            <p className="mt-1 text-[13px] leading-snug text-primary-700">Counting started today. The first full day shows here tomorrow.</p>
+          ) : (
+            <>
+              <p className="mt-1 font-display text-[34px] leading-none text-primary-900">{fmt(d7.visits)}</p>
+              <p className="mt-0.5 text-[13px] font-semibold text-primary-700">{d7.visits === 1 ? "visit" : "visits"}</p>
+              <p className="mt-2 flex flex-col gap-0.5 text-[12px] leading-snug text-primary-600">
+                {visitsChange ? (
+                  <Change text={visitsChange} vs={`vs ${fmt(prev7.visits)} the 7 days before`} />
+                ) : (
+                  <span>{full7 < 7 ? `All counted so far (from ${dayLabel(u.since)})` : from ? `Compared with the 7 days before from ${dayLabel(from)}` : null}</span>
+                )}
+                <span>
+                  {plural(d7.views, "page view")} <Change text={weekChange(u, "views")} vs="" />
+                </span>
+              </p>
+            </>
+          )}
         </div>
       </div>
       <p className="-mt-2 px-1 text-[12px] leading-snug text-primary-500">
-        7 days: yesterday and the 6 days before (today is still going). 30 days: {plural(d30.visits, "visit")}, {plural(d30.views, "page view")}. Signed in:{" "}
-        {shareText(d7.signedViews, d7.views)} of the 7 days&rsquo; page views. Counted since {dayLabel(u.since)}.
+        &ldquo;Last 7 days&rdquo; is yesterday and the 6 days before (today is still going). Counted since {dayLabel(u.since)}.
       </p>
 
+      {/* The 30 full days (the same days as the 30 days tab), then today, lighter, on the right. */}
       <div className="rounded-2xl border border-primary-200 bg-white p-4 sm:p-5">
-        <h3 className="mb-1 text-xs font-bold text-primary-500">Visits a day, last 30 days</h3>
+        <h3 className="text-xs font-bold text-primary-500">Visits a day: the last 30 days and today</h3>
+        <p className="mb-2 mt-1 text-[12px] leading-snug text-primary-500">
+          {full30 > 0 && (
+            <>
+              {full30 === 30 ? "The 30 days" : `The ${full30} full ${full30 === 1 ? "day" : "days"} counted`}: {plural(d30.visits, "visit")}, {plural(d30.views, "page view")}.{" "}
+            </>
+          )}
+          Today, so far, is the lighter bar on the right.
+        </p>
         <TrafficChart days={u.daily.map((d) => ({ day: d.day, label: dayLabel(d.day), visits: d.visits, views: d.views }))} />
       </div>
 
+      {/* Everything below follows the tab: where visits come from, what people open, the top pages, other sites and apps. Today first while the 7 days are empty. */}
       <TrafficTabs
-        panels={{ today: lists("today"), d7: lists("d7"), d30: lists("d30") }}
-        note={{ today: "Today so far.", d7: "Yesterday and the 6 days before.", d30: "Yesterday and the 29 days before." }}
+        initial={d7.views === 0 ? "today" : "d7"}
+        panels={{ today: panel("today"), d7: panel("d7"), d30: panel("d30") }}
+        note={{ today: note("today"), d7: note("d7"), d30: note("d30") }}
       />
-
-      <TopPages pages={u.pages} total={u.pagesTotal} />
-      <OtherSites u={u} />
 
       <p className="px-1 text-[12px] leading-snug text-primary-500">
         <Note />
@@ -160,7 +206,7 @@ function Card({ title, aside, children }: { title: string; aside?: string; child
 
 const Empty = ({ text }: { text: string }) => <p className="px-4 py-5 text-[13px] text-primary-400">{text}</p>;
 
-/** Where visits come from and what people open, for one window. */
+/** Where visits come from, what people open, the top pages and the other sites and apps, for one window. */
 function Lists({ u, w }: { u: TrafficUsage; w: TrafficWindow }) {
   const src: SourceRow[] = u.bySource[w];
   const visits = src.reduce((s, r) => s + r.visits, 0);
@@ -168,11 +214,12 @@ function Lists({ u, w }: { u: TrafficUsage; w: TrafficWindow }) {
   const internal = src.find((r) => r.source === "internal");
   const kinds: KindRow[] = u.byKind[w];
   const views = kinds.reduce((s, r) => s + r.views, 0);
+  const none = w === "today" ? "None yet today." : "None in these days.";
   return (
     <>
       <Card title="Where visits come from" aside={plural(visits, "visit")}>
         {arrivals.length === 0 ? (
-          <Empty text="No visits in these days." />
+          <Empty text={none} />
         ) : (
           <ul className="divide-y divide-primary-100">
             {arrivals.map((r) => (
@@ -196,7 +243,7 @@ function Lists({ u, w }: { u: TrafficUsage; w: TrafficWindow }) {
       </Card>
       <Card title="What people open" aside={plural(views, "page view")}>
         {kinds.length === 0 ? (
-          <Empty text="No page views in these days." />
+          <Empty text={none} />
         ) : (
           <ul className="divide-y divide-primary-100">
             {kinds.map((r) => (
@@ -212,6 +259,8 @@ function Lists({ u, w }: { u: TrafficUsage; w: TrafficWindow }) {
           </ul>
         )}
       </Card>
+      <TopPages top={u.pages[w]} none={none} />
+      <OtherSites u={u} w={w} none={none} />
     </>
   );
 }
@@ -250,11 +299,12 @@ function PageList({ pages }: { pages: PageRow[] }) {
   );
 }
 
-function TopPages({ pages, total }: { pages: PageRow[]; total: number }) {
+function TopPages({ top, none }: { top: TopList<PageRow>; none: string }) {
+  const { rows: pages, total } = top;
   return (
-    <Card title="Top pages, last 7 days" aside={total > pages.length ? `${fmt(pages.length)} of ${fmt(total)}, by views` : "by views"}>
+    <Card title="Top pages" aside={total > pages.length ? `${fmt(pages.length)} of ${fmt(total)}, by views` : "by views"}>
       {pages.length === 0 ? (
-        <Empty text="No page views in these days." />
+        <Empty text={none} />
       ) : (
         <>
           <PageList pages={pages.slice(0, FIRST_PAGES)} />
@@ -273,39 +323,43 @@ function TopPages({ pages, total }: { pages: PageRow[]; total: number }) {
   );
 }
 
-function OtherSites({ u }: { u: TrafficUsage }) {
-  const { sites, sitesTotal } = u;
-  // Each site's share of the 7 days' visits from other websites (the named ones are a part of those; never past 100%).
-  const visits = Math.max(u.bySource.d7.find((r) => r.source === "other_site")?.visits ?? 0, sites.reduce((s, r) => s + r.visits, 0));
+function OtherSites({ u, w, none }: { u: TrafficUsage; w: TrafficWindow; none: string }) {
+  const { rows: sites, total } = u.sites[w];
+  // Each one's share of the window's visits from other websites and apps (the named ones are a part of those; never past 100%).
+  const from = u.bySource[w].filter((r) => r.source === "other_site" || r.source === "app").reduce((s, r) => s + r.visits, 0);
+  const visits = Math.max(from, sites.reduce((s, r) => s + r.visits, 0));
   const max = sites[0]?.visits ?? 0;
   return (
-    <Card title="Other websites, last 7 days" aside={sitesTotal > sites.length ? `${fmt(sites.length)} of ${fmt(sitesTotal)}, by visits` : "by visits"}>
+    <Card title="Other websites and apps" aside={total > sites.length ? `${fmt(sites.length)} of ${fmt(total)}, by visits` : "by visits"}>
       {sites.length === 0 ? (
-        <Empty text="No visits from other websites in these days." />
+        <Empty text={none} />
       ) : (
         <ul className="divide-y divide-primary-100">
-          {sites.map((s) => (
-            <Row key={s.host} label={s.host === "(other)" ? "Others (past the day's 300 sites)" : s.host} value={s.visits} share={shareText(s.visits, visits)} max={max} />
-          ))}
+          {sites.map((s) => {
+            const { label, sub } = siteLabel(s);
+            return <Row key={s.host} label={label} sub={sub} value={s.visits} share={shareText(s.visits, visits)} max={max} />;
+          })}
         </ul>
       )}
     </Card>
   );
 }
 
-/** The glance's traffic line: visits and page views today, and the 7 days' visits with their change. Nothing before counting starts. */
+/** The glance's traffic line: visits and page views today, and the 7 days' visits with their change (fewer days in counting's first week). Nothing before counting starts. */
 export async function TrafficGlance() {
   const res = await adminTraffic();
   if (!res.ok && res.reason === "not_set_up") return null;
-  const t = res.ok ? res.data.totals : null;
+  const u = res.ok ? res.data : null;
+  const t = u?.totals;
   const chip = "inline-flex min-h-11 items-center justify-center rounded-xl bg-primary-50 px-2 py-1 text-center text-[12px] leading-tight text-primary-800 sm:min-h-10 sm:rounded-full sm:px-3 sm:text-[13px]";
-  const change = t ? changeText(t.d7.visits, t.prev7.visits) : null;
+  const week = u ? weekWords(u, { brackets: false }) : null;
   // Each chip: its number (bold) and what it counts.
   const items: [string, string][] = t
     ? [
         [fmt(t.today.visits), `${t.today.visits === 1 ? "visit" : "visits"} today`],
         [fmt(t.today.views), `${t.today.views === 1 ? "view" : "views"} today`],
-        [fmt(t.d7.visits), `in 7 days${change && change !== "new" ? ` ${change}` : ""}`],
+        // Counting's first day: no full day yet.
+        week ? [fmt(t.d7.visits), week] : ["7 days", "from tomorrow"],
       ]
     : [
         ["-", "visits today"],

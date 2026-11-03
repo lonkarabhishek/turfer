@@ -24,7 +24,9 @@ import { windowCounter } from "../limits";
  *   source where the page load came from, from the referrer's host name
  *          and utm_source only (arrivalOf): Google, other search, AI chat,
  *          WhatsApp, Instagram, Facebook, YouTube, X, another site (its
- *          host name kept, nothing else of the address), direct (no
+ *          host name kept, nothing else of the address), another app (an
+ *          app's referrer, android-app://<package>, that is none of those:
+ *          its package name kept, as a site's host is), direct (no
  *          referrer), or internal (a reload, Back or Forward, a full page
  *          load from a TapTurf page, or back from a sign-in: views only,
  *          never a visit, where how the person first arrived isn't known).
@@ -64,12 +66,12 @@ export const TRAFFIC_KINDS = [
 ] as const;
 export type TrafficKind = (typeof TRAFFIC_KINDS)[number];
 
-export const TRAFFIC_SOURCES = ["google", "search_other", "ai", "whatsapp", "instagram", "facebook", "youtube", "x", "other_site", "direct", "internal"] as const;
+export const TRAFFIC_SOURCES = ["google", "search_other", "ai", "whatsapp", "instagram", "facebook", "youtube", "x", "other_site", "app", "direct", "internal"] as const;
 export type TrafficSource = (typeof TRAFFIC_SOURCES)[number];
 
 /** A path is kept to this many characters at most (the top pages list). */
 export const PATH_MAX = 120;
-/** Another site's host name, at most. */
+/** Another site's host name (or another app's package name), at most. */
 export const HOST_MAX = 100;
 /** The path a page that doesn't exist is counted under (its own address is not kept). */
 export const NOT_FOUND_PATH = "(not found)";
@@ -155,7 +157,8 @@ export function pageKind(path: string): TrafficKind {
 // ---------------------------------------------------------------------------
 // Where a page load came from
 
-type HostRule = { source: Exclude<TrafficSource, "other_site" | "direct" | "internal">; hosts: string[] };
+type KnownSource = Exclude<TrafficSource, "other_site" | "app" | "direct" | "internal">;
+type HostRule = { source: KnownSource; hosts: string[] };
 
 /** Host names (and their subdomains) per source. An Android app's referrer (android-app://com.whatsapp/) has its package as the host. */
 const HOST_RULES: HostRule[] = [
@@ -169,8 +172,8 @@ const HOST_RULES: HostRule[] = [
   { source: "facebook", hosts: ["facebook.com", "fb.me", "fb.com", "messenger.com", "com.facebook.katana", "com.facebook.orca", "com.facebook.lite", "com.facebook.mlite"] },
   { source: "youtube", hosts: ["youtube.com", "youtu.be", "com.google.android.youtube"] },
   { source: "x", hosts: ["t.co", "x.com", "twitter.com", "com.twitter.android"] },
-  // The Google app; Google's websites are GOOGLE_RE.
-  { source: "google", hosts: ["com.google.android.googlequicksearchbox"] },
+  // The Google app, Google Go and Google Maps (the app and its share links); Google's websites, maps.google.com among them, are GOOGLE_RE.
+  { source: "google", hosts: ["com.google.android.googlequicksearchbox", "com.google.android.apps.searchlite", "com.google.android.apps.maps", "maps.app.goo.gl"] },
   {
     source: "search_other",
     hosts: ["bing.com", "duckduckgo.com", "yahoo.com", "yandex.com", "yandex.ru", "ecosia.org", "baidu.com", "search.brave.com", "startpage.com", "qwant.com", "naver.com", "ask.com", "search.aol.com", "seznam.cz", "sogou.com", "com.duckduckgo.mobile.android", "com.microsoft.bing"],
@@ -184,8 +187,8 @@ const AUTH_RE = /(^|\.)(accounts\.google\.com|accounts\.youtube\.com|supabase\.c
 
 const under = (host: string, base: string) => host === base || host.endsWith(`.${base}`);
 
-/** The source a host name is, when it is a known one; null for any other site. */
-export function hostSource(host: string): Exclude<TrafficSource, "other_site" | "direct" | "internal"> | null {
+/** The source a host name is, when it is a known one; null for any other site or app. */
+export function hostSource(host: string): KnownSource | null {
   for (const r of HOST_RULES) if (r.hosts.some((h) => under(host, h))) return r.source;
   if (host === "mail.google.com") return null;
   if (GOOGLE_RE.test(host)) return "google";
@@ -223,6 +226,11 @@ export function referrerHost(referrer: string | null | undefined): string | null
   }
   if (!["http:", "https:", "android-app:", "ios-app:"].includes(u.protocol)) return null;
   return u.hostname ? u.hostname.toLowerCase().replace(/^www\./, "") : null;
+}
+
+/** Whether a referrer is an app's (android-app://<package>/, or iOS's ios-app://), not a website's. */
+export function appReferrer(referrer: string | null | undefined): boolean {
+  return /^(android|ios)-app:\/\//i.test(referrer ?? "");
 }
 
 /** utm_source names that are a source (a host name in it is read as one, so utm_source=chatgpt.com is AI chat). */
@@ -278,7 +286,8 @@ export type Arrival = { source: TrafficSource; host: string | null; visit: boole
  * the site moved to itself, so it can't say where that visit came from).
  * So is a referrer of this site, or a sign-in page sending the person
  * back. Else a known utm_source wins over the referrer; else the
- * referrer's host; else direct.
+ * referrer's host: a known source, else another app (an app's referrer,
+ * its package kept) or another site (its host kept); else direct.
  */
 export function arrivalOf(o: { referrer: string | null | undefined; ownHost: string; utm: string | null | undefined; navType: string | null | undefined }): Arrival {
   const internal: Arrival = { source: "internal", host: null, visit: false };
@@ -290,7 +299,7 @@ export function arrivalOf(o: { referrer: string | null | undefined; ownHost: str
   if (!ref) return { source: "direct", host: null, visit: true };
   const known = hostSource(ref);
   if (known) return { source: known, host: null, visit: true };
-  return { source: "other_site", host: cleanHost(ref), visit: true };
+  return { source: appReferrer(o.referrer) ? "app" : "other_site", host: cleanHost(ref), visit: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -299,12 +308,15 @@ export function arrivalOf(o: { referrer: string | null | undefined; ownHost: str
 /** One view as the browser sends it. */
 export type TrafficView = { path: string; notFound: boolean; source: TrafficSource; host: string | null; visit: boolean };
 
-/** The body: the path, the source, 1 for a visit, the other site's host (a visit from one only), 1 for a page that doesn't exist. Nothing else. */
+/** Whether a source keeps its host: another site's name, another app's package. */
+export const keepsHost = (source: TrafficSource): boolean => source === "other_site" || source === "app";
+
+/** The body: the path, the source, 1 for a visit, the other site's host or app's package (a visit from one only), 1 for a page that doesn't exist. Nothing else. */
 export function trafficBody(v: TrafficView): string {
   const o: Record<string, string | number> = { p: v.path, s: v.source };
   if (v.visit && v.source !== "internal") {
     o.v = 1;
-    if (v.source === "other_site" && v.host) o.h = v.host;
+    if (keepsHost(v.source) && v.host) o.h = v.host;
   }
   if (v.notFound) o.nf = 1;
   return JSON.stringify(o);
@@ -316,7 +328,7 @@ export type TrafficCount = { path: string; kind: TrafficKind; source: TrafficSou
 /**
  * The view a POST body asks for, or null when it isn't one: a page's path
  * (never the admin's or the API's), a known source; a visit only from
- * outside the site, with a clean host only for another site's. The kind is
+ * outside the site, with a clean host only for another site's or app's. The kind is
  * worked out here from the path, never taken from the browser; a page that
  * doesn't exist counts under NOT_FOUND_PATH. A host that is a known source
  * (or a sign-in page) is read as that.
@@ -330,7 +342,7 @@ export function parseTrafficBody(raw: unknown): TrafficCount | null {
   let source = o.s as TrafficSource;
   let visit = (o.v === 1 || o.v === true) && source !== "internal";
   let host: string | null = null;
-  if (visit && source === "other_site") {
+  if (visit && keepsHost(source)) {
     host = cleanHost(typeof o.h === "string" ? o.h : null);
     if (host && authReturn(host)) {
       source = "internal";

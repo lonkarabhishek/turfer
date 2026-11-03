@@ -5,7 +5,8 @@ import { useId, useState, type ReactNode } from "react";
 /**
  * Today, 7 days or 30 days for the Traffic section's lists: one row of
  * three buttons above them, the server's lists for each window below, one
- * shown at a time (7 days first, also before the page has its JavaScript).
+ * shown at a time (`initial` first, also before the page has its
+ * JavaScript: 7 days, or Today while the 7 days have nothing yet).
  */
 
 export type TabWindow = "today" | "d7" | "d30";
@@ -15,8 +16,8 @@ const TABS: { id: TabWindow; label: string }[] = [
   { id: "d30", label: "30 days" },
 ];
 
-export function TrafficTabs({ panels, note }: { panels: Record<TabWindow, ReactNode>; note?: Record<TabWindow, string> }) {
-  const [on, setOn] = useState<TabWindow>("d7");
+export function TrafficTabs({ panels, note, initial = "d7" }: { panels: Record<TabWindow, ReactNode>; note?: Record<TabWindow, string>; initial?: TabWindow }) {
+  const [on, setOn] = useState<TabWindow>(initial);
   const id = useId();
   return (
     <div>

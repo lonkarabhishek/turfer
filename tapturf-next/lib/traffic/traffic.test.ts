@@ -8,6 +8,7 @@ import {
   TRAFFIC_PER_MIN,
   TRAFFIC_PER_NET_PAGE,
   TRAFFIC_VISITS_PER_NET,
+  appReferrer,
   arrivalOf,
   authReturn,
   cleanHost,
@@ -104,6 +105,10 @@ test("hostSource: search, AI chat, the apps; anything else is another site", () 
     ["google.co.in", "google"],
     ["news.google.com", "google"],
     ["com.google.android.googlequicksearchbox", "google"],
+    ["com.google.android.apps.searchlite", "google"],
+    ["com.google.android.apps.maps", "google"],
+    ["maps.google.com", "google"],
+    ["maps.app.goo.gl", "google"],
     ["mail.google.com", null],
     ["com.google.android.gm", null],
     ["bing.com", "search_other"],
@@ -138,6 +143,11 @@ test("hostSource: search, AI chat, the apps; anything else is another site", () 
     ["notgoogle.com", null],
   ];
   for (const [h, s] of cases) assert.equal(hostSource(h), s, h);
+});
+
+test("appReferrer: an app's referrer, not a website's", () => {
+  for (const r of ["android-app://com.google.android.gm/", "ANDROID-APP://com.x/", "ios-app://123/com.x"]) assert.equal(appReferrer(r), true, r);
+  for (const r of ["https://www.google.com/", "", null, undefined, "android-app:com.x", "https://android-app.example/"]) assert.equal(appReferrer(r), false, String(r));
 });
 
 test("authReturn: back from a sign-in is not an arrival", () => {
@@ -177,6 +187,12 @@ test("arrivalOf: from outside on a real navigation is a visit, with its source",
   assert.deepEqual(arr("android-app://com.whatsapp/"), { source: "whatsapp", host: null, visit: true });
   assert.deepEqual(arr("https://www.reddit.com/r/pune/"), { source: "other_site", host: "reddit.com", visit: true });
   assert.deepEqual(arr("http://192.168.1.10/"), { source: "other_site", host: null, visit: true }, "an address is never kept as a host");
+  assert.deepEqual(arr("android-app://com.google.android.apps.maps/"), { source: "google", host: null, visit: true }, "the Google Maps app is Google, as maps.google.com is");
+  assert.deepEqual(arr("https://maps.google.com/"), { source: "google", host: null, visit: true });
+  assert.deepEqual(arr("android-app://com.google.android.gm/"), { source: "app", host: "com.google.android.gm", visit: true }, "Gmail's app is another app, not a website");
+  assert.deepEqual(arr("android-app://org.telegram.messenger/"), { source: "app", host: "org.telegram.messenger", visit: true });
+  assert.deepEqual(arr("android-app://com.example.my_app/"), { source: "app", host: null, visit: true }, "an app whose package isn't a clean name: counted, its package not kept");
+  assert.deepEqual(arr("https://mail.google.com/"), { source: "other_site", host: "mail.google.com", visit: true }, "Gmail on the web is a website");
   assert.deepEqual(arr("https://chatgpt.com/", "prerender"), { source: "ai", host: null, visit: true }, "a prerendered page shown is a navigation");
   assert.deepEqual(arr("", null), { source: "direct", host: null, visit: true }, "a browser that doesn't say: a navigation");
 });
@@ -210,6 +226,8 @@ test("trafficBody: the path, the source, a visit, another site's host only for a
   assert.deepEqual(JSON.parse(trafficBody({ path: "/pune", notFound: false, source: "google", host: null, visit: false })), { p: "/pune", s: "google" });
   assert.deepEqual(JSON.parse(trafficBody({ path: "/blog/x", notFound: false, source: "other_site", host: "reddit.com", visit: true })), { p: "/blog/x", s: "other_site", v: 1, h: "reddit.com" });
   assert.deepEqual(JSON.parse(trafficBody({ path: "/blog/y", notFound: false, source: "other_site", host: "reddit.com", visit: false })), { p: "/blog/y", s: "other_site" }, "no host on a view");
+  assert.deepEqual(JSON.parse(trafficBody({ path: "/pune", notFound: false, source: "app", host: "com.google.android.gm", visit: true })), { p: "/pune", s: "app", v: 1, h: "com.google.android.gm" }, "another app's package, as a site's host");
+  assert.deepEqual(JSON.parse(trafficBody({ path: "/pune", notFound: false, source: "google", host: "com.google.android.apps.maps", visit: true })), { p: "/pune", s: "google", v: 1 }, "no host for a known source");
   assert.deepEqual(JSON.parse(trafficBody({ path: "/x", notFound: true, source: "direct", host: null, visit: true })), { p: "/x", s: "direct", v: 1, nf: 1 });
   assert.deepEqual(JSON.parse(trafficBody({ path: "/", notFound: false, source: "internal", host: null, visit: true })), { p: "/", s: "internal" }, "internal is never a visit");
   assert.ok(trafficBody({ path: "/" + "a".repeat(119), notFound: true, source: "other_site", host: "x".repeat(96) + ".com", visit: true }).length < 400, "the largest body fits the route's limit");
@@ -223,6 +241,9 @@ test("parseTrafficBody: the kind from the path, never from the browser; a visit 
   assert.deepEqual(parseTrafficBody({ p: "/blog/x", s: "other_site", v: 1, h: "10.0.0.1" }), { path: "/blog/x", kind: "blog", source: "other_site", host: null, visit: true });
   assert.deepEqual(parseTrafficBody({ p: "/", s: "other_site", v: 1, h: "l.instagram.com" }), { path: "/", kind: "home", source: "instagram", host: null, visit: true }, "a known host is its source");
   assert.deepEqual(parseTrafficBody({ p: "/", s: "other_site", v: 1, h: "accounts.google.com" }), { path: "/", kind: "home", source: "internal", host: null, visit: false }, "a sign-in page is not an arrival");
+  assert.deepEqual(parseTrafficBody({ p: "/pune", s: "app", v: 1, h: "Org.Telegram.Messenger" }), { path: "/pune", kind: "city", source: "app", host: "org.telegram.messenger", visit: true }, "another app: its package, cleaned");
+  assert.deepEqual(parseTrafficBody({ p: "/pune", s: "app", v: 1, h: "com.google.android.apps.maps" }), { path: "/pune", kind: "city", source: "google", host: null, visit: true }, "an app that is a known source is that source");
+  assert.deepEqual(parseTrafficBody({ p: "/pune", s: "app", h: "com.x.y" }), { path: "/pune", kind: "city", source: "app", host: null, visit: false }, "no package on a view");
   assert.deepEqual(parseTrafficBody({ p: "/old-link", s: "direct", v: 1, nf: 1 }), { path: NOT_FOUND_PATH, kind: "other", source: "direct", host: null, visit: true }, "a page that doesn't exist: its address isn't kept");
 });
 
@@ -288,7 +309,17 @@ test("the privacy page says what traffic counts records, and that it runs either
   assert.match(para, /nothing on your device/);
   assert.match(para, /we don&rsquo;t store your IP address/);
   assert.match(para, /whichever cookie choice you make/);
+  // A signed-in browser sends its sign-in with each view (lib/count/send.ts): the page says so, and keeps "nothing that identifies you" to signed out.
+  assert.match(para, /If you are not signed in, that is all it sends: nothing that identifies you or your device/);
+  assert.match(para, /If you are signed in, your browser also sends your sign-in with each page view/);
+  assert.match(para, /it carries your phone number or email/);
+  assert.doesNotMatch(para.replace(/If you are not signed in, that is all it sends: nothing that identifies you or your device/, ""), /sends nothing that identifies you/);
   assert.match(page, /pages opened and where visits came from/, "under What runs either way");
+  const either = page.slice(page.indexOf("What runs either way."), page.indexOf("</p>", page.indexOf("What runs either way.")));
+  assert.match(either, /while you are signed out, carry no tag and do not say who you are/, "what runs either way: anonymous while signed out");
+  assert.match(either, /each page you open sends your sign-in/, "and says what a signed-in page view sends");
+  const send = read("lib/count/send.ts");
+  assert.match(send, /Authorization: `Bearer \$\{t\.token\}`/, "(what the page describes: a signed-in view carries the sign-in)");
   assert.match(page, /The daily counts of visits and pages opened name nobody/, "how long");
   const banner = read("components/consent/CookieBanner.tsx");
   assert.match(banner, /TapTurf&rsquo;s own anonymous counts run either way and keep nothing on your device/, "the banner's promise, which the counter keeps");

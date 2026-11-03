@@ -13,11 +13,17 @@ import { createTrafficLimiter, parseTrafficBody, type TrafficCount } from "./tra
 // app/api/traffic. The answer is 204 at once for anything (400 only for a
 // body that isn't a view), so the page never waits and a bot or a script
 // learns nothing. Bots, prefetches, other sites' pages and anything past the
-// network's limits are not counted. A sign-in sent with it is verified after
-// the reply (identify, as on every account route), only to count the view as
-// a signed-in one and to leave the site owner's own views out; the account
-// itself is never looked up or stored. Nothing about the visitor is stored:
-// the limits key on a hash of the network kept in memory for the window only.
+// network's limits are not counted. A signed-in browser sends its sign-in
+// token with each view (lib/count/send.ts): a phone sign-in's Firebase token
+// carries the number, a Google one's Supabase token the email. It is
+// verified after the reply as on every account route (identifyToken: the
+// Firebase token checked here, a Google one with Supabase Auth, which
+// answers with that account's email), only to count the view as a
+// signed-in one and to leave the site owner's own views out. No TapTurf
+// account row is read, and nothing of the sign-in is stored with the count
+// (the checker keeps a verified sign-in in memory for a few minutes, as for
+// every account route). Nothing about the visitor is stored: the limits key
+// on a hash of the network kept in memory for the window only.
 // Relative imports only (npm run test:traffic).
 
 const limit = createTrafficLimiter();

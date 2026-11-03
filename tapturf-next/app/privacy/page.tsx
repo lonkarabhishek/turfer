@@ -246,11 +246,13 @@ const SECTIONS: LegalSection[] = [
           much the site is used. Each time a page opens, your browser sends which page was opened (its address on
           TapTurf, without anything after a &ldquo;?&rdquo; or &ldquo;#&rdquo;), whether it is the first page of your
           visit, and where that visit came from: the name of the website or app that sent you, when your browser says
-          (Google, WhatsApp or another site&rsquo;s name, never the address of the page you came from). If you are
-          signed in, our server checks that and keeps only whether you were signed in, never who. We note the day.
-          Your browser keeps nothing on your device for this and sends nothing that identifies you or your device, and
-          we don&rsquo;t store your IP address for it. This runs whichever cookie choice you make. Only TapTurf&rsquo;s
-          team sees these counts.
+          (Google, WhatsApp or another site&rsquo;s or app&rsquo;s name, never the address of the page you came from).
+          We note the day. If you are not signed in, that is all it sends: nothing that identifies you or your device.
+          If you are signed in, your browser also sends your sign-in with each page view, the same sign-in it sends
+          whenever you use your account (it carries your phone number or email). Our server checks it only to count
+          the view as a signed-in one and to leave the site owner&rsquo;s own browsing out, and keeps only whether you
+          were signed in, never who. Your browser keeps nothing on your device for this, and we don&rsquo;t store your
+          IP address for it. This runs whichever cookie choice you make. Only TapTurf&rsquo;s team sees these counts.
         </p>
         <p>
           <strong>Your location, only when you ask.</strong> On the Turf Near Me page, tapping &ldquo;Use my
@@ -391,10 +393,12 @@ const SECTIONS: LegalSection[] = [
           <strong>What runs either way.</strong> TapTurf&rsquo;s own anonymous counts: how many times each turf
           page is viewed, the pages opened and where visits came from (see &ldquo;When you visit TapTurf&rdquo;),
           taps on Call or WhatsApp, and each start or finish in a free tool. They keep nothing on
-          your device, carry no tag and do not say who you are; they give turf owners their numbers on
-          myTapturf and show us which tools are used. If you are signed in, a Call or WhatsApp tap and a free
-          tool use are also kept with your account, as described in section 2. The site works exactly the same
-          whichever you choose.
+          your device and, while you are signed out, carry no tag and do not say who you are; they give turf owners
+          their numbers on myTapturf and show us which tools are used. If you are signed in, a Call or WhatsApp tap
+          and a free tool use are also kept with your account, as described in section 2, and each page you open
+          sends your sign-in, which our server checks only to count the view as a signed-in one, keeping nothing of
+          who you are (see &ldquo;When you visit TapTurf&rdquo;). The site works exactly the same whichever you
+          choose.
         </p>
         <p id="signup">
           <strong>When you sign up.</strong> If you accepted cookies, while you browse your device keeps a short note of how you first

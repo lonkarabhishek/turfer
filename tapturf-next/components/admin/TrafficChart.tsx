@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 /**
  * Visits a day for the admin's Traffic section: one column per India day,
- * oldest on the left, today (so far, lighter) on the right, in plain SVG
+ * the 30 full days (the 30 days tab's days) oldest on the left, then
+ * today (so far, lighter) on the right, in plain SVG
  * with no chart library. Tap, hover or use the arrow keys on a day to read
  * its visits and page views above the chart (today's at first); a table of
  * every day is there for screen readers. Readable at 390 px.
@@ -117,7 +118,7 @@ export function TrafficChart({ days }: { days: ChartDay[] }) {
       {/* sr-only on the wrapper: a table sized to its content would ignore it and widen the page. */}
       <div className="sr-only">
         <table>
-          <caption>Visits and page views a day, last {n} days</caption>
+          <caption>Visits and page views a day, the last {n - 1} days and today</caption>
           <thead>
             <tr>
               <th scope="col">Day</th>
