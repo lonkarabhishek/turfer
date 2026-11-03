@@ -44,6 +44,7 @@ import { OwnerClaims } from "@/components/admin/OwnerClaims";
 import { OwnerPhotos } from "@/components/admin/OwnerPhotos";
 import { ReviewFlags } from "@/components/admin/ReviewFlags";
 import { MapSection, mapSummary } from "@/components/admin/MapUsage";
+import { TrafficSection, trafficSummary } from "@/components/admin/Traffic";
 
 // Never cache. Always fresh numbers for the owner.
 export const dynamic = "force-dynamic";
@@ -89,16 +90,21 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </div>
         <h1 className="mt-1 md:mt-2 font-display tracking-tight text-primary-900 text-3xl md:text-5xl leading-none">TapTurf Admin</h1>
         <p className="text-primary-500 text-[12px] md:text-sm mt-1.5 md:mt-2">
-          Real numbers, refreshed on every load. For deeper session / pageview analytics see{" "}
+          Real numbers, refreshed on every load. Traffic is TapTurf&rsquo;s own count of every visit;{" "}
           <a href="https://analytics.google.com" target="_blank" rel="noopener noreferrer" className="text-accent-600 underline hover:text-accent-700">
             Google Analytics
-          </a>
-          .
+          </a>{" "}
+          sees only people who accept cookies.
         </p>
       </div>
 
-      {/* Sign-ups today, this week and this month; turfs claimed; what waits for the owner. */}
+      {/* Sign-ups today, this week and this month; turfs claimed; what waits for the owner; traffic and the map. */}
       <AtAGlance />
+
+      {/* Visits and page views, what people open and where they come from: TapTurf's own counts, from 4 Nov 2026 (20261104_traffic.sql). */}
+      <AdminSection id="traffic" title="Traffic" height={140} summary={trafficSummary}>
+        <TrafficSection />
+      </AdminSection>
 
       {/* The people who signed up and what each did, open: the chart above the list folds away (SignupsTrend). */}
       <AdminSection id="signups" title="Users and what they did" height={420} summary={signupsSummary} open>

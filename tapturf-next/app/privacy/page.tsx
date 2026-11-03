@@ -241,6 +241,19 @@ const SECTIONS: LegalSection[] = [
           note of when it last opened the map (see &ldquo;Stored on your device&rdquo;). Only TapTurf&rsquo;s team
           sees these records, to learn how many people use the map.
         </p>
+        <p id="traffic" className="scroll-mt-24">
+          <strong>When you visit TapTurf.</strong> We count visits and the pages opened on TapTurf, per day, to see how
+          much the site is used. Each time a page opens, your browser sends which page was opened (its address on
+          TapTurf, without anything after a &ldquo;?&rdquo; or &ldquo;#&rdquo;), whether it is the first page of your
+          visit, and where that visit came from: the name of the website or app that sent you, when your browser says
+          (Google, WhatsApp or another site&rsquo;s or app&rsquo;s name, never the address of the page you came from).
+          We note the day. If you are not signed in, that is all it sends: nothing that identifies you or your device.
+          If you are signed in, your browser also sends your sign-in with each page view, the same sign-in it sends
+          whenever you use your account (it carries your phone number or email). Our server checks it only to count
+          the view as a signed-in one and to leave the site owner&rsquo;s own browsing out, and keeps only whether you
+          were signed in, never who. Your browser keeps nothing on your device for this, and we don&rsquo;t store your
+          IP address for it. This runs whichever cookie choice you make. Only TapTurf&rsquo;s team sees these counts.
+        </p>
         <p>
           <strong>Your location, only when you ask.</strong> On the Turf Near Me page, tapping &ldquo;Use my
           location&rdquo; sends your approximate coordinates to our server once so we can sort turfs by
@@ -378,11 +391,14 @@ const SECTIONS: LegalSection[] = [
         </ul>
         <p>
           <strong>What runs either way.</strong> TapTurf&rsquo;s own anonymous counts: how many times each turf
-          page is viewed, taps on Call or WhatsApp, and each start or finish in a free tool. They keep nothing on
-          your device, carry no tag and do not say who you are; they give turf owners their numbers on
-          myTapturf and show us which tools are used. If you are signed in, a Call or WhatsApp tap and a free
-          tool use are also kept with your account, as described in section 2. The site works exactly the same
-          whichever you choose.
+          page is viewed, the pages opened and where visits came from (see &ldquo;When you visit TapTurf&rdquo;),
+          taps on Call or WhatsApp, and each start or finish in a free tool. They keep nothing on
+          your device and, while you are signed out, carry no tag and do not say who you are; they give turf owners
+          their numbers on myTapturf and show us which tools are used. If you are signed in, a Call or WhatsApp tap
+          and a free tool use are also kept with your account, as described in section 2, and each page you open
+          sends your sign-in, which our server checks only to count the view as a signed-in one, keeping nothing of
+          who you are (see &ldquo;When you visit TapTurf&rdquo;). The site works exactly the same whichever you
+          choose.
         </p>
         <p id="signup">
           <strong>When you sign up.</strong> If you accepted cookies, while you browse your device keeps a short note of how you first
@@ -487,6 +503,7 @@ const SECTIONS: LegalSection[] = [
           Records of your map use stay with your account and are deleted with it, or sooner if you ask. The daily
           counts of the map&rsquo;s use name nobody and are kept as totals.
         </li>
+        <li>The daily counts of visits and pages opened name nobody and are kept as totals.</li>
         <li>
           A live link stops updating after 2 hours without a new score; people with the link then see the last
           score. A live score is cleared when you turn its link off, or 30 days after its last update. The

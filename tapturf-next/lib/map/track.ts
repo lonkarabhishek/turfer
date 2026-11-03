@@ -1,4 +1,4 @@
-import { hasSignIn, signInKnown, signInToken, type TokenCheck } from "../account/client";
+import { sendCount } from "../count/send";
 import { newViewTag } from "../live/views";
 import { MAP_SEEN_KEY, mapCardKind, mapUseBody, personHere, planMapView, readMapSeen, type MapKind, type MapSeen } from "./views";
 
@@ -17,8 +17,6 @@ import { MAP_SEEN_KEY, mapCardKind, mapUseBody, personHere, planMapView, readMap
  */
 
 const USE_URL = "/api/map/views";
-/** A sign-in token that takes longer than this (a cold Firebase load) makes the event a guest's. */
-const TOKEN_WAIT_MS = 5_000;
 /** The same card tapped again this soon (a double tap) is one tap. */
 const TAP_AGAIN_MS = 2_000;
 
@@ -28,41 +26,10 @@ let lastTap: { href: string; at: number } | null = null;
 
 const person = () => personHere(navigator.userAgent, navigator.webdriver === true);
 
-function beacon(body: string) {
-  try {
-    if (navigator.sendBeacon?.(USE_URL, new Blob([body], { type: "application/json" }))) return;
-  } catch {
-    /* a browser that refuses the beacon: the fetch below */
-  }
-  void fetch(USE_URL, { method: "POST", body, headers: { "content-type": "application/json" }, keepalive: true, cache: "no-store" }).catch(() => {});
-}
-
-const tokenSoon = (): Promise<TokenCheck> =>
-  Promise.race([signInToken(), new Promise<TokenCheck>((resolve) => setTimeout(() => resolve({ unknown: true }), TOKEN_WAIT_MS))]);
-
-function sendNow(body: string) {
-  try {
-    if (hasSignIn() !== true) return beacon(body);
-    void tokenSoon()
-      .then((t) =>
-        "token" in t
-          ? fetch(USE_URL, { method: "POST", body, keepalive: true, cache: "no-store", headers: { "content-type": "application/json", Authorization: `Bearer ${t.token}` } }).then(() => {})
-          : beacon(body),
-      )
-      .catch(() => {});
-  } catch {
-    /* ignore */
-  }
-}
-
-/** One event, never in the way: while AuthProvider is still reading this device's sign-in, it waits for that (as long as a token may take). */
+/** One event, never in the way (lib/count/send.ts: a beacon, or a keepalive fetch with the sign-in). */
 function send(kind: MapKind, unique = false) {
   try {
-    const body = mapUseBody(kind, unique, newViewTag());
-    if (hasSignIn() !== null) return sendNow(body);
-    void signInKnown(TOKEN_WAIT_MS)
-      .then(() => sendNow(body))
-      .catch(() => {});
+    sendCount(USE_URL, mapUseBody(kind, unique, newViewTag()));
   } catch {
     /* ignore */
   }

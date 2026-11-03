@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2022",
+    "moduleResolution": "node",
+    "rootDir": ".",
+    "outDir": ".test-out/traffic",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "baseUrl": ".",
+    "paths": { "@/*": ["./*"] },
+    "lib": ["es2023", "dom"],
+    "types": ["node"]
+  },
+  "files": ["lib/traffic/traffic.test.ts", "lib/traffic/route.test.ts", "lib/traffic/usage.test.ts", "lib/traffic/track.test.ts"]
+}

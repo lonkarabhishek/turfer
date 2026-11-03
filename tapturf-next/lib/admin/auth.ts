@@ -2,25 +2,13 @@ import { cookies } from "next/headers";
 import { requestServerClient } from "@/lib/supabase/server";
 import { perKey } from "@/lib/supabase/oneClient";
 import { verifyFirebaseIdToken } from "@/lib/firebase/verifyIdToken";
+import { ADMIN_EMAILS, ADMIN_PHONES, indianPhone10 } from "@/lib/admin/owner";
+
+// Who the site owner is (the email and the number) lives in lib/admin/owner.ts, shared with the traffic counter.
+export { ADMIN_EMAILS, ADMIN_PHONES, indianPhone10 };
 
 /** Cookie holding the phone user's Firebase ID token (about 1 hour). */
 export const ADMIN_TOKEN_COOKIE = "tt_fid";
-
-// The site owner. Signing in via EITHER of these paths unlocks /admin:
-//   - Google OAuth with this email
-//   - Phone OTP with this Indian number (the 10 digits after +91)
-export const ADMIN_EMAILS = ["lonkarabhishek00@gmail.com"];
-export const ADMIN_PHONES = ["9403612979"];
-
-/**
- * The 10 digits of a verified Indian number, or "". Only "+91" and exactly
- * 10 digits count: matching the last 10 digits of any number would let a
- * foreign number that ends the same way (+1 940 ...) pass as the owner.
- */
-export function indianPhone10(raw: string | null | undefined): string {
-  const m = /^\+91(\d{10})$/.exec(raw ?? "");
-  return m ? m[1] : "";
-}
 
 /**
  * Returns true if the currently-signed-in user is the site owner.
