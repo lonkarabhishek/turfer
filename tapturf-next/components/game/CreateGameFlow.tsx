@@ -901,7 +901,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                             </span>
                             <span className="flex-1 min-w-0">
                               <span className="block text-[15px] font-semibold text-primary-800">Not on TapTurf? Add the venue</span>
-                              <span className="block text-[12px] text-primary-500">A ground, a school, a club: type its name and address</span>
+                              <span className="block text-[12px] text-primary-500">Type its name and address</span>
                             </span>
                             <ChevronRight className="w-4 h-4 text-primary-400 shrink-0" aria-hidden="true" />
                           </button>
