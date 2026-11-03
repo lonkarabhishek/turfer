@@ -59,12 +59,12 @@ export function ProfileSection({ user, onEditPhoto }: { user: AppUser; onEditPho
   const [typedError, setTypedError] = useState("");
 
   // Back from the Google sign-in the phone row asked for (?add=phone): open it, and take the word out of the address.
-  const [addPhoneNow] = useState(() => params.get("add") === "phone");
+  const [addPhoneNow] = useState(() => params?.get("add") === "phone");
   // The verified tick card's "Add phone number", and the tick's asks elsewhere (?add=phone-step): the
   // phone row's own step, as its button opens it (Google first when that sign-in is over 5 minutes old).
-  const [phoneSignal, setPhoneSignal] = useState(() => (params.get("add") === PHONE_STEP ? 1 : 0));
+  const [phoneSignal, setPhoneSignal] = useState(() => (params?.get("add") === PHONE_STEP ? 1 : 0));
   useEffect(() => {
-    const add = params.get("add");
+    const add = params?.get("add");
     if (add === "phone" || add === PHONE_STEP) router.replace(PROFILE_PATH, { scroll: false });
   }, [params, router]);
 

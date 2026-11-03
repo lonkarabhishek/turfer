@@ -2,6 +2,7 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient as createServerClient } from "@/lib/supabase/server";
 import { createRowStore, type ListMeta, type ListPart, type LogLevel, type RowStore, type RowsRead } from "@/lib/cache/rowStore";
+import { Unavailable } from "@/lib/cache/unavailable";
 import { createPartReader, dbTag } from "@/lib/cache/partRoute";
 import { convertImageUrls, filterReviewedPhotos, firstImageUrl } from "@/lib/utils/images";
 import { cleanPriceMentions, cleanVenueName } from "@/lib/utils/bookingApps";
@@ -452,6 +453,36 @@ export async function markStaleRender(): Promise<void> {
   }
 }
 
+/**
+ * The same for a render that got none of a read's data (it failed with no
+ * copy to fall back on), so the thinner page is kept a minute, not its
+ * usual 10 minutes to a day. Only for what is in neither the head nor a
+ * price (the trending spotlight): turf facts and sport bands throw
+ * Unavailable instead (needForPage), so the last good page keeps serving.
+ * Not while `next build` prerenders: pages built without a read the
+ * build-data step could not make keep their usual life, as that step
+ * intends.
+ */
+export async function markThinRender(): Promise<void> {
+  if (isBuilding()) return;
+  await markStaleRender();
+}
+
+const isBuilding = () => process.env.NEXT_PHASE === "phase-production-build";
+
+/**
+ * A page's read that gave nothing (failed, no copy at all: turf facts,
+ * sport bands): the head or the prices would come out thinner than the
+ * page that is cached, so the render throws Unavailable instead (a
+ * regeneration keeps the last good page, a first render answers 503 with
+ * Retry-After, pages/_error.tsx). While `next build` prerenders, the
+ * value as it is: the build-data step decided to build without it.
+ */
+export function needForPage<T>(value: T | null, what: string): T | null {
+  if (value === null && !isBuilding()) throw new Unavailable(what);
+  return value;
+}
+
 const INSTANCE = Math.random().toString(36).slice(2, 8);
 let liveReadNo = 0;
 
@@ -511,11 +542,13 @@ const listMeta = unstable_cache(cacheKeyed("turf-list-meta", readListMeta), ["tu
  *
  * When the new version cannot be read (27 Oct: part reads past the 5 s
  * guard right after a purge), the page renders with the copy this process
- * has, or a recent version still whole in the data cache, and is kept for
- * a minute only (markStaleRender), instead of failing: a foreground render
- * no longer shows a 500. The store then waits 20 to 30 s before it reads
- * again and resumes at the part that failed. Only a process with no copy
- * at all still throws (the last good page keeps serving). On globalThis,
+ * has, while this process knew it current within the last hour
+ * (MAX_COPY_AGE_MS: its prices and hours show as current), or with the
+ * wanted version itself from the data cache, and is kept for a minute
+ * only (markStaleRender), instead of failing. The store then waits 20 to
+ * 30 s before it reads again and resumes at the part that failed. With
+ * neither it throws Unavailable: a regeneration keeps the last good page,
+ * a first render answers 503 with Retry-After (pages/_error.tsx). On globalThis,
  * so the page runtime and the route-handler runtime (which bundles its own
  * copy of this module) share one copy and one load.
  */
@@ -582,10 +615,22 @@ export const activeTurfRows = activeRows;
 export async function getAllActiveTurfs(cityFilter?: CityId | null): Promise<Turf[]> {
   const city = cityFilter && isCity(cityFilter) ? cityFilter : null;
   const rows = await activeRows();
-  const data = city ? rows.filter((r) => r.city === city) : rows;
-  // Default order is "top rated" with the minimum-review rule, so a
-  // 5.0 from a handful of reviews doesn't lead city / listing pages.
-  return data.map((r) => transformTurf(r as never)).sort(compareTopRated);
+  return toTurfs(city ? rows.filter((r) => r.city === city) : rows);
+}
+
+// Default order is "top rated" with the minimum-review rule, so a
+// 5.0 from a handful of reviews doesn't lead city / listing pages.
+const toTurfs = (rows: readonly Row[]): Turf[] => rows.map((r) => transformTurf(r as never)).sort(compareTopRated);
+
+/**
+ * Every active turf, as getAllActiveTurfs(), with when this process last
+ * knew its copy of the rows to be the current version (epoch ms; an older
+ * copy served after a failed read is at most MAX_COPY_AGE_MS old). For
+ * lib/queries/turfCache.ts, whose own last list must not outlive that.
+ */
+export async function getAllActiveTurfsAsOf(): Promise<{ turfs: Turf[]; asOf: number }> {
+  const got = await activeRead();
+  return { turfs: toTurfs(got.rows), asOf: got.asOf };
 }
 
 export type CardTurfs = {

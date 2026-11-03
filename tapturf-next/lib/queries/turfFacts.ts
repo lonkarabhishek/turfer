@@ -3,6 +3,7 @@ import { createReadOnlyClient } from "@/lib/supabase/server";
 import { turfFactsFrom, type TurfFacts } from "@/lib/seo/turfFacts";
 import { readTurfFactRows } from "@/lib/build/reads";
 import { buildData, isFailed } from "@/lib/build/data";
+import { needForPage } from "@/lib/queries/turfs";
 
 // While building: the facts the build-data step made from the same read,
 // or its note that the read failed (a failed read here, no read of our own).
@@ -23,10 +24,14 @@ async function readTurfFacts(): Promise<TurfFacts> {
  * a day behind a new phone number is fine. A regeneration skips the
  * data cache, so a warm instance also keeps it in memory for an hour,
  * and concurrent renders share one read. A failed read gives the last
- * copy, or null: the snippets then promise only what the list rows show
- * (no "Call or WhatsApp", timings from start/end only), and the turf
- * title keeps its usual order. Never throws: a snippet is not worth a
- * failed page.
+ * copy (they are ids and flags, no price or hour, so a day-old copy is
+ * fine). With none at all the page throws Unavailable (needForPage): its
+ * title and description would promise less than the page that is cached
+ * (no "Call or WhatsApp", no shared-name city), so a regeneration keeps
+ * the last good page and a first render answers 503 with Retry-After.
+ * While `next build` prerenders, null as before: the snippets then
+ * promise only what the list rows show, as the build-data step decided.
+ * Only pages call this.
  */
 const getTurfFactsCached = unstable_cache(readTurfFacts, ["turf-facts-v1"], { revalidate: 86400 });
 const MEMO_MS = 3_600_000;
@@ -36,6 +41,11 @@ let failLoggedAt = -Infinity;
 
 export function getTurfFacts(): Promise<TurfFacts | null> {
   if (memo && Date.now() - memo.at < MEMO_MS) return Promise.resolve(memo.facts);
+  // In each caller's own render: no facts at all fails the render (not while building).
+  return readShared().then((facts) => needForPage(facts, "turf facts"));
+}
+
+function readShared(): Promise<TurfFacts | null> {
   pending ??= getTurfFactsCached()
     .then((facts) => {
       memo = { at: Date.now(), facts };

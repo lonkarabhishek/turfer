@@ -25,7 +25,7 @@ const NAV_ITEMS = [
  * signed out.
  */
 export function MobileNav() {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   const { user, login } = useAuth();
 
   return (

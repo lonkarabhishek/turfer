@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { coversColumns, createRowStore, type ListMeta, type ListPart } from "./rowStore";
+import { coversColumns, createRowStore, MAX_COPY_AGE_MS, type ListMeta, type ListPart } from "./rowStore";
+import { isUnavailable, RETRY_AFTER_S, Unavailable, UNAVAILABLE_HEADERS, UNAVAILABLE_HTML } from "./unavailable";
 
 type Row = { id: string; rating: number | null };
 const COLS = "id, rating, name";
@@ -281,11 +282,14 @@ test("a newer meta does not resume an older build's parts", async () => {
   assert.deepEqual(db.asked, [[0, 3], [1, 3], [2, 3]]);
 });
 
-test("no copy in this process: an older version from the shared cache, never the database", async () => {
-  // The shared cache holds v1 whole; the database is at v3 and failing.
-  const cachedV1 = fakeDb();
+test("no copy in this process: an older version in the shared cache is never served (its age is unknown), nor read from the database", async () => {
+  // The shared cache holds v1 and v2 whole; the database is at v3 and failing.
   const cached = new Map<string, ListPart<Row>>();
-  for (let i = 0; i < 3; i++) cached.set(`1/${i}`, (await cachedV1.readPart(i, 1))!);
+  for (const v of [1, 2]) {
+    const f = fakeDb();
+    f.db.v = v;
+    for (let i = 0; i < 3; i++) cached.set(`${v}/${i}`, (await f.readPart(i, v))!);
+  }
   const cacheAsks: [number, number][] = [];
   const { db, store, logs, clock } = setup({
     readCachedPart: async (i, v) => {
@@ -297,15 +301,15 @@ test("no copy in this process: an older version from the shared cache, never the
   db.onPart = () => {
     throw new Error("TimeoutError");
   };
-  const r = await store.read(db.meta());
-  assert.deepEqual([r.v, r.stale, r.rows.length], [1, true, 1200], "v1 from the cache, stale");
-  assert.deepEqual(cacheAsks, [[0, 3], [0, 2], [0, 1], [1, 1], [2, 1]], "v3 and v2 missing, then v1 whole");
-  assert.equal(failures(logs)[0].extra.have, 1);
-  // While waiting, the kept v1 serves with no read at all.
+  const e = await store.read(db.meta()).then(() => null, (x: unknown) => x);
+  assert.ok(isUnavailable(e), "Unavailable, not v2 or v1");
+  assert.match((e as Error).message, /TimeoutError/, "the read's error is in it");
+  assert.deepEqual(cacheAsks, [[0, 3]], "only the wanted version is asked for");
+  assert.equal(failures(logs)[0].msg, "turf rows: read failed, no copy to serve");
+  // While waiting: Unavailable at once, no database read.
   const reads = db.partReads;
-  assert.equal((await store.read(db.meta())).rows, r.rows);
+  await assert.rejects(store.read(db.meta()), (x: unknown) => isUnavailable(x));
   assert.equal(db.partReads, reads);
-  assert.equal(cacheAsks.length, 5, "kept: the cache is not read again");
   clock.t += 20_000;
   db.onPart = null;
   assert.equal((await store.read(db.meta())).v, 3);
@@ -364,11 +368,11 @@ test("a load that part 0 moved to a newer build judges its fallback by that buil
   await atPart1.reached;
   const b = store.read(db.meta()); // a v2 render joins the load part 0 moved to v2
   release();
-  const [ra, rb] = await Promise.all([a, b]);
+  const [ra, rb] = await Promise.allSettled([a, b]);
   assert.equal(db.partReads, 2, "one load for both");
-  assert.deepEqual([rb.v, rb.stale], [1, true], "the v2 caller gets v1 marked stale");
-  assert.deepEqual([ra.v, ra.stale], [1, true], "the v1 caller too (harmless)");
-  assert.deepEqual(cacheAsks[0], [0, 2], "the shared cache is asked for v2 first");
+  assert.ok(rb.status === "rejected" && isUnavailable(rb.reason), "the v2 caller never gets v1");
+  assert.ok(ra.status === "rejected" && isUnavailable(ra.reason), "nor the v1 caller (v1 in the cache is of unknown age too)");
+  assert.deepEqual(cacheAsks, [[0, 2]], "the shared cache is asked for v2, part 0 named it");
 });
 
 test("loads that keep failing are logged as errors once they have lasted escalateAfterMs; a load that succeeds starts over", async () => {
@@ -402,15 +406,129 @@ test("no copy anywhere: the error, then the same error at once while waiting (no
   db.onPart = () => {
     throw new Error("TimeoutError: The operation was aborted due to timeout");
   };
-  await assert.rejects(store.read(db.meta()), /TimeoutError/);
+  await assert.rejects(store.read(db.meta()), (e: unknown) => isUnavailable(e) && /TimeoutError/.test((e as Error).message));
   assert.equal(failures(logs)[0].level, "error");
   const reads = db.partReads;
-  await assert.rejects(store.read(db.meta()), /TimeoutError/);
+  await assert.rejects(store.read(db.meta()), (e: unknown) => isUnavailable(e) && /TimeoutError/.test((e as Error).message));
   assert.equal(db.partReads, reads, "no read while waiting");
   assert.equal(failures(logs).length, 1);
   clock.t += 20_000;
   db.onPart = null;
   assert.equal((await store.read(db.meta())).rows.length, 1200);
+});
+
+/** The shared cache holding the given versions whole (each the fake database's rows at that version), and every ask of it. */
+async function sharedCacheOf(versions: number[]) {
+  const cached = new Map<string, ListPart<Row>>();
+  for (const v of versions) {
+    const f = fakeDb();
+    f.db.v = v;
+    for (let i = 0; i < 3; i++) cached.set(`${v}/${i}`, (await f.readPart(i, v))!);
+  }
+  const asks: [number, number][] = [];
+  const readCachedPart = async (i: number, v: number) => {
+    asks.push([i, v]);
+    return cached.get(`${v}/${i}`) ?? null;
+  };
+  return { cached, asks, readCachedPart };
+}
+
+test("a copy stands in for a failed read only while young: at most an hour since this process knew it current", async () => {
+  const HOUR = 3_600_000;
+  assert.equal(MAX_COPY_AGE_MS, HOUR);
+  const { db, store, logs, clock } = setup();
+  const v1 = await store.read(db.meta());
+  assert.deepEqual([v1.stale, v1.asOf], [false, clock.t], "a fresh read is current as of now");
+  // An idle hour, then the list moves and its parts time out.
+  clock.t += HOUR;
+  db.v = 2;
+  db.onPart = () => {
+    throw new Error("TimeoutError: The operation was aborted due to timeout");
+  };
+  const r = await store.read(db.meta());
+  assert.deepEqual([r.rows === v1.rows, r.v, r.stale, r.asOf], [true, 1, true, v1.asOf], "exactly an hour: still served, marked stale, its age kept");
+  assert.equal(failures(logs).at(-1)?.extra.ageMs, HOUR);
+  // A millisecond past the hour (after the wait), the same copy is too old.
+  clock.t += 30_001;
+  const e = await store.read(db.meta()).then(() => null, (x: unknown) => x);
+  assert.ok(isUnavailable(e), "too old: Unavailable, not the hour-old prices and hours");
+  const line = failures(logs).at(-1)!;
+  assert.deepEqual([line.msg, line.level, line.extra.kept, line.extra.keptAgeMs], ["turf rows: read failed, no copy to serve", "error", 1, HOUR + 30_001]);
+  // While waiting: the same, at once, with no database read.
+  const reads = db.partReads;
+  await assert.rejects(store.read(db.meta()), (x: unknown) => isUnavailable(x));
+  assert.equal(db.partReads, reads);
+  // The database is back: the new version, fresh.
+  clock.t += 30_000;
+  db.onPart = null;
+  const v2 = await store.read(db.meta());
+  assert.deepEqual([v2.v, v2.stale, v2.asOf], [2, false, clock.t]);
+});
+
+test("every read that finds the copy current keeps it young: a busy process serves it through a failure much later", async () => {
+  const { db, store, clock } = setup();
+  const v1 = await store.rowsFor(db.meta());
+  // Six hours of renders, each finding v1 still the current version.
+  for (let k = 0; k < 36; k++) {
+    clock.t += 600_000;
+    assert.equal((await store.read(db.meta())).asOf, clock.t);
+  }
+  db.v = 2;
+  db.onPart = () => {
+    throw new Error("TimeoutError");
+  };
+  clock.t += 59 * 60_000;
+  const r = await store.read(db.meta());
+  assert.deepEqual([r.rows === v1, r.stale, clock.t - r.asOf], [true, true, 59 * 60_000], "known current 59 minutes ago: served");
+});
+
+test("orKept and a failed table read follow the same bound", async () => {
+  const HOUR = 3_600_000;
+  const err = new Error("Turf list version read failed");
+  const a = setup();
+  await a.store.rowsFor(a.db.meta());
+  a.clock.t += HOUR;
+  assert.equal(a.store.orKept(err).stale, true, "an hour old: served");
+  a.clock.t += 1;
+  assert.throws(() => a.store.orKept(err), (x: unknown) => isUnavailable(x) && /version read failed/.test((x as Error).message));
+  // The table (a snapshot missing a column), its copy, then a failed read.
+  const b = setup();
+  const cols = "id, rating";
+  const first = await b.store.rowsFor(b.db.meta({ cols }));
+  b.db.built += 60_000;
+  b.db.failLive = true;
+  b.clock.t += HOUR;
+  assert.equal((await b.store.read(b.db.meta({ cols }))).rows, first, "an hour old: served");
+  b.clock.t += 30_001;
+  b.db.built += 60_000;
+  await assert.rejects(b.store.read(b.db.meta({ cols })), (x: unknown) => isUnavailable(x) && /Paged fetch failed/.test((x as Error).message));
+});
+
+test("the wanted version from the shared cache is served (it is current); no older one, near or far (3 Nov's far search is gone)", async () => {
+  const sc = await sharedCacheOf([5, 12, 29]);
+  const { db, store } = setup({ readCachedPart: sc.readCachedPart });
+  db.v = 30;
+  db.onPart = () => {
+    throw new Error("Turf list part 1 read failed: TimeoutError: The operation was aborted due to timeout");
+  };
+  await assert.rejects(store.read(db.meta()), (x: unknown) => isUnavailable(x));
+  assert.deepEqual(sc.asks, [[0, 30]], "v29, v12 and v5 are never asked for");
+  // The list post's warm-up puts v30 there: served, fresh.
+  const whole = await sharedCacheOf([30]);
+  for (const [k, p] of whole.cached) sc.cached.set(k, p);
+  const r = await store.read(db.meta());
+  assert.deepEqual([r.v, r.stale, r.rows.length], [30, false, 1200]);
+});
+
+test("a failed table read with no young copy here: Unavailable; a stale snapshot in the shared cache is never served", async () => {
+  const sc = await sharedCacheOf([7]);
+  const { db, store } = setup({ readCachedPart: sc.readCachedPart });
+  db.v = 7;
+  db.failLive = true;
+  // The builder is stuck (not built for 3 hours): the table is read, and fails.
+  await assert.rejects(store.read(db.meta({ age_s: 20_000 })), (x: unknown) => isUnavailable(x) && /Paged fetch failed/.test((x as Error).message));
+  assert.equal(db.partReads, 0, "never the snapshot from the database");
+  assert.equal(sc.asks.length, 0, "nor from the shared cache");
 });
 
 test("at most one part read in flight, and a load a newer version overtakes hands its callers over", async () => {
@@ -467,7 +585,7 @@ test("callers for the build part 0 named join the load in flight", async () => {
   assert.equal(db.partReads, 3, "one load for both");
 });
 
-test("orKept: a failed version read serves this process's copy (logged once per wait), or rethrows", async () => {
+test("orKept: a failed version read serves this process's copy (logged once per wait), or Unavailable", async () => {
   const { db, store, logs, clock } = setup();
   const err = new Error("Turf list version read failed");
   assert.throws(() => store.orKept(err), /version read failed/, "nothing kept yet");
@@ -642,4 +760,30 @@ test("kept rows are sorted once and frozen", async () => {
   assert.equal(rows[0].rating, null, "no rating first");
   for (let i = 1; i < rows.length; i++) assert.ok((rows[i - 1].rating ?? Infinity) >= (rows[i].rating ?? Infinity));
   assert.throws(() => (rows as Row[]).sort(), TypeError, "callers cannot sort it in place");
+});
+
+test("Unavailable: known by name or message across bundles (never instanceof), with the 503's headers and page", () => {
+  const e = new Unavailable("turf rows", new Error("TimeoutError: The operation was aborted due to timeout"));
+  assert.ok(isUnavailable(e));
+  assert.equal(e.name, "TapTurfUnavailable");
+  assert.match(e.message, /^TapTurf unavailable: turf rows: TimeoutError/);
+  assert.ok(e.cause instanceof Error);
+  // As another bundle (or Next, passing it on) may hand it over: a plain object, or the message alone.
+  assert.ok(isUnavailable({ name: e.name, message: "x" }));
+  assert.ok(isUnavailable({ name: "Error", message: e.message }));
+  assert.ok(isUnavailable(new Unavailable("turf facts")));
+  for (const other of [new Error("Turf list part 1 read failed: TimeoutError"), null, undefined, "TapTurf unavailable: x", { message: 5 }]) {
+    assert.equal(isUnavailable(other), false, String(other));
+  }
+  assert.equal(RETRY_AFTER_S, 30);
+  assert.deepEqual(UNAVAILABLE_HEADERS, {
+    "Retry-After": "30",
+    "Cache-Control": "private, no-cache, no-store, max-age=0, must-revalidate",
+    "X-Robots-Tag": "noindex",
+    "Content-Type": "text/html; charset=utf-8",
+  });
+  assert.ok(Object.isFrozen(UNAVAILABLE_HEADERS));
+  assert.match(UNAVAILABLE_HTML, /<meta name="robots" content="noindex, follow">/);
+  assert.match(UNAVAILABLE_HTML, /<a href="\/"/);
+  assert.doesNotMatch(UNAVAILABLE_HTML, /<script/i, "nothing that runs or reads data");
 });

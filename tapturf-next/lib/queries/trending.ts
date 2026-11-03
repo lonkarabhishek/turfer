@@ -8,6 +8,7 @@ import { areaFor } from "@/lib/utils/area";
 import { turfPhotos } from "@/lib/utils/images";
 import { livePicks, readTrendingRows } from "@/lib/build/reads";
 import { buildData } from "@/lib/build/data";
+import { markThinRender } from "@/lib/queries/turfs";
 
 /** The live "Most Trending Turf" pick for a city (server-side). */
 export interface TrendingPick {
@@ -60,9 +61,34 @@ const getTrendingPicksCached = unstable_cache(readTrendingPicks, ["trending-pick
   tags: ["turf-data"],
 });
 
-/** The shared copy, but never throws: a failed lookup just means no spotlight. */
+// The last picks this process read (page and route-handler bundles share them).
+const kept = ((globalThis as typeof globalThis & { __tapturfTrendingKept?: { picks: Partial<Record<CityId, TrendingPick>> | null } }).__tapturfTrendingKept ??= { picks: null });
+
+/** The kept picks whose window is open at `now`: a pick that ended since is never shown. */
+function stillLive(picks: Partial<Record<CityId, TrendingPick>>, now: number): Partial<Record<CityId, TrendingPick>> {
+  const out: Partial<Record<CityId, TrendingPick>> = {};
+  for (const [city, p] of Object.entries(picks)) {
+    if (p && Date.parse(p.startsAt) <= now && now < Date.parse(p.endsAt)) out[city as CityId] = p;
+  }
+  return out;
+}
+
+/**
+ * The shared copy, but never throws. A failed lookup gives the last picks
+ * this process read, those still live, else none (no spotlight); either
+ * way the page is kept a minute only (markThinRender, not while
+ * building), so a page without its spotlight is not kept 10 minutes
+ * because of one slow read.
+ */
 export async function getTrendingPicks(): Promise<Partial<Record<CityId, TrendingPick>>> {
-  return getTrendingPicksCached().catch(() => ({}));
+  try {
+    const picks = await getTrendingPicksCached();
+    kept.picks = picks;
+    return picks;
+  } catch {
+    await markThinRender();
+    return kept.picks ? stillLive(kept.picks, Date.now()) : {};
+  }
 }
 
 /** The pick for one city, or null. */

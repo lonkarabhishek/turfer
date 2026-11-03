@@ -6,7 +6,8 @@ import { ChevronRight, LocateFixed } from "lucide-react";
 import { getAllActiveTurfs, getCardTurfs, turfRowsStale } from "@/lib/queries/turfs";
 import { cityPointsOf, isCity, labelFor, type CityId } from "@/lib/city";
 import { getCitiesForSport, getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
-import { citySportHref, citySportLinks, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
+import { citySportHref, citySportLinks, SPORT_PAGES, sportBySlug, sportVenues, turfPlaysSport, venueWord } from "@/lib/sports";
+import { prerenderedListCities } from "@/lib/build/reads";
 import { MIN_TURFS_TO_INDEX, relatedPosts, sportCityFaq, sportCityStats } from "@/lib/sportCity";
 import { CARD_LIMIT, SportTurfRest } from "@/components/sport/SportTurfList";
 import { TurfListingClient } from "@/components/search/TurfListingClient";
@@ -22,19 +23,34 @@ import { OG_BASE, ROBOTS_INDEX, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/li
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
 import { listingReach, reachOf } from "@/lib/seo/turfFacts";
 import { getTurfFacts } from "@/lib/queries/turfFacts";
-import { getSportBands, listWithSportBands } from "@/lib/queries/sportBands";
+import { getSportBandsForPage, listWithSportBands } from "@/lib/queries/sportBands";
+import { Unavailable } from "@/lib/cache/unavailable";
 import { courtNearMeLink } from "@/lib/near/courtNearMe";
 
 // "Football turfs in Pune" style landing pages: the city + sport
 // queries people actually search. Built from the listings only.
 export const revalidate = 3600;
 
-// None built at deploy: about 750 city and sport pairs, many of them
-// 404s or thin pages, each rendered against the database on every build
-// and preview. Each now renders on its first visit (from the cached turf
-// rows) and is cached from then on.
-export function generateStaticParams(): { city: string; sport: string }[] {
-  return [];
+// Production builds render the indexable pages (3 or more venues, the
+// sitemap's rule) of the 8 biggest cities by live count and Nashik, the
+// home market (lib/build/reads.ts prerenderedListCities), from the
+// build-data step's rows: after a deploy their first visit, often
+// Googlebot's, used to be a live database read. Every other pair (about
+// 750 in all, many of them 404s or thin) renders on its first visit (from
+// the cached turf rows) and is cached from then on; previews and local
+// builds render none. A read that fails here builds none, as before.
+export async function generateStaticParams(): Promise<{ city: string; sport: string }[]> {
+  if (process.env.VERCEL_ENV !== "production") return [];
+  try {
+    const cities = new Set(prerenderedListCities(await getLiveCities()));
+    const out: { city: string; sport: string }[] = [];
+    for (const sp of SPORT_PAGES) {
+      for (const c of await getCitiesForSport(sp.slug)) if (cities.has(c.id)) out.push({ city: c.id, sport: sp.slug });
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 // Once per render: generateMetadata and the page share it (React cache).
@@ -47,11 +63,12 @@ const load = cache(async (cityParam: string, sportParam: string) => {
   // A live city has active turfs, so an empty list is a bad read, not a
   // missing page: throw (the last good page keeps serving) rather than
   // cache a 404. /bangalore/swimming, 17 pools, was a 404 to Google on 18 Oct.
-  if (cityTurfs.length === 0) throw new Error(`No turfs read for live city ${city}`);
+  // (Unavailable: a first render answers 503 with Retry-After, pages/_error.tsx.)
+  if (cityTurfs.length === 0) throw new Unavailable(`No turfs read for live city ${city}`);
   const turfs = cityTurfs.filter((t) => turfPlaysSport(t.sports, sport));
   // Rows older than the current version (its read failed) may predate this
   // sport's first turfs here: fail the render rather than cache a 404.
-  if (turfs.length === 0 && (await turfRowsStale())) throw new Error(`No ${sport.slug} turfs in ${city} in an older copy of the rows`);
+  if (turfs.length === 0 && (await turfRowsStale())) throw new Unavailable(`No ${sport.slug} turfs in ${city} in an older copy of the rows`);
   return { city, sport, turfs, cityTurfs };
 });
 
@@ -138,7 +155,7 @@ export default async function CitySportPage({
   // first. The points come from the live list (the page read it already,
   // isLiveCity), so this city is placed even when its own sport page is
   // too thin to be in the sport's list.
-  const [sportCities, live, bands, cards] = await Promise.all([getCitiesForSport(s.slug), getLiveCities(), getSportBands(), getCardTurfs(cityId)]);
+  const [sportCities, live, bands, cards] = await Promise.all([getCitiesForSport(s.slug), getLiveCities(), getSportBandsForPage(), getCardTurfs(cityId)]);
   const otherCities = pickOtherCities(sportCities, cityId, cityPointsOf(live)).flatMap((c) => {
     const href = citySportHref(c.id, s.slug, c.n);
     return href ? [{ ...c, href }] : [];

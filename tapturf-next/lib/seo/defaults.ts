@@ -86,7 +86,9 @@ export const OG_BASE = { siteName: SITE_NAME, locale: "en_IN", type: "website" }
  * Words a title or description must never use: TapTurf takes no
  * booking (players call or WhatsApp the turf), ranks nothing it cannot
  * source, shows no star glyph as if the rating were its own, and does
- * not hurry anyone. Tests run every template through this.
+ * not hurry anyone. Tests run every template through this. One title is
+ * allowed "booking": /pune's (listingMeta.ts BOOKING_TITLE_PHRASE, the
+ * site owner's call), which says the player calls or WhatsApps the turf.
  */
 export const BANNED_COPY: readonly RegExp[] = [
   /\bbook(?:ing|ed|s)?\b(?! fee)/i,

@@ -17,7 +17,10 @@ import {
   courtNearMeDescription,
   courtNearMeKeywords,
   courtNearMeTitle,
+  BOOKING_TITLE_CITY,
+  BOOKING_TITLE_PHRASE,
 } from "./listingMeta";
+import { CITIES, cityInfo } from "../city";
 import { bannedCopy, DEFAULT_OG_IMAGE, SEO_TEMPLATE_DATE } from "./defaults";
 import { listingReach, reachOf, turfFactsFrom, type TurfFactRow } from "./turfFacts";
 import { DESCRIPTION_MAX_CHARS, titleFits } from "./width";
@@ -27,6 +30,7 @@ import type { Turf } from "../../types/turf";
 import { TURF_PHOTOS_BUCKET } from "../utils/images";
 
 const sport = (slug: string) => sportBySlug(slug)!;
+const cityInfoLabel = (slug: string) => cityInfo(slug).label;
 
 function clean(title: string, description: string) {
   assert.ok(titleFits(title), `title: ${title}`);
@@ -123,6 +127,68 @@ test("city: no 'Timings', 'Photos' or 'Call or WhatsApp' that no turf behind the
   assert.equal(cityDescription(kolar), "2 turfs in Kolar: 2 football, 2 box cricket. 1 floodlit. No booking fee.");
   assert.match(cityDescription({ ...kolar, contactable: 1 }), /Call or WhatsApp, no booking fee\.$/);
   clean(cityTitle(muz), cityDescription(kolar));
+});
+
+test("/pune alone: 'Turf Booking in Pune: <n> Turfs, Call or WhatsApp', its description unchanged", () => {
+  const pune: CityFacts = { ...surat, label: "Pune", count: 295, priced: 40 };
+  const before = cityTitle(pune);
+  assert.equal(before, "295 Turfs in Pune: Box Cricket & Football, Timings & Photos", "the title every other city keeps");
+  const t = cityTitle(pune, "pune");
+  assert.equal(t, "Turf Booking in Pune: 295 Turfs, Call or WhatsApp");
+  assert.equal(BOOKING_TITLE_CITY, "pune");
+  assert.ok(t.startsWith(`${BOOKING_TITLE_PHRASE}: `));
+  // The one exception to the booking ban is exactly that phrase: the rest of the title passes every rule.
+  assert.equal(bannedCopy(t), "Booking");
+  clean(t.replace(BOOKING_TITLE_PHRASE, "Turfs in Pune"), cityDescription(pune));
+  assert.ok(titleFits(t), t);
+  // The count is the one the usual title states (Indian grouping included).
+  assert.equal(cityTitle({ ...pune, count: 1234 }, "pune"), "Turf Booking in Pune: 1,234 Turfs, Call or WhatsApp");
+  assert.equal(cityTitle({ ...pune, count: 1 }, "pune"), "Turf Booking in Pune: 1 Turf, Call or WhatsApp");
+  // The description takes no slug: /pune's is the one it always was.
+  assert.equal(cityDescription(pune), "295 turfs in Pune: 41 box cricket, 8 football, 3 pickleball. Most in Vesu, Mota Varachha and Pal Gam; 17 floodlit. Call or WhatsApp, no booking fee.");
+});
+
+test("/pune falls back to its usual title only when too wide (or with no count); never on the turf facts", () => {
+  const pune: CityFacts = { ...surat, label: "Pune", count: 295, priced: 40 };
+  for (const f of [{ ...pune, count: 0 }, { ...pune, count: 1e12 }]) {
+    assert.equal(cityTitle(f, "pune"), cityTitle(f), `count ${f.count}`);
+    assert.equal(bannedCopy(cityTitle(f, "pune")), null);
+  }
+  // 1e12 in Indian grouping is too long for the booking title; the usual one still fits.
+  assert.ok(titleFits(cityTitle({ ...pune, count: 1e12 }, "pune")));
+  // The turf facts unread (a build whose facts read failed, reach null): the same title, not the old one.
+  const card = (id: string) => ({ id, images: [], rating: 0, total_reviews: 0, opening_hours: null, start_time: null, end_time: null, is_24x7: null }) as unknown as Turf;
+  const unread = { ...pune, ...listingReach(Array.from({ length: 295 }, (_, i) => card(`t${i}`)), null) };
+  assert.equal(unread.contactable, 0);
+  assert.equal(cityTitle(unread, "pune"), "Turf Booking in Pune: 295 Turfs, Call or WhatsApp");
+  assert.equal(cityTitle({ ...pune, contactable: 0 }, "pune"), "Turf Booking in Pune: 295 Turfs, Call or WhatsApp");
+});
+
+test("every other city keeps its title: keyed to the slug 'pune', never the label", () => {
+  const shapes: CityFacts[] = [
+    surat,
+    { ...surat, count: 390, priced: 220 },
+    { ...surat, count: 1, sports: [{ name: "Box Cricket", count: 1 }], areas: [], floodlit: 0, priced: 0 },
+    { ...surat, count: 0 },
+    { ...surat, contactable: 0, withHours: 0 },
+  ];
+  const slugs = [...CITIES.map((c) => c.id), "alwar", "pune-cantonment", "pimpri-chinchwad", "Pune", "PUNE", " pune", ""];
+  let checked = 0;
+  for (const slug of slugs) {
+    if (slug === "pune") continue;
+    for (const f of shapes) {
+      for (const label of [cityInfoLabel(slug), "Pune"]) {
+        const facts = { ...f, label };
+        const t = cityTitle(facts, slug);
+        assert.equal(t, cityTitle(facts), `${slug} (${label})`);
+        assert.equal(bannedCopy(t), null, t);
+        checked++;
+      }
+    }
+  }
+  assert.ok(checked > 500, `${checked} titles checked`);
+  // No slug at all (every caller before 3 Nov): the usual title, Pune's label or not.
+  assert.equal(cityTitle({ ...surat, label: "Pune", count: 295 }), "295 Turfs in Pune: Box Cricket & Football, Timings & Photos");
 });
 
 test("city + sport: facets and the call to action follow the venues", () => {

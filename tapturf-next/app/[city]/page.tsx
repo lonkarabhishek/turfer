@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import { compareTopRated, hasEnoughReviews } from "@/lib/utils/ranking";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowUpRight, MapPin } from "lucide-react";
-import { getAllActiveTurfs, getCardTurfs } from "@/lib/queries/turfs";
+import { getAllActiveTurfs, getCardTurfs, turfRowsStale } from "@/lib/queries/turfs";
+import { Unavailable } from "@/lib/cache/unavailable";
 import { getTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { trendingFor } from "@/lib/queries/turfList";
 import { TurfListingClient } from "@/components/search/TurfListingClient";
@@ -13,7 +15,7 @@ import { MakeMyCity } from "@/components/city/MakeMyCity";
 import { AskPageContext } from "@/components/ask/AskPageContext";
 import { citySportLinks, venueWord } from "@/lib/sports";
 import { CITIES, cityPointsOf, isCity, labelFor, stateFor, type CityId } from "@/lib/city";
-import { getLiveCities, isLiveCity, pickOtherCities } from "@/lib/queries/cities";
+import { cityPageIndexable, getLiveCities, isLiveCity, pickOtherCities, servedAfterFailure } from "@/lib/queries/cities";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { fitFontSize } from "@/lib/utils/fitText";
@@ -39,6 +41,23 @@ export async function generateStaticParams() {
   return [...new Set([...live.map((c) => c.id), ...CITIES.map((c) => c.id)])].map((city) => ({ city }));
 }
 
+/**
+ * The city's turfs, as /<city>/<sport> guards them (its load()): a live
+ * city has active turfs, so none is a bad read, and rows older than the
+ * current version (their read failed) with fewer turfs than the live count
+ * would be a thinner page than the one cached. Either way the render
+ * throws Unavailable: a regeneration keeps the last good page, a first
+ * render answers 503 with Retry-After (pages/_error.tsx). Never an empty
+ * "0 grounds" page, never a 404. Once per render (React cache).
+ */
+const cityTurfs = cache(async (city: CityId) => {
+  const [turfs, stale, liveCities] = await Promise.all([getAllActiveTurfs(city), turfRowsStale(), getLiveCities()]);
+  if (turfs.length === 0) throw new Unavailable(`No turfs read for live city ${city}`);
+  const live = liveCities.find((c) => c.id === city);
+  if (stale && live && turfs.length < live.n) throw new Unavailable(`${turfs.length} of ${live.n} turfs in ${city} in an older copy of the rows`);
+  return turfs;
+});
+
 export async function generateMetadata(
   { params }: { params: Promise<{ city: string }> }
 ): Promise<Metadata> {
@@ -47,10 +66,18 @@ export async function generateMetadata(
   const label = labelFor(city);
   // The rows the page reads anyway (one read per render, React cache),
   // and which of them show timings or a number to call (a day-long copy).
-  const [turfs, turfFacts] = await Promise.all([getAllActiveTurfs(city), getTurfFacts()]);
+  const [turfs, turfFacts, liveCities] = await Promise.all([cityTurfs(city), getTurfFacts(), getLiveCities()]);
   const facts = cityFacts(label, turfs, citySportLinks(city, turfs), listingReach(turfs, reachOf(turfFacts)));
-  const title = cityTitle(facts);
+  // The slug: /pune alone has its own title (lib/seo/listingMeta.ts BOOKING_TITLE_CITY).
+  const title = cityTitle(facts, city);
   const description = cityDescription(facts);
+  // A city with fewer turfs than MIN_TURFS_TO_INDEX (city_turf_counts, the
+  // count the sitemap uses) stays out of the index and the sitemap, as thin
+  // city + sport pages do; its links are still followed. Every other city
+  // sets no robots and keeps the layout's. A list kept from before (its
+  // read failed) can be a day old: then the rows this page shows count.
+  const live = liveCities.find((c) => c.id === city);
+  const thin = !!live && !cityPageIndexable(servedAfterFailure(liveCities) ? { n: turfs.length } : live);
 
   return {
     title: { absolute: title },
@@ -74,6 +101,7 @@ export async function generateMetadata(
     },
     twitter: TWITTER_CARD,
     alternates: { canonical: `https://www.tapturf.in/${city}` },
+    ...(thin ? { robots: ROBOTS_NOINDEX_FOLLOW } : {}),
   };
 }
 
@@ -84,9 +112,10 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
   const label = labelFor(cityId);
 
   // The card rows and picks are the ones /turfs and GET /api/turfs/list rank
-  // (same rows as getAllActiveTurfs, one read per render).
+  // (same rows as getAllActiveTurfs, one read per render; cityTurfs refuses a
+  // stale or empty copy, as generateMetadata does).
   const [turfs, picks, liveCities, cards] = await Promise.all([
-    getAllActiveTurfs(cityId),
+    cityTurfs(cityId),
     getTrendingPicks(),
     getLiveCities(),
     getCardTurfs(cityId),

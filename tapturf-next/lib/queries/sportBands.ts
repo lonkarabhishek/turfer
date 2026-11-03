@@ -1,6 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
-import { cacheKeyed, toBands } from "@/lib/queries/turfs";
+import { cacheKeyed, needForPage, toBands } from "@/lib/queries/turfs";
 import { readSportBandRows } from "@/lib/build/reads";
 import { buildData, isFailed } from "@/lib/build/data";
 import { sportBandMap, sportBandTimeMap, type SportBandMap, type SportBandTimeMap } from "@/lib/utils/cardSport";
@@ -37,8 +37,11 @@ async function readSportBandTimes(): Promise<SportBandTimeMap> {
  * Cached for a day and untagged, as getTurfFacts: a card a day behind a
  * band the data team changed is fine (the turf page itself is current). A
  * warm instance keeps it an hour in memory, and concurrent renders share
- * one read. A failed read gives the last copy, or null: the cards then
- * decide without bands, as before bands were read (sportPrice). For a
+ * one read. A failed read gives the last copy, or null: a route's cards
+ * then decide without bands, as before bands were read (sportPrice); a
+ * page throws Unavailable instead (needForPage at its call, not while
+ * building), so its prices never come out other than the cached page's
+ * and the last good page keeps serving. For a
  * minute after one the instance answers that way without reading again:
  * the /turfs chips ask on every request, and each read of a database that
  * is down waits out the guard's timeout and counts toward its breaker,
@@ -48,6 +51,9 @@ async function readSportBandTimes(): Promise<SportBandTimeMap> {
  * the build wrote are one entry.
  */
 export const getSportBands = memoised("getSportBands", unstable_cache(cacheKeyed("sport-bands", readSportBands), ["sport-bands-v1"], { revalidate: 86400 }));
+
+/** getSportBands for a page: no bands at all throws Unavailable (needForPage), never while building. */
+export const getSportBandsForPage = (): Promise<SportBandMap | null> => getSportBands().then((bands) => needForPage(bands, "sport bands"));
 
 /**
  * The same bands by time band and day type (cardSport.ts sportBandTimesOf),

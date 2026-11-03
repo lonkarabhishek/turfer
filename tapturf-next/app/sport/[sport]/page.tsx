@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, LocateFixed } from "lucide-react";
 import { getTurfsBySport } from "@/lib/queries/turfs";
-import { getSportBands } from "@/lib/queries/sportBands";
+import { getSportBandsForPage } from "@/lib/queries/sportBands";
 import { SportTurfList } from "@/components/sport/SportTurfList";
 import { SPORT_PAGES, citySportHref, sportBySlug, sportVenues, venueWord, type SportPage } from "@/lib/sports";
 import { CITY_IDS, isCity, isCitySlug, labelFor } from "@/lib/city";
@@ -109,7 +109,7 @@ export default async function SportPage({
   const info = sportBySlug(sport);
   if (!info) notFound();
 
-  const [turfs, bands] = await Promise.all([turfsFor(info), getSportBands()]);
+  const [turfs, bands] = await Promise.all([turfsFor(info), getSportBandsForPage()]);
   const perCity = citiesFor(turfs, info);
   // Each of those cities' own page, /<city>, in the same order. A reserved
   // slug (a turfs.city of "blog") is never a city page: getLiveCities

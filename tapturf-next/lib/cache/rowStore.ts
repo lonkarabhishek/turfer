@@ -39,9 +39,19 @@
 //   0. A newer build replaces them; a part from another build drops them.
 // - A load that fails serves the newest copy this process has, marked
 //   stale (the caller then shortens the page's life, so it is read again
-//   within a minute or two). With no copy at all it looks in the shared
-//   cache (readCachedPart, never the database) for the wanted version, whole,
-//   then for the few before it, and only then throws. "Wanted" is the
+//   within a minute or two), but only while that copy is young: this
+//   process knew it to be the current version at most maxCopyAgeMs (an
+//   hour) ago (`asOf`, moved by every read that found it current). The
+//   rows carry prices, hours and is_active, and an older copy would show
+//   them as current (the site owner's rule, 4 Nov). With no young copy it
+//   looks in the shared cache (readCachedPart, never the database) for the
+//   wanted version itself, whole (that one is current), and otherwise
+//   throws Unavailable (lib/cache/unavailable.ts): a regeneration then
+//   keeps the last good page, and a first render answers 503 with
+//   Retry-After, kept nowhere (pages/_error.tsx). Older versions in that
+//   cache are never served: nothing in them says how long ago they
+//   stopped being current (3 Nov's search up to 48 versions back could
+//   serve one nine days old). "Wanted" is the
 //   newest build the load was asked for or found (part 0 can name a newer
 //   one than the meta), so a caller for that build never gets an older copy
 //   unmarked. One log line per failed load, never one per caller: a warning
@@ -50,9 +60,9 @@
 //   part that always times out must not go unnoticed behind stale pages).
 // - After a failed read (a part or table read that threw), callers wait
 //   retryAfterMs (to 1.5 times that, so processes do not retry in step)
-//   before this process reads again: meanwhile they get the stale copy (or
-//   what the shared cache has), or the error at once, with no database
-//   call. Parts that do not fit
+//   before this process reads again: meanwhile they get the young stale
+//   copy (or the wanted version from the shared cache), or Unavailable at
+//   once, with no database call. Parts that do not fit
 //   together (a rebuild between two parts) are retried by the next caller
 //   straight away: that costs one part 0 and is no sign of a slow database.
 // - A snapshot is used when it carries every column the app selects (extra
@@ -61,7 +71,11 @@
 //   or no build for 3 hours) means the table is read directly, as before.
 //   That copy is reused for an hour, but never across a build: every list
 //   post builds first, so a purge always gets a fresh read. A failed table
-//   read serves the last copy, as above.
+//   read serves the last copy while it is young, as above, else throws
+//   Unavailable (never a snapshot from the shared cache: the table is read
+//   because none is usable, and a stale one is 3 hours old or more).
+
+import { Unavailable } from "./unavailable";
 
 export type ListMeta = {
   /** Snapshot version; moves only when the rows or the columns changed. */
@@ -97,6 +111,12 @@ export type RowsRead<R> = {
    * not be read. The page should not be kept as long as usual.
    */
   stale: boolean;
+  /**
+   * When this process last knew the copy to be the current version (epoch
+   * ms): the time of this read for a fresh copy, at most maxCopyAgeMs
+   * before it for a stale one.
+   */
+  asOf: number;
 };
 
 export type LogLevel = "info" | "warn" | "error";
@@ -112,8 +132,8 @@ export type RowStoreOptions<R> = {
   readPart: (i: number, v: number) => Promise<ListPart<R> | null>;
   /**
    * Part i of exactly version v when a shared cache already holds it, else
-   * null. Never the database: only for a process with no copy of its own
-   * whose load failed.
+   * null. Never the database: only for a process with no young copy of its
+   * own whose load failed, and only for the wanted version.
    */
   readCachedPart?: (i: number, v: number) => Promise<ListPart<R> | null>;
   /** Every row straight from the table: the way without a usable snapshot. */
@@ -128,8 +148,11 @@ export type RowStoreOptions<R> = {
   retryAfterMs?: number;
   /** Part reads in flight at once in this process. */
   maxPartReads?: number;
-  /** Versions below the wanted one also tried in the shared cache when this process has no copy. */
-  olderVersions?: number;
+  /**
+   * A copy this process last knew to be current longer ago than this never
+   * stands in for a failed read (Unavailable instead). MAX_COPY_AGE_MS.
+   */
+  maxCopyAgeMs?: number;
   /** Loads failing for this long with none succeeding: the failed-load line is logged as an error, not a warning. */
   escalateAfterMs?: number;
   random?: () => number;
@@ -144,8 +167,8 @@ export type RowStore<R> = {
   rowsFor(meta: ListMeta | null): Promise<readonly R[]>;
   /**
    * The version read itself failed: the newest copy this process has,
-   * marked stale, or `err` thrown when it has none. Logs at most once per
-   * retryAfterMs.
+   * marked stale, while it is young, else Unavailable (`err` its cause).
+   * Logs at most once per retryAfterMs.
    */
   orKept(err: unknown): RowsRead<R>;
 };
@@ -166,6 +189,13 @@ const MAX_PARTS = 200;
 
 /** A snapshot not built for this long (seconds) is not trusted: the builder is stuck. */
 export const SNAPSHOT_MAX_AGE_S = 10_800;
+
+/**
+ * The oldest a copy may be (since this process last knew it to be the
+ * current version) and still stand in for a failed read: its prices and
+ * hours show as current. About an hour, the site owner's rule (4 Nov).
+ */
+export const MAX_COPY_AGE_MS = 3_600_000;
 
 /**
  * Why no snapshot is usable for an app that selects `cols` ("no snapshot",
@@ -197,13 +227,14 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
   const liveTtlMs = opts.liveTtlMs ?? 3_600_000;
   const retryAfterMs = Math.max(0, opts.retryAfterMs ?? 20_000);
   const maxPartReads = Math.max(1, Math.floor(opts.maxPartReads ?? 1));
-  const olderVersions = Math.max(0, Math.floor(opts.olderVersions ?? 3));
+  const maxCopyAgeMs = Math.max(0, opts.maxCopyAgeMs ?? MAX_COPY_AGE_MS);
   const escalateAfterMs = Math.max(0, opts.escalateAfterMs ?? 600_000);
   const random = opts.random ?? Math.random;
   const now = opts.now ?? Date.now;
   const log = opts.log ?? ((msg, extra, level = "info") => console[level](msg, extra));
 
-  type Copy = { v: number; rows: readonly R[] };
+  // asOf: when this process last knew the copy to be the current version (fresh() moves it).
+  type Copy = { v: number; rows: readonly R[]; asOf: number };
   // v orders copies; built (live copies only) moves on every build.
   type Slot = { v: number; built: number; p: Promise<RowsRead<R>> };
   // The build a load is putting together: its numbers and the parts read so far.
@@ -226,9 +257,17 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
   const pending: { snapshot: Slot | null; live: Slot | null } = { snapshot: null, live: null };
 
   const keep = (rows: R[]): readonly R[] => Object.freeze(opts.order ? rows.sort(opts.order) : rows);
-  const fresh = (c: Copy): RowsRead<R> => ({ rows: c.rows, v: c.v, stale: false });
-  const stale = (c: Copy): RowsRead<R> => ({ rows: c.rows, v: c.v, stale: true });
+  // Handed out as the current version: it is, as of now.
+  const fresh = (c: Copy): RowsRead<R> => {
+    c.asOf = now();
+    return { rows: c.rows, v: c.v, stale: false, asOf: c.asOf };
+  };
+  const stale = (c: Copy): RowsRead<R> => ({ rows: c.rows, v: c.v, stale: true, asOf: c.asOf });
   const cooling = () => cool !== null && now() < cool.until;
+  // The newest copy here, when it may still stand in for a failed read.
+  const young = (): Copy | null => (latest && now() - latest.asOf <= maxCopyAgeMs ? latest : null);
+  // Nothing may stand in: the page is not rendered from older data (lib/cache/unavailable.ts).
+  const unavailable = (err: unknown) => new Unavailable("turf rows", err);
 
   function setSnap(c: Copy) {
     snap = c;
@@ -295,7 +334,7 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
     if (rows.length !== b.n) throw new Mismatch(`turf snapshot: v${b.v} has ${rows.length} rows, not ${b.n}`);
     const kept = keep(rows);
     // An older load finishing late never replaces a newer copy.
-    if (!snap || b.v > snap.v) setSnap({ v: b.v, rows: kept });
+    if (!snap || b.v > snap.v) setSnap({ v: b.v, rows: kept, asOf: now() });
     log("turf snapshot read", { src: "snapshot", v: b.v, rows: kept.length, parts: b.parts, reused, from, ms: now() - t0 });
     return fresh(snap!);
   }
@@ -310,24 +349,22 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
       if (!sameBuild(p, first)) return null;
       rows.push(...p!.rows);
     }
-    return rows.length === first.n ? { v, rows: keep(rows) } : null;
+    return rows.length === first.n ? { v, rows: keep(rows), asOf: now() } : null;
   }
 
-  // The newest of `want` and the few versions below it that the shared
-  // cache holds whole (`want` itself too: while this process waits after a
-  // failed read, a render that can read that cache still gets the version).
+  // `want` itself, whole, from the shared cache: while this process waits
+  // after a failed read, a render that can read that cache still gets the
+  // version. Only that one: it is the current version, where an older one
+  // could have stopped being current days ago (nothing in it says when).
   function fromCache(want: number): Promise<Copy | null> {
     const read = opts.readCachedPart;
     if (!read) return Promise.resolve(null);
     if (cachePending && cachePending.want === want) return cachePending.p;
     const p = (async () => {
-      for (let v = want; v >= Math.max(1, want - olderVersions); v--) {
-        const c = await cachedCopy(read, v).catch(() => null);
-        if (!c) continue;
-        if (!snap || c.v > snap.v) setSnap(c);
-        return snap;
-      }
-      return null;
+      const c = await cachedCopy(read, want).catch(() => null);
+      if (!c) return null;
+      if (!snap || c.v > snap.v) setSnap(c);
+      return snap;
     })().finally(() => {
       if (cachePending?.p === p) cachePending = null;
     });
@@ -338,10 +375,11 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
   async function snapshotFallback(want: number, err: unknown): Promise<RowsRead<R>> {
     // A load that ended meanwhile may have the version after all.
     if (snap && snap.v >= want) return fresh(snap);
-    if (latest) return stale(latest);
+    const kept = young();
+    if (kept) return stale(kept);
     const c = await fromCache(want);
-    if (c) return c.v >= want ? fresh(c) : stale(c);
-    throw err;
+    if (c && c.v >= want) return fresh(c);
+    throw unavailable(err);
   }
 
   async function loadLive(v: number, built: number, reason: string): Promise<RowsRead<R>> {
@@ -354,15 +392,19 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
     if (rows.length === 0) throw new Error("turf full read returned no active turfs");
     // An older read finishing late never replaces a newer copy.
     if (!live || (v >= live.v && built >= live.built)) {
-      live = { v, built, at: now(), rows: keep(rows) };
+      live = { v, built, at: now(), rows: keep(rows), asOf: now() };
       if (!latest || live.v >= latest.v) latest = live;
     }
     return fresh(live);
   }
 
+  // A table read failed: this process's copy while it is young, marked
+  // stale. Never a snapshot from the shared cache: the table is read
+  // because none is usable (a stale one is 3 hours old or more).
   async function liveFallback(err: unknown): Promise<RowsRead<R>> {
-    if (!latest) throw err;
-    return stale(latest);
+    const kept = young();
+    if (kept) return stale(kept);
+    throw unavailable(err);
   }
 
   function start(
@@ -390,14 +432,15 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
       let got: RowsRead<R>;
       try {
         got = await fallback(err, slot);
-      } catch {
-        log("turf rows: read failed, no copy to serve", line, "error");
-        throw err;
+      } catch (e) {
+        // kept: the copy this process has, too old to stand in (keptAgeMs since it was known current).
+        log("turf rows: read failed, no copy to serve", latest ? { ...line, kept: latest.v, keptAgeMs: now() - latest.asOf } : line, "error");
+        throw e;
       }
       // A warning for a burst that clears in a retry or two; an error (a
       // runtime-error group) once it has lasted, so a fault that only ever
       // serves stale rows is still seen.
-      log("turf rows: read failed, serving an older copy", { ...line, have: got.v }, failingForMs >= escalateAfterMs ? "error" : "warn");
+      log("turf rows: read failed, serving an older copy", { ...line, have: got.v, ageMs: now() - got.asOf }, failingForMs >= escalateAfterMs ? "error" : "warn");
       return got;
     };
     slot.p = load(slot)
@@ -443,12 +486,13 @@ export function createRowStore<R>(opts: RowStoreOptions<R>): RowStore<R> {
     read,
     rowsFor: (meta) => read(meta).then((r) => r.rows),
     orKept(err) {
-      if (!latest) throw err;
+      const kept = young();
+      if (!kept) throw unavailable(err);
       if (now() - metaLoggedAt >= Math.max(retryAfterMs, 1)) {
         metaLoggedAt = now();
-        log("turf rows: version read failed, serving this process's copy", { have: latest.v, error: message(err) }, "warn");
+        log("turf rows: version read failed, serving this process's copy", { have: kept.v, ageMs: now() - kept.asOf, error: message(err) }, "warn");
       }
-      return stale(latest);
+      return stale(kept);
     },
   };
 }

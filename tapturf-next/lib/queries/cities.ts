@@ -7,6 +7,8 @@ import { SPORT_PAGES, turfPlaysSport } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
 import { readCityCountRows } from "@/lib/build/reads";
 import { buildData } from "@/lib/build/data";
+import { cityCountsFromRows } from "@/lib/cache/cityCounts";
+import { isUnavailable, Unavailable } from "@/lib/cache/unavailable";
 
 // Pure, in lib/city.ts so test:city covers them; still imported from here.
 export { HOME_CITIES, pickOtherCities } from "@/lib/city";
@@ -27,6 +29,19 @@ type CountsRow = { city: string; n: number; lat?: unknown; lng?: unknown };
 
 const coord = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
+/** The view's rows as the live list: slug-shaped cities only, biggest first. */
+function toLiveCities(data: readonly CountsRow[]): LiveCity[] {
+  // Slug-shaped and not reserved: a turfs.city of "blog" must never
+  // become a city whose /blog link is another page.
+  const rows = data.filter((r) => isCitySlug(r.city));
+  const order = new Map(CITIES.map((c, i) => [c.id, i]));
+  // The view has no ORDER BY: the id breaks the last ties, so two
+  // uncurated cities with the same count never swap between reads.
+  return rows
+    .map((r) => ({ ...cityInfo(r.city), n: r.n, lat: coord(r.lat), lng: coord(r.lng) }))
+    .sort((a, b) => b.n - a.n || (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999) || a.id.localeCompare(b.id));
+}
+
 // One read of the city_turf_counts view (see getLiveCities); while
 // building, the one the build-data step made (lib/build/data.ts).
 async function readLiveCities(): Promise<LiveCity[]> {
@@ -39,15 +54,39 @@ async function readLiveCities(): Promise<LiveCity[]> {
     }
     data = res.data;
   }
-  // Slug-shaped and not reserved: a turfs.city of "blog" must never
-  // become a city whose /blog link is another page.
-  const rows = (data as CountsRow[]).filter((r) => isCitySlug(r.city));
-  const order = new Map(CITIES.map((c, i) => [c.id, i]));
-  // The view has no ORDER BY: the id breaks the last ties, so two
-  // uncurated cities with the same count never swap between reads.
-  return rows
-    .map((r) => ({ ...cityInfo(r.city), n: r.n, lat: coord(r.lat), lng: coord(r.lng) }))
-    .sort((a, b) => b.n - a.n || (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999) || a.id.localeCompare(b.id));
+  return toLiveCities(data as CountsRow[]);
+}
+
+/**
+ * The last good lists this process read, shared by the page and
+ * route-handler bundles (on globalThis, as the row store is): the hourly
+ * copy (getLiveCities) and the footer's day-long one (getFooterCities).
+ * After a failed read each serves its own, else the other's.
+ */
+type KeptLists = { hourly: LiveCity[] | null; footer: LiveCity[] | null };
+const kept = ((globalThis as typeof globalThis & { __tapturfLiveCities?: KeptLists }).__tapturfLiveCities ??= { hourly: null, footer: null });
+
+/**
+ * The list worked out from the active turf rows (lib/cache/cityCounts.ts),
+ * for a process with no list of its own when the view cannot be read. The
+ * rows keep their own last good copies (this process's, or a whole
+ * version in Next's data cache, lib/cache/rowStore.ts), and an older copy
+ * marks the render stale itself. Throws `err` when the rows cannot be read
+ * either, or name no city.
+ */
+let fromRowsMemo: { rows: readonly Record<string, unknown>[]; cities: LiveCity[] } | null = null;
+
+async function liveCitiesFromRows(err: unknown): Promise<LiveCity[]> {
+  let rows: readonly Record<string, unknown>[];
+  try {
+    rows = await activeTurfRows();
+  } catch {
+    throw err;
+  }
+  // The rows are one frozen array per copy: worked out once per copy.
+  if (fromRowsMemo?.rows !== rows) fromRowsMemo = { rows, cities: toLiveCities(cityCountsFromRows(rows)) };
+  if (fromRowsMemo.cities.length === 0) throw err;
+  return fromRowsMemo.cities;
 }
 
 /**
@@ -67,35 +106,68 @@ async function readLiveCities(): Promise<LiveCity[]> {
  * cache, and /<city> and /c/<city> asked 3 times each (metadata, layout or
  * page, the list), so a purge's burst of rebuilds ran city_turf_counts 3
  * times per page (3,524 calls by 27 Oct, 200 ms on average, up to 2.9 s).
- * When the read fails, a warm instance serves the last list it read
- * (logged at most every 30 s) and the page is kept a minute only
- * (markStaleRender), as with the turf rows. That list can be an hour old
- * or more (the hourly entry, or an instance idle since), so isLiveCity
- * never reads "not live" from it (see there).
+ * When the read fails (about 2,000 "Live cities read failed" a week in
+ * early Nov), the page gets the last good list there is: this process's
+ * hourly copy, else its footer copy, else the list worked out from the
+ * turf rows (liveCitiesFromRows); logged at most every 30 s, and the page
+ * is kept a minute only (markStaleRender), as with the turf rows. Only
+ * with none of them does it throw (Unavailable: a page with a last good
+ * version keeps it, a first render answers 503). That list can be an hour
+ * old or more (the hourly entry, the footer's day-long one, or an
+ * instance idle since), so isLiveCity never reads "not live" from it (see
+ * there), and a page never decides from its counts whether it is indexed
+ * (servedAfterFailure: /<city> and the sitemap count the turf rows
+ * instead).
  */
 const getLiveCitiesCached = unstable_cache(readLiveCities, ["live-cities"], { revalidate: 3600 });
-let liveKept: LiveCity[] | null = null;
 let liveFailLoggedAt = -Infinity;
-// The answers that were liveKept served after a failed read (each its own array).
+// The answers served after a failed read (each its own array).
 const keptAnswers = new WeakSet<LiveCity[]>();
 
 export const getLiveCities = cache(async (): Promise<LiveCity[]> => {
   try {
     const cities = await getLiveCitiesCached();
-    liveKept = cities;
+    kept.hourly = cities;
     return cities;
   } catch (e) {
-    if (!liveKept) throw e;
+    const own = kept.hourly ?? kept.footer;
+    let list: LiveCity[];
+    try {
+      list = own ?? (await liveCitiesFromRows(e));
+    } catch (none) {
+      throw isUnavailable(none) ? none : new Unavailable("live cities", none);
+    }
     if (Date.now() - liveFailLoggedAt >= 30_000) {
       liveFailLoggedAt = Date.now();
-      console.warn("getLiveCities: read failed, serving this instance's last list", e instanceof Error ? e.message : e);
+      const from = kept.hourly ? "this instance's last list" : own ? "this instance's footer list" : "the list worked out from the turf rows";
+      console.warn(`getLiveCities: read failed, serving ${from}`, e instanceof Error ? e.message : e);
     }
     await markStaleRender();
-    const kept = liveKept.slice();
-    keptAnswers.add(kept);
-    return kept;
+    const answer = list.slice();
+    keptAnswers.add(answer);
+    return answer;
   }
 });
+
+/**
+ * True when getLiveCities answered with a list kept from before (its read
+ * failed): its counts can be a day old, so whether a city page is indexed
+ * is then decided from the turf rows the caller has (/<city>, the sitemap).
+ */
+export function servedAfterFailure(list: LiveCity[]): boolean {
+  return keptAnswers.has(list);
+}
+
+/**
+ * A city page (/<city>) is indexed, and in the sitemap, only with at
+ * least MIN_TURFS_TO_INDEX active turfs (city_turf_counts): the rule thin
+ * city + sport pages follow. Below it (71 live cities on 3 Nov, 47 of them
+ * with one turf) the page is noindex, follow; links to it stay, and it is
+ * indexed again on the render that counts its third turf.
+ */
+export function cityPageIndexable(c: Pick<CityCountRow, "n">): boolean {
+  return c.n >= MIN_TURFS_TO_INDEX;
+}
 
 /**
  * The same list for the footer, which is on every page: its own copy,
@@ -108,7 +180,11 @@ export const getLiveCities = cache(async (): Promise<LiveCity[]> => {
  * A warm instance also keeps it in memory for an hour: a purged turf page
  * rebuilds with the data cache bypassed, and without the memo each of
  * those rebuilds re-ran the city_turf_counts query (20 Oct follow-up).
- * Throws like getLiveCities; the footer falls back for that render.
+ * A failed read gives the last good list this process has (its own, else
+ * the hourly one getLiveCities read); with none it throws, and the footer
+ * falls back to the curated cities for that render. Never the turf rows:
+ * a page that reads none (a turf page, the blog) would load the whole
+ * list, the reads that are failing, for its footer, and take its tag.
  */
 const getFooterCitiesCached = unstable_cache(readLiveCities, ["live-cities-footer"], { revalidate: 86400 });
 const FOOTER_MEMO_MS = 3_600_000;
@@ -120,12 +196,14 @@ export function getFooterCities(): Promise<LiveCity[]> {
   footerPending ??= getFooterCitiesCached()
     .then((cities) => {
       footerMemo = { at: Date.now(), cities };
+      kept.footer = cities;
       return cities;
     })
     .catch((e) => {
       // An hour-old list beats the curated fallback.
-      if (!footerMemo) throw e;
-      return footerMemo.cities;
+      const held = footerMemo?.cities ?? kept.footer ?? kept.hourly;
+      if (!held) throw e;
+      return held;
     })
     .finally(() => {
       footerPending = null;
@@ -142,7 +220,7 @@ export function getFooterCities(): Promise<LiveCity[]> {
 export async function isLiveCity(slug: string): Promise<boolean> {
   const cities = await getLiveCities();
   if (cities.some((c) => c.id === slug)) return true;
-  if (keptAnswers.has(cities)) throw new Error(`Live cities read failed; ${slug} is not in this instance's last list`);
+  if (keptAnswers.has(cities)) throw new Unavailable(`Live cities read failed; ${slug} is not in this instance's last list`);
   return false;
 }
 

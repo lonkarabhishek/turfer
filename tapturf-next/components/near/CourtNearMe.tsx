@@ -3,7 +3,7 @@ import { cache } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getTurfsBySport } from "@/lib/queries/turfs";
-import { getSportBands, withSportBands } from "@/lib/queries/sportBands";
+import { getSportBandsForPage, withSportBands } from "@/lib/queries/sportBands";
 import { getTurfFacts } from "@/lib/queries/turfFacts";
 import { sportVenues, venueWord } from "@/lib/sports";
 import { areaFor } from "@/lib/utils/area";
@@ -42,7 +42,7 @@ const load = cache(async (slug: CourtNearMeSlug) => {
   if (!sport) throw new Error(`No court near-me page for ${slug}`);
   // The sport page's rows (top rated first), its sport bands for the
   // price facts, and the turf facts for what the venues show.
-  const [turfs, bands, facts] = await Promise.all([getTurfsBySport(sport), getSportBands(), getTurfFacts()]);
+  const [turfs, bands, facts] = await Promise.all([getTurfsBySport(sport), getSportBandsForPage(), getTurfFacts()]);
   const cities = courtCities(turfs, sport);
   return {
     sport,
