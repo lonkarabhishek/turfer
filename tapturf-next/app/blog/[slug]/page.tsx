@@ -15,6 +15,7 @@ import { PostCard } from "@/components/blog/PostCard";
 import { TableOfContents } from "@/components/blog/TableOfContents";
 import { ShareBar } from "@/components/blog/ShareBar";
 import { StickyMobileCTA } from "@/components/blog/StickyMobileCTA";
+import { PreferredSourceBadge } from "@/components/ui/PreferredSourceBadge";
 import { AskPageContext } from "@/components/ask/AskPageContext";
 import { labelFor } from "@/lib/city";
 import { blogSeoDescription, blogSeoTitle, blogShareImage } from "@/lib/seo/blogMeta";
@@ -284,6 +285,15 @@ export default async function BlogPostPage({
           <div className="font-semibold text-primary-700">
             The TapTurf team
           </div>
+        </div>
+
+        {/* The end of the post, for readers who liked it: Google's preferred
+            sources, a plain link that loads nothing from Google (lib/preferredSource.ts). */}
+        <div className="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl bg-primary-50 p-4">
+          <p className="text-sm text-primary-600 leading-snug">
+            Like this post? Tell Google you want to see more from TapTurf.
+          </p>
+          <PreferredSourceBadge className="shrink-0 self-start sm:self-auto" />
         </div>
       </article>
 
