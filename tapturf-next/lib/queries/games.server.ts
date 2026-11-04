@@ -47,7 +47,8 @@ export async function getGameByIdServer(gameId: string): Promise<Game | null> {
   if (g.turf_id) {
     const { data: turfs } = await supabase
       .from("turfs")
-      .select('id, slug, name, address, city, lat, lng, "Gmap Embed link"')
+      // area: the share card's place line, as /games' cards have it (lib/og/gameCard.ts).
+      .select('id, slug, name, address, area, city, lat, lng, "Gmap Embed link"')
       .eq("id", g.turf_id)
       .limit(1);
     if (turfs?.[0]) (g as Record<string, unknown>).turfs = { ...turfs[0], name: cleanVenueName(turfs[0].name) };

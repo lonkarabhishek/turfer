@@ -4,9 +4,7 @@ import { getLiveCities } from "@/lib/queries/cities";
 import { CITIES, cityCopyFrom } from "@/lib/city";
 import { allTurfsDescription, homeDescription, homeTitle } from "@/lib/seo/listingMeta";
 import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
-import { gameDates } from "@/lib/seo/gameDates";
 import type { HomeData } from "@/lib/home/types";
-import type { Game } from "@/types/game";
 import { plural } from "@/lib/home/format";
 
 /**
@@ -147,40 +145,9 @@ export const GAMES_METADATA: Metadata = {
   alternates: { canonical: "https://www.tapturf.in/games" },
 };
 
-/** ItemList of SportsEvent for the first 20 open games, identical in every /games variant. */
-export function gamesJsonLd(active: Game[]) {
-  // JSON-LD: SportsEvent per game so Google can show rich results.
-  return {
-    "@context": "https://schema.org",
-    "@type": "ItemList",
-    itemListElement: active.slice(0, 20).map((g, i) => ({
-      "@type": "ListItem",
-      position: i + 1,
-      item: {
-        "@type": "SportsEvent",
-        "@id": `https://www.tapturf.in/game/${g.id}`,
-        name: `${g.sport} at ${g.turfs?.name || "a local turf"}`,
-        // India time, so a 7 PM game is not read as 7 PM UTC.
-        ...gameDates(g),
-        sport: g.sport,
-        location: g.turfs
-          ? {
-              "@type": "Place",
-              name: g.turfs.name,
-              address: g.turfs.address,
-            }
-          : undefined,
-        offers: {
-          "@type": "Offer",
-          price: g.price_per_player ?? 0,
-          priceCurrency: "INR",
-          availability: g.current_players < g.max_players
-            ? "https://schema.org/InStock"
-            : "https://schema.org/SoldOut",
-        },
-        maximumAttendeeCapacity: g.max_players,
-        remainingAttendeeCapacity: Math.max(0, g.max_players - g.current_players),
-      },
-    })),
-  };
-}
+/**
+ * ItemList of SportsEvent for the first 20 open games, identical in every
+ * /games variant: built in lib/seo/gameJsonLd.ts with the game page's
+ * SportsEvent, so both say the same of a game's host, card and venue.
+ */
+export { gamesJsonLd } from "@/lib/seo/gameJsonLd";

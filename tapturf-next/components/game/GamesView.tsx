@@ -3,7 +3,8 @@ import { AskPageContext } from "@/components/ask/AskPageContext";
 import { getLiveCities } from "@/lib/queries/cities";
 import { resolveCityScope } from "@/lib/city";
 import { cityLineFor } from "@/lib/cityLine";
-import { gamesJsonLd } from "@/lib/seo/pageMetadata";
+import { GAMES_JSON_LD_MAX, gamesJsonLd } from "@/lib/seo/gameJsonLd";
+import { hostUsernames } from "@/lib/games/hostProfile.server";
 import { gameCity } from "@/lib/utils/game";
 import { GamesListingClient } from "./GamesListingClient";
 import type { Game } from "@/types/game";
@@ -24,6 +25,8 @@ function cityOf(g: Game): string | null {
  */
 export async function GamesView({ requested }: { requested: string | null }) {
   const [{ games, at }, live] = await Promise.all([getOpenGamesCached(), getLiveCities()]);
+  // The listed games' hosts' public profiles, for the JSON-LD organizer url (none while building: the game page's url then).
+  const hosts = await hostUsernames(games.slice(0, GAMES_JSON_LD_MAX).map((g) => ({ id: g.creator_id, name: g.host_name })));
   const scope = resolveCityScope(requested, live);
   const id = scope.kind === "city" ? scope.id : null;
   const mine = id ? games.filter((g) => cityOf(g) === id) : games;
@@ -37,7 +40,7 @@ export async function GamesView({ requested }: { requested: string | null }) {
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(gamesJsonLd(games)) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(gamesJsonLd(games, hosts, at)) }} />
       <div id="tt-scope" data-scope={requested ?? ""} hidden />
       {/* Ask follows the city on screen (a fallback view shows a nearby one). */}
       <AskPageContext city={scope.kind === "city" ? scope.id : null} />

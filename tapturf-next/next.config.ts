@@ -55,6 +55,12 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // The game share cards draw the app icon, read from public/ while they
+  // render (lib/og/gameCardImage.tsx); public/ is served by the CDN and
+  // is not in a function's files unless named here.
+  outputFileTracingIncludes: {
+    "/api/og/game/**": ["./public/apple-icon.png"],
+  },
   images: {
     remotePatterns: [
       {
