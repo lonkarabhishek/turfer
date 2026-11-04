@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { Menu, X, MapPin, Gamepad2, PlusCircle, Calculator, BookOpen, LocateFixed, Store, Cookie } from "lucide-react";
 import { CityMenuRow } from "@/components/city/CityMenuRow";
 import { openCookieSettings } from "@/lib/consent";
+import { PreferredSourceBadge } from "@/components/ui/PreferredSourceBadge";
 
 const LINKS = [
   { href: "/turfs", label: "All turfs", icon: MapPin },
@@ -23,7 +24,7 @@ const LINKS = [
  * and the main links, so the header stays clean. Bottom sheet on phones,
  * a dropdown card on desktop. Closes on navigation and Esc. Also holds
  * Cookie settings, since the footer that has it on desktop is hidden on
- * phones.
+ * phones, and for the same reason the "preferred source on Google" link.
  */
 export function HeaderMenu() {
   const [open, setOpen] = useState(false);
@@ -95,6 +96,10 @@ export function HeaderMenu() {
                 <Cookie className="w-4 h-4 text-accent-600" />
                 Cookie settings
               </button>
+              {/* Google's preferred sources, a plain link (lib/preferredSource.ts). Last and quiet: the menu's own links come first. */}
+              <div className="px-1 pt-2 pb-1">
+                <PreferredSourceBadge wide onClick={() => setOpen(false)} />
+              </div>
             </div>
             <div className="md:hidden h-[env(safe-area-inset-bottom)] bg-white" />
           </div>

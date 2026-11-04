@@ -4,6 +4,7 @@ import { CITIES } from "@/lib/city";
 import { SPORT_PAGES } from "@/lib/sports";
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import { CookieSettingsButton } from "@/components/consent/CookieSettingsButton";
+import { PreferredSourceBadge } from "@/components/ui/PreferredSourceBadge";
 
 /** City links on every desktop page: the twelve biggest live cities. */
 const LINKED_CITIES = 12;
@@ -155,6 +156,15 @@ export async function Footer() {
               </li>
             </ul>
           </div>
+        </div>
+
+        {/* Google's preferred sources: a plain link; the badge loads nothing
+            from Google (lib/preferredSource.ts). Its own row, so it stays on
+            two lines at every desktop width (the brand column is too narrow
+            for it), on the right so the cookie banner (bottom left on desktop,
+            components/consent/CookieBanner.tsx) never covers it. */}
+        <div className="mt-10 md:flex md:justify-end">
+          <PreferredSourceBadge tone="dark" />
         </div>
 
         <div className="mt-10 pt-6 border-t border-primary-700 flex flex-col md:flex-row items-center justify-between gap-3">
