@@ -1,8 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  GAME_CARD_PADDING,
   GAME_CARD_SHAPES,
   cardSpots,
+  cardTitleSize,
   gameCardAlt,
   gameCardFacts,
   gameCardPath,
@@ -46,6 +48,7 @@ test("the card says sport, venue, place, the stored India day and time, and spot
   const f = gameCardFacts(turfGame, NOW);
   assert.deepEqual(f, {
     sport: "Box Cricket",
+    pill: "BOX CRICKET GAME",
     title: "Kings Arena",
     place: "Baner, Pune",
     when: "Sat 7 Nov \u00b7 7\u00a0\u2013 9\u00a0PM",
@@ -67,7 +70,7 @@ test("spots: left, one, full, closed once played, cancelled; never urgency", () 
   assert.deepEqual(cardSpots({ ...turfGame, status: "cancelled" }, NOW), { text: "Cancelled", kind: "cancelled" });
   for (const g of [turfGame, typedGame, { ...turfGame, current_players: 12 }]) {
     const f = gameCardFacts(g, NOW);
-    for (const line of [f.sport, f.title, f.place ?? "", f.when, f.spots.text, gameCardAlt(g, NOW)]) assert.equal(bannedCopy(line), null, line);
+    for (const line of [f.sport, f.pill, f.title, f.place ?? "", f.when, f.spots.text, gameCardAlt(g, NOW)]) assert.equal(bannedCopy(line), null, line);
   }
 });
 
@@ -87,14 +90,56 @@ test("a name the font cannot draw whole is left off, never drawn in part", () =>
   const none = gameCardFacts({ ...typedGame, venue_name: "शिवाजी मैदान", venue_area: null, venue_city: "वाई" }, NOW);
   assert.deepEqual([none.title, none.place], ["Football game", null]);
   assert.equal(gameCardFacts({ ...typedGame, sport: "कबड्डी" }, NOW).sport, "Game");
+  const bare = gameCardFacts({ ...typedGame, sport: "कबड्डी", venue_name: "शिवाजी मैदान", venue_area: null, venue_city: "वाई" }, NOW);
+  assert.deepEqual([bare.title, bare.pill], ["Game", "GAME"], "never \"Game game\"");
   const long = gameCardFacts({ ...typedGame, venue_name: "Pimpri Chinchwad Municipal Corporation Ground ⚽ behind the Old Railway Station" }, NOW);
   assert.equal(long.title, "Pimpri Chinchwad Municipal Corporation Ground behind the Old…", "cut after a whole word, the emoji left out");
   const oneWord = gameCardFacts({ ...typedGame, venue_name: "X".repeat(80) }, NOW);
   assert.equal(oneWord.title, `${"X".repeat(63)}…`, "no space to cut at: cut at the limit");
   for (const g of [turfGame, typedGame, { ...typedGame, venue_name: "Ground ⚽ 👍" }, { ...typedGame, venue_name: "Āzād ₹ Maidān" }]) {
     const f = gameCardFacts(g, NOW);
-    for (const line of [f.sport, f.title, f.place ?? "", f.when, f.spots.text]) assert.match(line, DRAWABLE, line);
+    for (const line of [f.sport, f.pill, f.title, f.place ?? "", f.when, f.spots.text]) assert.match(line, DRAWABLE, line);
   }
+});
+
+test("the sport pill is uppercased before it is drawn, so every capital in it is one the font has", () => {
+  // Uppercasing in the renderer (textTransform) came after ogText: "µ" and "ÿ" are in the font, their
+  // capitals (Greek "Μ", "Ÿ") are not, and next/og fetched them from Google Fonts while drawing.
+  assert.equal(gameCardFacts({ ...typedGame, sport: "Taµball" }, NOW).pill, "GAME", "a capital the font lacks: just GAME");
+  assert.equal(gameCardFacts({ ...typedGame, sport: "Kaÿoga" }, NOW).pill, "KAYOGA GAME", "Ÿ: its base letter");
+  assert.equal(gameCardFacts({ ...typedGame, sport: "Straße" }, NOW).pill, "STRASSE GAME");
+  assert.equal(gameCardFacts({ ...typedGame, sport: "Pétanque" }, NOW).pill, "PÉTANQUE GAME");
+  assert.equal(gameCardFacts({ ...typedGame, sport: "कबड्डी" }, NOW).pill, "GAME");
+  // Every character the font has, inside a sport's name and leading it: the pill is drawable as it stands.
+  for (let c = 0x20; c <= 0x2215; c++) {
+    const ch = String.fromCodePoint(c);
+    if (!DRAWABLE.test(ch)) continue;
+    for (const sport of [`Ta${ch}ball`, `${ch}ball`]) {
+      const f = gameCardFacts({ ...typedGame, sport }, NOW);
+      assert.match(f.pill, DRAWABLE, `U+${c.toString(16)}: ${f.pill}`);
+      assert.match(f.sport, DRAWABLE, `U+${c.toString(16)}: ${f.sport}`);
+    }
+  }
+});
+
+test("a long word gets a smaller title so it stays on the card; ordinary names keep their size", () => {
+  const shapes = ["og", "4x3", "1x1"] as const;
+  assert.deepEqual(shapes.map((s) => cardTitleSize("Kings Arena", s)), [96, 106, 117], "short names: the sizes as before");
+  assert.deepEqual(shapes.map((s) => cardTitleSize("Pimpri Chinchwad Municipal Corporation Ground behind the Old…", s)), [54, 59, 66]);
+  // Widths in em measured from the bundled Noto Sans (its hmtx): each word fits its line at its size.
+  // (A word of only its widest letters, "WWWW…", can still be too wide: it wraps inside itself, wordBreak.)
+  const em: Record<string, number> = { PlayArenaSportsHub: 9.725, MAHALAXMISPORTSARENA: 12.799, Supercalifragilistic: 8.601 };
+  for (const shape of shapes) {
+    const line = GAME_CARD_SHAPES[shape].width - 2 * GAME_CARD_PADDING[shape][1];
+    for (const [word, w] of Object.entries(em)) {
+      const size = cardTitleSize(word, shape);
+      assert.ok(w * size <= line, `${shape} ${word}: ${size}px is ${Math.round(w * size)}px, the line ${line}px`);
+      assert.ok(cardTitleSize(`${word} Turf`, shape) <= size, "the longest word sets it, wherever it is");
+    }
+    // No size fits 63 letters on a line: the smallest size, and the card wraps the word (wordBreak).
+    assert.equal(cardTitleSize(`${"X".repeat(63)}…`, shape), { og: 54, "4x3": 59, "1x1": 66 }[shape]);
+  }
+  assert.equal(cardTitleSize("Kings-Arena-Sports-Complex", "og"), cardTitleSize("Kings Arena Sports Complex", "og"), "a line can break after a hyphen");
 });
 
 test("the version changes with what the card says, and only then", () => {

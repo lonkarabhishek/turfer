@@ -43,6 +43,32 @@ export function isGameCardShape(s: unknown): s is GameCardShape {
   return typeof s === "string" && Object.prototype.hasOwnProperty.call(GAME_CARD_SHAPES, s);
 }
 
+/** Each shape's padding in px, [top and bottom, each side] (lib/og/gameCardImage.tsx): a line of text is the width less both sides. */
+export const GAME_CARD_PADDING: Record<GameCardShape, readonly [number, number]> = {
+  og: [56, 72],
+  "4x3": [72, 76],
+  "1x1": [88, 80],
+};
+
+// What a word is taken to need per character, in em: the bundled Noto Sans's capitals average 0.63 (small letters 0.53).
+const EM_PER_CHAR = 0.64;
+
+/**
+ * The title's font size: by its length, then smaller (to the smallest
+ * size at most) while its longest word would not fit on one line, so a
+ * typed name without spaces ("PlayArenaSportsHub") stays whole on the
+ * card instead of running off its edge. A word still too long at the
+ * smallest size wraps inside itself (wordBreak in gameCardImage.tsx).
+ */
+export function cardTitleSize(title: string, shape: GameCardShape): number {
+  const n = [...title].length;
+  const k = shape === "1x1" ? 1.22 : shape === "4x3" ? 1.1 : 1;
+  const bySize = Math.round((n <= 18 ? 96 : n <= 28 ? 80 : n <= 42 ? 64 : 54) * k);
+  const longest = Math.max(1, ...title.split(/[ \u200b\u2013\u2014-]+/u).map((w) => [...w].length));
+  const line = GAME_CARD_SHAPES[shape].width - 2 * GAME_CARD_PADDING[shape][1];
+  return Math.max(Math.round(54 * k), Math.min(bySize, Math.floor(line / (longest * EM_PER_CHAR))));
+}
+
 // What noto-sans-v27-latin-regular.ttf (next/dist/compiled/@vercel/og) has a glyph for, read from its cmap.
 const COVERED = /^[ -~\u00a0-\u00ff\u0131\u0152\u0153\u02bb\u02bc\u02c6\u02da\u02dc\u2002\u2009\u200b\u2013\u2014\u2018-\u201a\u201c-\u201e\u2022\u2026\u2032\u2033\u2039\u203a\u2044\u2074\u20ac\u2122\u2212\u2215]$/u;
 const covered = (ch: string) => COVERED.test(ch) && ch !== "\u00ad";
@@ -95,6 +121,13 @@ export type GameCardSpots = { text: string; kind: "open" | "full" | "closed" | "
 export type GameCardFacts = {
   /** "Football", or "Game" when the sport cannot be drawn. */
   sport: string;
+  /**
+   * "FOOTBALL GAME", the pill at the top: uppercased here, never by the
+   * renderer (textTransform), since a drawable letter's capital can be one
+   * the font lacks ("µ" -> Greek "Μ", "ÿ" -> "Ÿ"), which next/og would
+   * fetch from Google Fonts. "GAME" when the capitals cannot be drawn.
+   */
+  pill: string;
   /** The big line: the venue's name; its place when the name cannot be drawn; else "<Sport> game". */
   title: string;
   /** "Baner, Pune" under it (null when it is the title, or cannot be drawn). */
@@ -127,12 +160,16 @@ export function cardWhen(g: Pick<Game, "date" | "start_time" | "end_time">, now:
 /** Everything the card draws, each line already drawable in the bundled font. */
 export function gameCardFacts(g: CardGame, now: number = Date.now()): GameCardFacts {
   const sport = drawable(sportLabel(g.sport)) ?? "Game";
+  // "Football game"; just "Game" when the sport is (never "Game game").
+  const kind = (s: string) => (s === "Game" ? s : `${s} game`);
   const v = gameVenue(g);
   const name = v ? drawable(v.name) : null;
   const place = v ? drawable(venuePlace(v)) : null;
-  const title = clip(name ?? place ?? `${sport} game`, 64);
+  const title = clip(name ?? place ?? kind(sport), 64);
+  const short = clip(sport, 24);
   return {
-    sport: clip(sport, 24),
+    sport: short,
+    pill: drawable(kind(short).toUpperCase()) ?? "GAME",
     title,
     place: name && place ? clip(place, 56) : null,
     when: ogText(cardWhen(g, now)).text,
@@ -140,7 +177,7 @@ export function gameCardFacts(g: CardGame, now: number = Date.now()): GameCardFa
   };
 }
 
-/** The card's version: FNV-1a of the lines drawn and the template, in base 36. */
+/** The card's version: FNV-1a of the lines drawn and the template, in base 36 (the pill is the sport's, so the sport stands for it). */
 export function gameCardVersion(f: GameCardFacts): string {
   const s = JSON.stringify([GAME_CARD_TEMPLATE, f.sport, f.title, f.place, f.when, f.spots.text, f.spots.kind]);
   let h = 0x811c9dc5;

@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import { getGameByIdServer } from "@/lib/queries/games.server";
 import {
+  GAME_CARD_PADDING,
   GAME_CARD_SHAPES,
+  cardTitleSize,
   gameCardFacts,
   gameCardPath,
   gameCardVersion,
@@ -47,18 +49,12 @@ function appMark(): Promise<string> {
 const TEAL = "#00A699";
 const TEAL_DARK = "#00756C";
 
-function titleSize(title: string, shape: GameCardShape): number {
-  const n = [...title].length;
-  const base = n <= 18 ? 96 : n <= 28 ? 80 : n <= 42 ? 64 : 54;
-  return Math.round(base * (shape === "1x1" ? 1.22 : shape === "4x3" ? 1.1 : 1));
-}
-
 /** The card itself: brand and sport on top, the venue and its place, then the day and time and the spots. */
 function Card({ f, shape, icon }: { f: GameCardFacts; shape: GameCardShape; icon: string }) {
   const k = shape === "1x1" ? 1.2 : shape === "4x3" ? 1.1 : 1;
   const px = (n: number) => Math.round(n * k);
   const open = f.spots.kind === "open";
-  const pad = shape === "og" ? "56px 72px" : shape === "4x3" ? "72px 76px" : "88px 80px";
+  const pad = `${GAME_CARD_PADDING[shape][0]}px ${GAME_CARD_PADDING[shape][1]}px`;
   return (
     <div
       style={{
@@ -80,20 +76,22 @@ function Card({ f, shape, icon }: { f: GameCardFacts; shape: GameCardShape; icon
           style={{
             marginLeft: "auto",
             fontSize: px(24),
-            textTransform: "uppercase",
             letterSpacing: 3,
             padding: `${px(10)}px ${px(22)}px`,
             borderRadius: 999,
             border: "2px solid rgba(255,255,255,0.55)",
           }}
         >
-          {`${f.sport} game`}
+          {/* Already uppercase and drawable (gameCardFacts): no textTransform, whose capitals could be ones the font lacks. */}
+          {f.pill}
         </div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", fontSize: titleSize(f.title, shape), lineHeight: 1.08, letterSpacing: -1.5, maxWidth: 1056 }}>{f.title}</div>
-        {f.place && <div style={{ display: "flex", marginTop: px(16), fontSize: px(36), opacity: 0.92 }}>{f.place}</div>}
+        <div style={{ display: "flex", fontSize: cardTitleSize(f.title, shape), lineHeight: 1.08, letterSpacing: -1.5, maxWidth: 1056, wordBreak: "break-word" }}>
+          {f.title}
+        </div>
+        {f.place && <div style={{ display: "flex", marginTop: px(16), fontSize: px(36), opacity: 0.92, wordBreak: "break-word" }}>{f.place}</div>}
       </div>
 
       <div style={{ display: "flex", flexDirection: shape === "og" ? "row" : "column", alignItems: shape === "og" ? "center" : "flex-start" }}>
