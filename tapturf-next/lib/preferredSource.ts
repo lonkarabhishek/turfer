@@ -7,12 +7,12 @@
  * components/ui/PreferredSourceBadge.tsx draws it, and
  * lib/preferredSource.test.ts pins both (npm run test:badge).
  *
- * Plain link, nothing from Google on the page: the cookie banner rule
- * is that no third-party script, image or request loads before Accept
- * (lib/consent.ts), so this is not Google's JavaScript button
- * (news.google.com/swg/js/v1/publisher.js) and the artwork is served
- * from tapturf.in. Google is reached only when someone taps the link,
- * in a new tab.
+ * Plain link: the badge itself loads nothing from Google. Under the
+ * cookie banner rule no third-party script or tracking loads before
+ * Accept (lib/consent.ts), so this is not Google's JavaScript button
+ * (news.google.com/swg/js/v1/publisher.js), and the artwork is served
+ * from tapturf.in. The badge reaches Google only when someone taps the
+ * link, in a new tab.
  */
 
 /**

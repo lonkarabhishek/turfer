@@ -158,10 +158,12 @@ export async function Footer() {
           </div>
         </div>
 
-        {/* Google's preferred sources: a plain link, nothing loads from Google
-            (lib/preferredSource.ts). Its own row, so it stays on two lines at
-            every desktop width (the brand column is too narrow for it). */}
-        <div className="mt-10">
+        {/* Google's preferred sources: a plain link; the badge loads nothing
+            from Google (lib/preferredSource.ts). Its own row, so it stays on
+            two lines at every desktop width (the brand column is too narrow
+            for it), on the right so the cookie banner (bottom left on desktop,
+            components/consent/CookieBanner.tsx) never covers it. */}
+        <div className="mt-10 md:flex md:justify-end">
           <PreferredSourceBadge tone="dark" />
         </div>
 
