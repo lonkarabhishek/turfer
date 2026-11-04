@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { appTraceFiles, ERROR_PAGES, errorPageFiles, includeErrorPages } from "./errorPages";
 import { buildData, FAILED, FIRST_LIFE_S, firstLifeOf, isFailed, manifestProblem, MANIFEST, MANIFEST_MAX_AGE_MS, recorded, type BuildDatasets, type Manifest } from "./data";
 import { buildDataDir } from "./env";
 import { backoffMs, createPatientFetch, readEach, retryAfterMs } from "./patient";
@@ -943,4 +944,128 @@ test("old id links: the map in the project (the proxy's import) is the committed
   // map here means a build was stopped before it could (the next npm run build puts {} back).
   assert.equal(readFileSync(join(process.cwd(), TURF_IDS_FILE), "utf8"), TURF_IDS_EMPTY);
   assert.deepEqual(JSON.parse(TURF_IDS_EMPTY), {});
+});
+
+// ---------------------------------------------------------------- error pages in every app function
+
+/** A .next folder as Next 16 with Turbopack writes it: the pages router's error pages, app traces, shared chunks. */
+function distFixture(manifest: Record<string, string> = { "/500": "pages/500.js", "/_app": "pages/_app.js", "/_error": "pages/_error.js", "/_document": "pages/_document.js", "/404": "pages/404.html" }) {
+  const root = mkdtempSync(join(tmpdir(), "tapturf-errpages-test-"));
+  const dist = join(root, ".next");
+  const put = (rel: string, text = "x") => {
+    const file = join(root, rel);
+    mkdirSync(join(file, ".."), { recursive: true });
+    writeFileSync(file, text);
+  };
+  const trace = (rel: string, files: string[]) => put(rel, JSON.stringify({ version: 1, files }));
+  put(".next/server/pages-manifest.json", JSON.stringify(manifest));
+  for (const page of ["500", "_app", "_error", "_document"]) put(`.next/server/pages/${page}.js`, `module.exports = "${page}"`);
+  put(".next/server/pages/404.html", "<html>404</html>");
+  put(".next/server/pages/500.html", "<html>500</html>");
+  put(".next/server/pages/500/react-loadable-manifest.json", "{}");
+  for (const c of ["err500", "shared", "turf", "home"]) put(`.next/server/chunks/ssr/${c}.js`, `/* ${c} */`);
+  put("node_modules/react/index.js", "module.exports = {}");
+  // The 500 page's own chunk and loadable manifest, a package, and a file the trace lists that is not there.
+  trace(".next/server/pages/500.js.nft.json", ["../chunks/ssr/err500.js", "./500/react-loadable-manifest.json", "../../../node_modules/react/index.js", "../chunks/ssr/gone.js"]);
+  trace(".next/server/pages/_error.js.nft.json", ["../chunks/ssr/shared.js", "../../../node_modules/react/index.js"]);
+  trace(".next/server/pages/_app.js.nft.json", []);
+  trace(".next/server/pages/_document.js.nft.json", ["../chunks/ssr/shared.js"]);
+  trace(".next/server/app/turf/[id]/page.js.nft.json", ["../../../chunks/ssr/turf.js", "../../../chunks/ssr/shared.js"]);
+  trace(".next/server/app/api/cities/route.js.nft.json", ["../../../chunks/ssr/shared.js"]);
+  trace(".next/server/app/page.js.nft.json", ["../chunks/ssr/home.js"]);
+  put(".next/server/app/turf/[id]/page.js", "/* not a trace */");
+  return { root, dist, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+const traceOf = (file: string) => JSON.parse(readFileSync(file, "utf8")) as { version: number; files: string[] };
+
+test("error pages: every app trace (pages and route handlers) gains the 500 page, its chunk and loadable manifest, and _error, _app, _document", () => {
+  const f = distFixture();
+  try {
+    const turf = join(f.dist, "server/app/turf/[id]/page.js.nft.json");
+    const got = includeErrorPages(f.dist);
+    assert.equal(got.traces, 3);
+    // 500.js, err500.js, its loadable manifest, react; _error.js, shared.js; _app.js; _document.js. Not gone.js, not 500.html.
+    assert.equal(got.files, 8);
+    assert.ok(got.added > 0);
+    const t = traceOf(turf);
+    assert.equal(t.version, 1);
+    // What the trace listed comes first, as it was; nothing twice.
+    assert.deepEqual(t.files.slice(0, 2), ["../../../chunks/ssr/turf.js", "../../../chunks/ssr/shared.js"]);
+    assert.equal(new Set(t.files).size, t.files.length);
+    for (const p of [
+      "../../../pages/500.js",
+      "../../../chunks/ssr/err500.js",
+      "../../../pages/500/react-loadable-manifest.json",
+      "../../../pages/_error.js",
+      "../../../pages/_app.js",
+      "../../../pages/_document.js",
+      "../../../../../node_modules/react/index.js",
+    ]) {
+      assert.ok(t.files.includes(p), `${p} in the turf page's trace`);
+    }
+    assert.ok(!t.files.some((p) => p.endsWith("gone.js")), "only files that exist (Vercel stats each one)");
+    assert.ok(traceOf(join(f.dist, "server/app/page.js.nft.json")).files.includes("../pages/500.js"));
+    assert.ok(traceOf(join(f.dist, "server/app/api/cities/route.js.nft.json")).files.includes("../../../pages/500.js"));
+    // Every path in every trace names a file that is there, from that trace's folder.
+    for (const file of appTraceFiles(f.dist)) for (const p of traceOf(file).files) assert.ok(existsSync(join(file, "..", p)), `${p} from ${file}`);
+    // A second run (a build run again on the same .next) adds nothing.
+    const before = readFileSync(turf, "utf8");
+    assert.equal(includeErrorPages(f.dist).added, 0);
+    assert.equal(readFileSync(turf, "utf8"), before);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("error pages: the files come from the pages manifest and each page's own trace; a static page is its .html", () => {
+  const f = distFixture({ "/500": "pages/500.html", "/_error": "pages/_error.js" });
+  try {
+    const files = errorPageFiles(f.dist).map((p) => p.slice(f.root.length + 1).split("\\").join("/"));
+    assert.deepEqual(files, [".next/server/chunks/ssr/shared.js", ".next/server/pages/500.html", ".next/server/pages/_error.js", "node_modules/react/index.js"]);
+    assert.deepEqual(ERROR_PAGES, ["/500", "/_error", "/_app", "/_document"]);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("error pages: no pages router, nothing to do; a module the manifest names that is missing, or has no trace, fails the build", () => {
+  const f = distFixture();
+  try {
+    rmSync(join(f.dist, "server/pages-manifest.json"));
+    assert.deepEqual(includeErrorPages(f.dist), { traces: 0, files: 0, bytes: 0, added: 0 });
+  } finally {
+    f.cleanup();
+  }
+  const g = distFixture();
+  try {
+    rmSync(join(g.dist, "server/pages/500.js"));
+    assert.throws(() => includeErrorPages(g.dist), /pages\/500\.js for \/500, and it is not in/);
+  } finally {
+    g.cleanup();
+  }
+  const h = distFixture();
+  try {
+    rmSync(join(h.dist, "server/pages/500.js.nft.json"));
+    assert.throws(() => includeErrorPages(h.dist), /pages\/500\.js \(\/500\) has no trace file/);
+  } finally {
+    h.cleanup();
+  }
+});
+
+test("error pages: npm run build (what Vercel runs) adds them after every next build that passed, with the build-data step or without", () => {
+  const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as { scripts: Record<string, string> };
+  assert.match(pkg.scripts.build, /node \.test-out\/build-data\/scripts\/build\.js$/);
+  const src = readFileSync(join(process.cwd(), "scripts/build.ts"), "utf8");
+  const start = src.indexOf("async function nextBuild(");
+  const end = src.indexOf("\nfunction runNextBuild(", start);
+  assert.ok(start >= 0 && end > start, "scripts/build.ts has nextBuild, then runNextBuild");
+  assert.match(
+    src.slice(start, end),
+    /const code = await runNextBuild\(env, args\);\n\s+if \(code !== 0\) return code;\n\s+const done = includeErrorPages\(join\(process\.cwd\(\), "\.next"\)\);/,
+  );
+  // `next build` starts only there: both paths (TAPTURF_BUILD_DATA=off and the step) call nextBuild.
+  assert.equal(src.match(/runNextBuild\(/g)?.length, 2, "runNextBuild is defined once and called once, by nextBuild");
+  assert.equal(src.match(/(?:await|return) nextBuild\(/g)?.length, 2);
+  assert.equal(src.match(/spawn\(/g)?.length, 1, "one place starts next build");
 });
