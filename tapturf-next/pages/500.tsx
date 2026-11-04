@@ -12,10 +12,13 @@ import type { GetStaticProps } from "next";
 // pointed the pages manifest at that file, which Vercel serves from its
 // CDN and leaves out of the functions. A function that rendered the error
 // itself then found no file ("Failed to load static file for page: /500
-// ENOENT pages/500.html", 772 times in the week to 2 Nov) and sent a bare
-// "Internal Server Error". With getStaticProps the build still writes
-// pages/500.html (the CDN's copy), and the manifest names this module, so
-// a function renders the page from code and never needs the file.
+// ENOENT pages/500.html", 772 times in the week to 2 Nov) and sent nothing,
+// leaving the answer to the platform. With getStaticProps the build still
+// writes pages/500.html (the CDN's copy), and the manifest names this
+// module, so a function renders the page from code and never needs the file.
+// Vercel leaves this module out of the app router's functions too ("Cannot
+// find module .../pages/500.js", 4 Nov): `npm run build` adds it and the
+// files it loads to every app route's trace (lib/build/errorPages.ts).
 //
 // Plain on purpose: no layout, data or app code that could be what
 // failed; inline styles (the app's CSS is the root layout's); a plain

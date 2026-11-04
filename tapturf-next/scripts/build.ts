@@ -20,6 +20,10 @@
  * - TAPTURF_BUILD_DATA=off skips the step: `next build` reads the database
  *   itself, as before (a local build without a database), and the proxy's
  *   map stays empty (the turf page redirects old links itself).
+ * - After every `next build` that passed, with the step or without, the
+ *   error pages (pages/500.js, _error, _app, _document and what they load)
+ *   are added to every app route's trace, so each Vercel function can
+ *   render them (lib/build/errorPages.ts).
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -27,6 +31,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadEnvConfig } from "@next/env";
 import { buildDataStrict, TRIPWIRE_FILE } from "../lib/build/env";
+import { includeErrorPages } from "../lib/build/errorPages";
 import { resetTurfIds, writeTurfIds } from "../lib/build/turfIds";
 import { runBuildData, StepFailed } from "./build-data";
 
@@ -57,7 +62,18 @@ for (const sig of Object.keys(SIGNALS) as Signal[]) {
 }
 process.on("exit", cleanup);
 
-function nextBuild(env: NodeJS.ProcessEnv, args: string[]): Promise<number> {
+/** `next build`, then, when it passed, the error pages into every app route's trace (lib/build/errorPages.ts). */
+async function nextBuild(env: NodeJS.ProcessEnv, args: string[]): Promise<number> {
+  const code = await runNextBuild(env, args);
+  if (code !== 0) return code;
+  const done = includeErrorPages(join(process.cwd(), ".next"));
+  console.log(
+    `build: the error pages (${done.files} files, ${(done.bytes / 1024).toFixed(0)} KB) are in all ${done.traces} app route traces (${done.added} entries added)`,
+  );
+  return code;
+}
+
+function runNextBuild(env: NodeJS.ProcessEnv, args: string[]): Promise<number> {
   return new Promise((resolve) => {
     const proc = spawn(process.execPath, [require.resolve("next/dist/bin/next"), "build", ...args], { stdio: "inherit", env });
     child = proc;
