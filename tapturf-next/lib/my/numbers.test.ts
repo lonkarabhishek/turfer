@@ -2,8 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { numberInput, numberKind, numberPatch, readCallNumber, readWhatsApp, saveMessage, shownCallNumber } from "./numbers";
+import { numberInput, numberKind, numberPatch, pageHasNumber, readCallNumber, readWhatsApp, saveMessage, shownCallNumber } from "./numbers";
 import { normalizeIndianPhone } from "../utils/phone";
+import { hasUsableContact } from "../utils/contact";
 import { getPhone } from "../utils/seo";
 import type { Turf } from "../../types/turf";
 
@@ -63,6 +64,17 @@ test("shownCallNumber is the number the turf page's Call button dials (getPhone)
     assert.equal(shownCallNumber({ owner_phone: t.owner_phone, contact_phone: t.contact_info?.phone ?? null, landline_phone: t.landline_phone }), getPhone(t), JSON.stringify(f));
   }
   assert.equal(shownCallNumber({}), null, "an older database sends none of them");
+});
+
+test("pageHasNumber is the turf page's own rule (Call or WhatsApp shown); not known on an older database", () => {
+  for (const f of [...fixtures, { owner_phone: null, contact_info: null, landline_phone: null, whatsapp_phone: null }, { owner_phone: "junk", whatsapp_phone: "12345" }]) {
+    const t = turf(f);
+    const mine = { owner_phone: t.owner_phone, contact_phone: t.contact_info?.phone ?? null, landline_phone: t.landline_phone, whatsapp_phone: t.whatsapp_phone };
+    assert.equal(pageHasNumber(mine), hasUsableContact(t), JSON.stringify(f));
+  }
+  assert.equal(pageHasNumber({ owner_phone: null, contact_phone: null, landline_phone: null, whatsapp_phone: null }), false, "a claimed turf with no number");
+  assert.equal(pageHasNumber({ owner_phone: null, contact_phone: null, landline_phone: null, whatsapp_phone: "+919000000002" }), true, "a WhatsApp number alone");
+  assert.equal(pageHasNumber({ whatsapp_phone: null }), null, "an older database: not known");
 });
 
 test("numberPatch sends a number only when it changes", () => {

@@ -302,11 +302,31 @@ export function istStamp(iso: string): string {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}, ${clockLabel(d.getUTCHours() * 60 + d.getUTCMinutes())}`;
 }
 
-/** The owner's status line and its button. */
+/**
+ * A turf whose page has no number to call or WhatsApp: players never see its
+ * free slots (the page shows the card only beside Call or WhatsApp), so the
+ * owner's section says so, with a link to the numbers, instead of "Players
+ * see this". The marks still save and count once a number is added.
+ */
+export const OWNER_NO_NUMBER = {
+  line: "Players see your free slots once your page has a number to call or WhatsApp.",
+  link: "Add your number",
+} as const;
+
+/** The owner's section's lead under its heading: with a number, that players see the free hours. */
+export function ownerLead(hasNumber: boolean): string {
+  return hasNumber
+    ? "Tap an hour when it gets booked. Tap again to free it. Players see your free hours on your page and contact you."
+    : "Tap an hour when it gets booked. Tap again to free it.";
+}
+
+/** The owner's status line and its button. hasNumber false: the page has no number, so players see nothing yet. */
 export function ownerStatus(
   updatedAt: string | null,
   nowMs: number,
-): { kind: "never" | "live" | "ending" | "hidden"; line: string; button: string } {
+  hasNumber = true,
+): { kind: "never" | "live" | "ending" | "hidden" | "no_number"; line: string; button: string } {
+  if (!hasNumber) return { kind: "no_number", line: OWNER_NO_NUMBER.line, button: "All correct" };
   if (!updatedAt || !Number.isFinite(timeOf(updatedAt)))
     return { kind: "never", line: "Players don't see this yet. Mark what's booked; players will see the rest as free.", button: "Show free hours to players" };
   if (!isFresh(updatedAt, nowMs)) return { kind: "hidden", line: `Hidden from players · last updated ${istStamp(updatedAt)}`, button: "All correct" };

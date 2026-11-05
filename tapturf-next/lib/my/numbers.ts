@@ -1,4 +1,5 @@
 import { normalizeIndianMobile, normalizeIndianPhone } from "../utils/phone";
+import { hasUsableContact } from "../utils/contact";
 
 /**
  * The call and WhatsApp numbers in the myTapturf editor. Pure, relative
@@ -24,6 +25,22 @@ export type NumberField = "owner_phone" | "whatsapp_phone";
 /** The number the turf page's Call button dials: the first one it can (getPhone in lib/utils/seo.ts). */
 export function shownCallNumber(t: TurfNumbers): string | null {
   return [t.owner_phone, t.contact_phone, t.landline_phone].find((p) => normalizeIndianPhone(p)) ?? null;
+}
+
+/**
+ * Whether the turf's page shows Call or WhatsApp, by the page's own rule
+ * (lib/utils/contact.ts hasUsableContact): its free slots card shows only
+ * then (app/turf/[id]/page.tsx). Null on an older database, which doesn't
+ * return the call numbers (not known).
+ */
+export function pageHasNumber(t: TurfNumbers): boolean | null {
+  if (!("owner_phone" in t) && !("contact_phone" in t) && !("landline_phone" in t)) return null;
+  return hasUsableContact({
+    owner_phone: t.owner_phone ?? null,
+    contact_info: t.contact_phone ? { phone: t.contact_phone } : null,
+    landline_phone: t.landline_phone ?? null,
+    whatsapp_phone: t.whatsapp_phone ?? null,
+  });
 }
 
 /** A stored number as the editor shows it after +91: 10 digits for a mobile, 0 and the STD code and number for a landline. */

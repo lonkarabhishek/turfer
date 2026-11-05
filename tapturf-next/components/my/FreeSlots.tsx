@@ -9,7 +9,9 @@ import {
   closeChoices,
   hasUsableHours,
   nextTickMs,
+  OWNER_NO_NUMBER,
   ownerDefault,
+  ownerLead,
   ownerStatus,
   slotDays,
   wholeDay,
@@ -37,26 +39,27 @@ const hasUnsaved = (x: Queue) => !!x.inflight || x.pending.size > 0;
  * Free or Booked. One tap flips an hour and saves it at once (no Save
  * button); "All correct" says the day's marks are still right. Players see
  * the free hours on the turf page for 24 hours after the last tap or All
- * correct (lib/availability/slots.ts has every rule and word).
+ * correct (lib/availability/slots.ts has every rule and word), and only
+ * while the page has a number to call or WhatsApp (hasNumber: the card sits
+ * beside those buttons); without one, the section says so and links to the
+ * numbers (#numbers in EditListing).
  *
  * Hidden before the database has free slots, and for anyone who doesn't run
  * the turf (forbidden, not_claimed).
  */
-export function FreeSlots({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; initial: InitialSlots; hoursKey: string; onHoursSaved: () => void }) {
-  if (initial === undefined) return <Frame><Skeleton /></Frame>;
+export function FreeSlots({ turfId, initial, hoursKey, onHoursSaved, hasNumber = true }: { turfId: string; initial: InitialSlots; hoursKey: string; onHoursSaved: () => void; /** The turf's page shows Call or WhatsApp (lib/my/numbers.ts pageHasNumber). */ hasNumber?: boolean }) {
+  if (initial === undefined) return <Frame hasNumber={hasNumber}><Skeleton /></Frame>;
   if (initial === "missing" || (!isView(initial) && initial !== "failed")) return null;
-  return <Editor turfId={turfId} initial={initial} hoursKey={hoursKey} onHoursSaved={onHoursSaved} />;
+  return <Editor turfId={turfId} initial={initial} hoursKey={hoursKey} onHoursSaved={onHoursSaved} hasNumber={hasNumber} />;
 }
 
-function Frame({ children, grounds }: { children: React.ReactNode; grounds?: number | null }) {
+function Frame({ children, grounds, hasNumber }: { children: React.ReactNode; grounds?: number | null; hasNumber: boolean }) {
   return (
     <section id="slots" className="mt-6 scroll-mt-20">
       <h2 className="font-display text-[22px] text-primary-900 inline-flex items-center gap-2">
         <CalendarCheck className="w-5 h-5 text-accent-700" aria-hidden /> Free slots
       </h2>
-      <p className="mt-1 text-[14px] text-primary-500 leading-snug">
-        Tap an hour when it gets booked. Tap again to free it. Players see your free hours on your page and contact you.
-      </p>
+      <p className="mt-1 text-[14px] text-primary-500 leading-snug">{ownerLead(hasNumber)}</p>
       {grounds != null && grounds >= 2 && (
         <p className="mt-1 text-[14px] text-primary-500 leading-snug">
           You have {grounds} grounds: mark an hour booked only when all of them are taken.
@@ -88,7 +91,7 @@ function Skeleton() {
   );
 }
 
-function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; initial: OwnerSlots | "failed"; hoursKey: string; onHoursSaved: () => void }) {
+function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId: string; initial: OwnerSlots | "failed"; hoursKey: string; onHoursSaved: () => void; hasNumber: boolean }) {
   const first = isView(initial) ? initial : null;
   // The owner's view (hours, grounds), as the database last answered it.
   const [view, setView] = useState<OwnerSlots | null>(first);
@@ -276,10 +279,10 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
   const booked = useMemo(() => shown(q), [q]);
 
   if (phase === "hidden") return null;
-  if (phase === "loading" || (phase === "ready" && (!view || now == null))) return <Frame grounds={view?.grounds}><Skeleton /></Frame>;
+  if (phase === "loading" || (phase === "ready" && (!view || now == null))) return <Frame grounds={view?.grounds} hasNumber={hasNumber}><Skeleton /></Frame>;
   if (phase === "failed" || !view)
     return (
-      <Frame>
+      <Frame hasNumber={hasNumber}>
         <div className={CARD}>
           <p className="text-[14px] text-primary-700">Couldn&rsquo;t load your free slots.</p>
           <button
@@ -313,7 +316,7 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
   // No hours to make slots from: the owner picks them once, here.
   if (!hasUsableHours(view.hours))
     return (
-      <Frame grounds={view.grounds}>
+      <Frame grounds={view.grounds} hasNumber={hasNumber}>
         <div className={CARD}>
           <HoursPicker
             turfId={turfId}
@@ -329,7 +332,7 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
 
   const picked = pick ? days.findIndex((d) => dayKey(d) === pick) : -1;
   const day: SlotDay | undefined = days[picked >= 0 ? picked : ownerDefault(days)];
-  const status = ownerStatus(updatedAt, now ?? 0);
+  const status = ownerStatus(updatedAt, now ?? 0, hasNumber);
   const busy = hasUnsaved(q);
   const whole = day ? wholeDay(day, booked) : null;
   const undoHere = undo && day && undo.day === dayKey(day) ? undo : null;
@@ -362,7 +365,17 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
       <div className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 ${firstUse ? "mt-4 border-t border-primary-100 pt-4" : ""}`}>
         <p className={`min-w-0 flex-1 basis-48 inline-flex items-start gap-2 text-[13px] font-semibold leading-snug ${lineTone}`}>
           <span className={`mt-[5px] w-2 h-2 shrink-0 rounded-full ${dot}`} aria-hidden />
-          <span>{status.line}</span>
+          <span>
+            {status.line}
+            {status.kind === "no_number" && (
+              <>
+                {" "}
+                <a href="#numbers" className="text-accent-700 hover:underline">
+                  {OWNER_NO_NUMBER.link}
+                </a>
+              </>
+            )}
+          </span>
         </p>
         <button
           type="button"
@@ -394,7 +407,7 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
   );
 
   return (
-    <Frame grounds={view.grounds}>
+    <Frame grounds={view.grounds} hasNumber={hasNumber}>
       <div className={CARD}>
         {!firstUse && statusRow}
 

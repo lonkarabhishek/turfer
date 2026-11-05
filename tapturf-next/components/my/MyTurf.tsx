@@ -15,6 +15,7 @@ import { ManagerNameNote } from "./ManagerNameNote";
 import { GroundSizes, type GroundSizeState } from "./GroundSizes";
 import { GroundSizeNudge } from "./GroundSizeNudge";
 import { FreeSlots, type InitialSlots } from "./FreeSlots";
+import { pageHasNumber } from "@/lib/my/numbers";
 import { turfPath } from "@/lib/utils/turfPath";
 
 const PERIODS = [7, 30, 90] as const;
@@ -103,8 +104,9 @@ export function MyTurf({ id }: { id: string }) {
           Public page <ExternalLink className="w-3.5 h-3.5" />
         </Link>
       </div>
-      {/* Free slots: which hours are free, on the public page for 24 hours after the last tap. */}
-      <FreeSlots turfId={t.id} initial={slots0} hoursKey={`${t.start_time}|${t.end_time}|${t.is_24x7}|${t.closed_days}`} onHoursSaved={load} />
+      {/* Free slots: which hours are free, on the public page for 24 hours after the last tap, while the page
+          has a number to call or WhatsApp (an older database doesn't say: taken as yes). */}
+      <FreeSlots turfId={t.id} initial={slots0} hoursKey={`${t.start_time}|${t.end_time}|${t.is_24x7}|${t.closed_days}`} onHoursSaved={load} hasNumber={pageHasNumber(t) ?? true} />
       {/* "Managed by @you" on the public page (under the name and in the Claimed turf panel): whether it shows, or how to make it show. */}
       <ManagerNameNote className="mt-3" turfName={t.name} turfId={t.id} pageHref={turfPath(t)} />
       {/* Fewer than 3 photos of their own: ask for them (only those can show on Google), down to Photos. */}

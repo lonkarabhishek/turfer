@@ -26,7 +26,9 @@ import {
   keyTime,
   nextTickMs,
   noFreeLine,
+  OWNER_NO_NUMBER,
   ownerDefault,
+  ownerLead,
   ownerStatus,
   parseOwner,
   parsePublic,
@@ -247,6 +249,24 @@ test("13. the owner's line in all four states", () => {
   assert.deepEqual(ownerStatus(iso(now - 12 * 60_000), now), { kind: "live", line: "Players see this · updated 12 min ago", button: "All correct" });
   assert.deepEqual(ownerStatus(iso(now - 21 * HOUR - 10 * 60_000), now), { kind: "ending", line: "Players see this for 3 more h · updated 21 h ago", button: "All correct" });
   assert.deepEqual(ownerStatus("2026-11-03T15:45:00Z", now), { kind: "hidden", line: "Hidden from players · last updated 3 Nov, 9:15 PM", button: "All correct" });
+});
+
+test("13b. a page with no number: players see nothing, so the owner's lines never say they do", () => {
+  const now = ist("2026-11-05 13:00");
+  for (const at of [null, iso(now - 12 * 60_000), iso(now - 21 * HOUR - 10 * 60_000), "2026-11-03T15:45:00Z"]) {
+    const s = ownerStatus(at, now, false);
+    assert.deepEqual(s, { kind: "no_number", line: OWNER_NO_NUMBER.line, button: "All correct" }, String(at));
+    assert.doesNotMatch(s.line, /Players see this/);
+    assert.deepEqual(ownerStatus(at, now, true), ownerStatus(at, now), "with a number, as before");
+  }
+  assert.equal(OWNER_NO_NUMBER.line, "Players see your free slots once your page has a number to call or WhatsApp.");
+  assert.doesNotMatch(ownerLead(false), /Players see/);
+  assert.match(ownerLead(true), /Players see your free hours on your page and contact you\./);
+  for (const s of [OWNER_NO_NUMBER.line, OWNER_NO_NUMBER.link]) assert.equal(bannedCopy(s), null, s);
+  // The owner's own words may say "booked" (the hour's mark), never the ruled-out phrasings.
+  for (const s of [OWNER_NO_NUMBER.line, OWNER_NO_NUMBER.link, ownerLead(false), ownerLead(true)]) {
+    assert.doesNotMatch(s, /take bookings|takes no bookings|book now|instant|guarantee/i, s);
+  }
 });
 
 test("14. the clock: the server's when the device runs behind", () => {

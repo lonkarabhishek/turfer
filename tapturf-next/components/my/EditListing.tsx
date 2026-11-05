@@ -330,7 +330,7 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
         </label>
       </Group>
 
-      <Group title="Your numbers" hint="Players tap these on your TapTurf page to call or WhatsApp you.">
+      <Group id="numbers" title="Your numbers" hint="Players tap these on your TapTurf page to call or WhatsApp you.">
         {f.owner_phone !== undefined && (
           <div className="mb-4">
             <label htmlFor="call-number" className="block text-[12px] font-semibold text-primary-500">Call number</label>
@@ -405,7 +405,7 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
   );
 }
 
-/** id: a section other parts of the page link to (#hours, from Free slots). */
+/** id: a section other parts of the page link to (#hours and #numbers, from Free slots). */
 function Group({ id, title, hint, children }: { id?: string; title: string; hint?: string; children: React.ReactNode }) {
   return (
     <div id={id} className={`mt-5 rounded-2xl border border-primary-200 bg-white p-4 md:p-5 ${id ? "scroll-mt-20" : ""}`}>
