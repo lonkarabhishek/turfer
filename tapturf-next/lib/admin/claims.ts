@@ -71,6 +71,11 @@ export type AdminClaim = {
   numberEdits: NumberEdit[];
   /** A waiting claim's player signals (admin_owner_claim_signals, merged in by the admin route); null when not read. */
   signals: RawSignals | null;
+  /**
+   * A waiting claim's turf page, merged in by the admin route: whether it shows Call or WhatsApp, and
+   * whether it is a members' club, so the rejection's preview reads as sent (lib/my/claimNotice.ts); null when not read.
+   */
+  page: { hasNumber: boolean; membersOnly: boolean } | null;
 };
 
 const STATUSES: readonly string[] = ["active", "pending", "rejected", "revoked"];
@@ -83,6 +88,11 @@ const time = (x: unknown): number | null => {
   return Number.isFinite(t) ? t : null;
 };
 const obj = (x: unknown): Record<string, unknown> | null => (x && typeof x === "object" && !Array.isArray(x) ? (x as Record<string, unknown>) : null);
+
+function toPage(x: unknown): AdminClaim["page"] {
+  const p = obj(x);
+  return p && typeof p.has_number === "boolean" && typeof p.members_only === "boolean" ? { hasNumber: p.has_number, membersOnly: p.members_only } : null;
+}
 
 function toAccount(x: unknown): ClaimAccount | null {
   const a = obj(x);
@@ -152,6 +162,7 @@ export function toClaims(data: unknown): AdminClaim[] {
       account: toAccount(r.account),
       numberEdits: toNumberEdits(r.number_edits),
       signals: obj(r.signals) as RawSignals | null,
+      page: toPage(r.page),
     });
   }
   return out;

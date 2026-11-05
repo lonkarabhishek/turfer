@@ -24,6 +24,13 @@ const row = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+test("a waiting claim's page (from the admin route): a number, a members' club; anything else is not known", () => {
+  assert.deepEqual(toClaims([row({ page: { has_number: false, members_only: false } })])[0].page, { hasNumber: false, membersOnly: false });
+  assert.deepEqual(toClaims([row({ page: { has_number: true, members_only: true } })])[0].page, { hasNumber: true, membersOnly: true });
+  assert.equal(toClaims([row()])[0].page, null);
+  assert.equal(toClaims([row({ page: { has_number: "no" } })])[0].page, null);
+});
+
 test("a full row", () => {
   const [c] = toClaims([row()]);
   assert.equal(c.turfId, "t1");

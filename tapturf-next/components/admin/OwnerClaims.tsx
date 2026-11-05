@@ -116,7 +116,8 @@ export function OwnerClaims() {
         // Only on a waiting claim, and only when a fact points to a player.
         const facts = c.status === "pending" ? claimFacts(c, c.signals) : null;
         const playerLine = facts ? playerSignalLine(playerSignals(facts)) : null;
-        const preview = rejecting === key ? claimDecisionNotice("rejected", c.turfName, kind) : null;
+        // As the route will send it: no booking line where the turf's page has none (c.page, from the route).
+        const preview = rejecting === key ? claimDecisionNotice("rejected", c.turfName, kind, c.page ?? undefined) : null;
         return (
           <li key={key} className={`rounded-2xl border p-3 ${c.status === "pending" ? "border-amber-300 bg-amber-50" : "border-primary-200 bg-white"}`}>
             <div className="flex flex-wrap items-start justify-between gap-2">

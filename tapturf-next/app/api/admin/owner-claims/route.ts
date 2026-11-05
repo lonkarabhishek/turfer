@@ -29,14 +29,25 @@ export async function GET() {
   const [sig, turfs] = await Promise.all([
     waiting.length ? supabase.rpc("admin_owner_claim_signals", { p_firebase_token: token }) : Promise.resolve({ data: [], error: null }),
     waiting.length
-      ? supabase.from("turfs").select("id, owner_phone, contact_info, landline_phone, whatsapp_phone").in("id", waiting)
+      ? supabase.from("turfs").select("id, owner_phone, contact_info, landline_phone, whatsapp_phone, membership_required").in("id", waiting)
       : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
   ]);
   // Neither read fails the queue: without them the cards show no player line.
   if (sig.error && !missingFn(sig.error.code)) console.warn("admin_owner_claim_signals failed", sig.error.code);
   const hasNumber = new Map<string, boolean>();
-  for (const t of (turfs.data ?? []) as Record<string, unknown>[]) if (typeof t.id === "string") hasNumber.set(t.id, hasUsableContact(contactFieldsOf(t)));
-  const out = withSignals(claims, sig.error ? new Map() : signalsByClaim(sig.data), hasNumber);
+  // And each waiting claim's page (a number, a members' club), so the rejection's preview reads as POST sends it.
+  const pages = new Map<string, { has_number: boolean; members_only: boolean }>();
+  for (const t of (turfs.data ?? []) as Record<string, unknown>[]) {
+    if (typeof t.id !== "string") continue;
+    const has = hasUsableContact(contactFieldsOf(t));
+    hasNumber.set(t.id, has);
+    pages.set(t.id, { has_number: has, members_only: t.membership_required === true });
+  }
+  const out = withSignals(claims, sig.error ? new Map() : signalsByClaim(sig.data), hasNumber).map((x) => {
+    const r = x && typeof x === "object" ? (x as Record<string, unknown>) : null;
+    const page = r && r.status === "pending" && typeof r.turf_id === "string" ? pages.get(r.turf_id) : undefined;
+    return page ? { ...r, page } : x;
+  });
   return NextResponse.json({ claims: out }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
