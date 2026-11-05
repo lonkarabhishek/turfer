@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="t"><title id="t">Cricket points table for a 6-over, four-team round robin: Strikers 5 points +2.556, Warriors 3 points -1.667, Kings 2 points -0.167, Titans 2 points -1.333, with a note that the ICC ranks teams level on points by wins before NRR</title>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1F14"/><stop offset="1" stop-color="#123524"/></linearGradient></defs>
+<rect width="1200" height="675" fill="url(#bg)"/>
+<g font-family="Arial, Helvetica, sans-serif" fill="#FFFFFF">
+<text x="80" y="110" font-size="50" font-weight="700">How to make a cricket points table</text>
+<text x="80" y="155" font-size="26" fill-opacity="0.7">Set points and overs a side first, then add each result</text>
+<rect x="80" y="205" width="560" height="350" rx="20" fill="#111113"/>
+<rect x="80" y="205" width="560" height="8" fill="#16A34A"/>
+<text x="105" y="255" font-size="22" font-weight="800">6-over round robin</text>
+<g font-size="15" fill-opacity="0.55"><text x="105" y="295">Team</text><text x="340" y="295" text-anchor="end">P</text><text x="390" y="295" text-anchor="end">W</text><text x="470" y="295" text-anchor="end">Pts</text><text x="610" y="295" text-anchor="end">NRR</text></g>
+<g font-size="22">
+<text x="105" y="345">Strikers</text><text x="340" y="345" text-anchor="end">3</text><text x="390" y="345" text-anchor="end">2</text><text x="470" y="345" text-anchor="end" font-weight="700">5</text><text x="610" y="345" text-anchor="end" fill="#86EFAC">+2.556</text>
+<text x="105" y="400">Warriors</text><text x="340" y="400" text-anchor="end">3</text><text x="390" y="400" text-anchor="end">1</text><text x="470" y="400" text-anchor="end" font-weight="700">3</text><text x="610" y="400" text-anchor="end" fill="#FCA5A5">-1.667</text>
+<text x="105" y="455">Kings</text><text x="340" y="455" text-anchor="end">3</text><text x="390" y="455" text-anchor="end">0</text><text x="470" y="455" text-anchor="end" font-weight="700">2</text><text x="610" y="455" text-anchor="end" fill="#FCA5A5">-0.167</text>
+<text x="105" y="510">Titans</text><text x="340" y="510" text-anchor="end">3</text><text x="390" y="510" text-anchor="end">1</text><text x="470" y="510" text-anchor="end" font-weight="700">2</text><text x="610" y="510" text-anchor="end" fill="#FCA5A5">-1.333</text>
+</g>
+<rect x="690" y="205" width="430" height="350" rx="16" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="720" y="255" font-size="22" font-weight="800">Level on points?</text>
+<text x="720" y="305" font-size="21" fill-opacity="0.8">TapTurf tool: points, NRR, wins</text>
+<text x="720" y="345" font-size="21" fill-opacity="0.8">ICC events: points, then <tspan fill="#4ADE80" font-weight="700">wins</tspan> first</text>
+<text x="720" y="410" font-size="21" fill-opacity="0.8">Win 2, tie 1, no result 1</text>
+<text x="720" y="450" font-size="21" fill-opacity="0.8">All out? Full overs count</text>
+<text x="720" y="490" font-size="21" fill-opacity="0.8">Round robin: n x (n - 1) / 2</text>
+<text x="80" y="625" font-size="24" fill-opacity="0.7">tapturf.in/tools/cricket-tournament-scorer</text>
+</g>
+</svg>
