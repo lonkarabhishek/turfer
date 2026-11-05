@@ -217,6 +217,16 @@ export function istWeekdayName(now: Date = new Date()): DayName {
 }
 
 /**
+ * "Closed Mondays" (turfs.closed_days, free text): true when it names the
+ * day. The turf page's hours table (components/turf/TurfDetails.tsx) and the
+ * free slots (lib/availability/slots.ts) read it the same way.
+ */
+export function isClosedDay(closedDays: string | null | undefined, day: DayName): boolean {
+  const c = closedDays?.trim();
+  return !!c && new RegExp(`\\b${day}`, "i").test(c);
+}
+
+/**
  * A span that covers the whole day. 42 turfs store 00:00-23:59 and
  * one stores 00:00-00:00; both should read "Open 24 hours".
  */

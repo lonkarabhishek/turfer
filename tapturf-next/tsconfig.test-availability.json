@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2022",
+    "moduleResolution": "node",
+    "rootDir": ".",
+    "outDir": ".test-out/availability",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "files": [
+    "lib/availability/slots.test.ts",
+    "lib/availability/queue.test.ts",
+    "lib/availability/route.test.ts"
+  ]
+}
