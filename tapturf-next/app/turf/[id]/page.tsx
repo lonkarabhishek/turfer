@@ -44,7 +44,7 @@ import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
 import { TurfGames } from "@/components/turf/TurfGames";
 import { sportPageForLabel } from "@/lib/sports";
 import { TurfSuggestions, NoContactNotice } from "@/components/turf/TurfSuggestions";
-import { bookingFeeLine, membersNote, noContactLinks, turfCheck } from "@/lib/turfPage/noContact";
+import { bookingFeeLine, bookingLine, membersNote, noContactLinks, turfCheck } from "@/lib/turfPage/noContact";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 
 // A day: since the 20 Oct outage the cache queue purges a turf's page
@@ -568,6 +568,7 @@ export default async function TurfDetailPage({
           address={turf.address}
           variant="fixed-bottom"
           pageUrl={turfUrl(turf)}
+          note={bookingLine(membersOnly, hasContact)}
         />
       ) : (
         <NoContactNotice variant="fixed-bottom" links={noContact} />

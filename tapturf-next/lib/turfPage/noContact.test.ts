@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Turf } from "../../types/turf";
-import { bookingFeeLine, detailsLink, httpsLink, instagramLink, isNotTurfSite, membersNote, noContactLinks, reportedPricesNote, turfCheck, websiteLink } from "./noContact";
+import { BOOKING_LINE, bookingFeeLine, bookingLine, detailsLink, httpsLink, instagramLink, isNotTurfSite, membersNote, noContactLinks, reportedPricesNote, turfCheck, websiteLink } from "./noContact";
 import { callNumber, contactFieldsOf, hasUsableContact, parseContactInfo, whatsAppNumber, type ContactFields } from "../utils/contact";
 import { directionsUrl } from "../utils/maps";
 
@@ -242,7 +242,14 @@ test("no-number links: directions and the turf's own links, never a claim link",
 
 test("sidebar lines: with a number, word for word as before; without one, no call, book or reserve", () => {
   assert.equal(membersNote(null, true), "Booking is for members. Call to ask about guest access.");
-  assert.equal(bookingFeeLine(false, true), "No booking fee. Contact turf directly to reserve your slot.");
+  assert.equal(BOOKING_LINE, "For bookings, contact the turf directly.", "the site owner's words (5 Nov 2026)");
+  assert.equal(bookingFeeLine(false, true), "For bookings, contact the turf directly. No booking fee.");
+  assert.equal(bookingLine(false, true), "For bookings, contact the turf directly.");
+  assert.equal(bookingLine(true, true), null, "a members' club: no booking line on the bar");
+  assert.equal(bookingLine(false, false), null, "no number: the bar says it has none");
+  for (const s of [bookingLine(false, true), bookingFeeLine(false, true)]) {
+    assert.doesNotMatch(s ?? "", /(don.t|doesn.t|not|no) take booking|takes no booking/i, "never that TapTurf doesn't take bookings");
+  }
   assert.equal(bookingFeeLine(true, true), null, "a members' club never had it");
   assert.equal(bookingFeeLine(false, false), null);
   assert.equal(bookingFeeLine(true, false), null);

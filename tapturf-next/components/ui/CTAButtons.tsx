@@ -31,6 +31,8 @@ interface CTAButtonsProps {
    * (/turf/<uuid>, the address before 19 Oct) any more.
    */
   pageUrl: string;
+  /** The phone bar only: a line over Call and WhatsApp (the turf page's "For bookings, contact the turf directly."). */
+  note?: string | null;
 }
 
 /**
@@ -50,6 +52,7 @@ export function CTAButtons({
   callLabel = "Call to Book",
   pageUrl,
   source: sourceProp,
+  note,
 }: CTAButtonsProps) {
   const { user, login } = useAuth();
   const normalized = normalizeIndianPhone(phone);
@@ -82,8 +85,11 @@ export function CTAButtons({
 
   if (variant === "fixed-bottom") {
     return (
-      <div className="fixed bottom-0 left-0 right-0 z-50 material-thick border-t border-primary-200/70 px-4 pt-3 flex gap-3 md:hidden animate-slide-up"
+      <div className={`fixed bottom-0 left-0 right-0 z-50 material-thick border-t border-primary-200/70 px-4 md:hidden animate-slide-up ${note ? "pt-2.5" : "pt-3"}`}
         style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
+        {/* The same line over the buttons as the no-number bar's (components/turf/TurfSuggestions.tsx NoContactNotice). */}
+        {note && <p className="text-[13px] leading-snug text-primary-500">{note}</p>}
+        <div className={`flex gap-3 ${note ? "mt-2" : ""}`}>
         {telHref && (
           <a
             href={telHref}
@@ -110,6 +116,7 @@ export function CTAButtons({
             WhatsApp
           </a>
         )}
+        </div>
       </div>
     );
   }

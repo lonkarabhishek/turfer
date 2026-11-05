@@ -145,7 +145,19 @@ export function turfCheck(hasContact: boolean, what?: string): string {
   return hasContact ? `confirm ${w}with the turf` : `check ${w}at the turf`;
 }
 
+/**
+ * How a player books, in the site owner's words (5 Nov 2026): say where
+ * bookings happen, never that TapTurf doesn't take them. Over the phone's
+ * Call and WhatsApp bar, and leading the sidebar's line under its buttons.
+ */
+export const BOOKING_LINE = "For bookings, contact the turf directly.";
+
+/** The phone bar's line over Call and WhatsApp: only where there is a number to contact, and not for a members' club. */
+export function bookingLine(membersOnly: boolean, hasContact: boolean): string | null {
+  return !membersOnly && hasContact ? BOOKING_LINE : null;
+}
+
 /** The sidebar's line under the buttons: only where there is a number to contact, and not for a members' club. */
 export function bookingFeeLine(membersOnly: boolean, hasContact: boolean): string | null {
-  return !membersOnly && hasContact ? "No booking fee. Contact turf directly to reserve your slot." : null;
+  return !membersOnly && hasContact ? `${BOOKING_LINE} No booking fee.` : null;
 }
