@@ -13,9 +13,11 @@ import type { Turf } from "@/types/turf";
 import { normaliseOpeningHours, formatSpan } from "@/lib/utils/hours";
 import { HoursList } from "@/components/turf/HoursList";
 import { formatLabel } from "@/lib/utils/formats";
-import { publicLink, scrubBookingApps } from "@/lib/utils/bookingApps";
+import { scrubBookingApps } from "@/lib/utils/bookingApps";
+import { detailsLink } from "@/lib/turfPage/noContact";
 
-export function TurfDetails({ turf }: { turf: Turf }) {
+/** `hasContact` false: the page has no number (lib/utils/contact.ts), so no chat link and nothing to confirm "with the turf". */
+export function TurfDetails({ turf, hasContact = true }: { turf: Turf; hasContact?: boolean }) {
   const hoursRows = normaliseOpeningHours(turf.opening_hours, {
     start_time: turf.start_time,
     end_time: turf.end_time,
@@ -97,10 +99,11 @@ export function TurfDetails({ turf }: { turf: Turf }) {
   // Public links from research. nofollow: these are venue pages, not endorsements.
   // A booking app's page for the venue (playspots.in, open.turftown.in,
   // link.district.in: 35 active turfs on 26 Oct) is no website of its
-  // own, and TapTurf links to no booking app.
+  // own, and TapTurf links to no booking app. A page with no number
+  // opens no chat to one either (a WhatsApp link stored as the website).
   const links: { href: string; label: string; icon: React.ReactNode; text: string }[] = [];
-  const website = publicLink(turf.website_url);
-  const instagram = publicLink(turf.instagram_url);
+  const website = detailsLink(turf.website_url, hasContact);
+  const instagram = detailsLink(turf.instagram_url, hasContact);
   if (website) {
     links.push({ href: website, label: "Website", icon: <Globe className="w-5 h-5 text-primary-400" />, text: hostOf(website) });
   }
@@ -135,7 +138,7 @@ export function TurfDetails({ turf }: { turf: Turf }) {
           <p className="text-xs font-semibold text-primary-500">Good to know</p>
           <p className="mt-1 text-[15px] leading-relaxed text-primary-800">{note}</p>
           <p className="mt-1.5 text-[12px] text-primary-400">
-            From public reviews{monthYear(turf.good_to_know_updated_at) ? `, updated ${monthYear(turf.good_to_know_updated_at)}` : ""}. Confirm with the turf.
+            From public reviews{monthYear(turf.good_to_know_updated_at) ? `, updated ${monthYear(turf.good_to_know_updated_at)}` : ""}{`. ${hasContact ? "Confirm with the turf" : "Check at the turf"}.`}
           </p>
         </div>
       )}

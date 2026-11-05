@@ -396,19 +396,23 @@ export function TurfSuggestions({
         Shared by people who know this turf. Not verified by TapTurf.
       </p>
 
+      {/* No number: the full notice (directions, the turf's own links, the
+          claim) below the desktop width whether or not players have shared
+          anything yet. The phone bar holds two buttons only, and from 768px
+          (no bar) to 1024px (the sidebar) nothing else shows it. Desktop
+          already shows it in the sidebar. */}
+      {!hasPhone && (
+        <div className={count === 0 ? "lg:hidden" : "lg:hidden mb-5"}>
+          <NoContactNotice links={noContact} />
+        </div>
+      )}
       {count === 0 ? (
         hasPhone ? (
           <SuggestRow turfName={turfName} />
         ) : (
-          <>
-            {/* Desktop already shows the full notice in the sidebar. */}
-            <div className="lg:hidden">
-              <NoContactNotice links={noContact} />
-            </div>
-            <div className="hidden lg:block">
-              <SuggestRow turfName={turfName} />
-            </div>
-          </>
+          <div className="hidden lg:block">
+            <SuggestRow turfName={turfName} />
+          </div>
         )
       ) : (
         <>

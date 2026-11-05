@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Turf } from "../../types/turf";
-import { bookingFeeLine, httpsLink, instagramLink, membersNote, noContactLinks, reportedPricesNote, websiteLink } from "./noContact";
+import { bookingFeeLine, detailsLink, httpsLink, instagramLink, isNotTurfSite, membersNote, noContactLinks, reportedPricesNote, turfCheck, websiteLink } from "./noContact";
 import { callNumber, contactFieldsOf, hasUsableContact, parseContactInfo, whatsAppNumber, type ContactFields } from "../utils/contact";
 import { directionsUrl } from "../utils/maps";
 
@@ -108,6 +108,98 @@ test("website and Instagram: Instagram only on instagram.com to a profile; the w
   assert.equal(websiteLink("http://kickoffarena.in"), null);
 });
 
+test("Instagram: a profile only, not a post, reel, explore or stories page", () => {
+  assert.equal(instagramLink("https://www.instagram.com/kick_off.arena/"), "https://www.instagram.com/kick_off.arena/");
+  assert.equal(instagramLink("https://m.instagram.com/kickoffarena"), "https://m.instagram.com/kickoffarena");
+  for (const bad of [
+    "https://www.instagram.com/p/abc123/",
+    "https://www.instagram.com/reel/abc/",
+    "https://www.instagram.com/reels/abc/",
+    "https://www.instagram.com/tv/abc/",
+    "https://www.instagram.com/explore/tags/turf/",
+    "https://www.instagram.com/stories/kickoffarena/123/",
+    "https://www.instagram.com/share/abc",
+    "https://www.instagram.com/accounts/login/",
+    "https://www.instagram.com/direct/inbox/",
+    "https://www.instagram.com/kick-off-arena/", // no user name has a hyphen
+    `https://www.instagram.com/${"a".repeat(31)}/`,
+    "https://l.instagram.com/?u=https%3A%2F%2Fwa.me%2F919800000009",
+  ]) {
+    assert.equal(instagramLink(bad), null, bad);
+  }
+});
+
+test("website: no chat, redirect, shortener or map link; nothing but an https link at all", () => {
+  // Made-up numbers only. Each of these opens a chat to a number, hides where it goes, or is the map.
+  for (const bad of [
+    "https://wa.me/919800000009",
+    "https://api.whatsapp.com/send?phone=919800000009",
+    "https://chat.whatsapp.com/AbCdEf",
+    "https://call.whatsapp.com/voice/AbCdEf",
+    "https://whatsapp.com/channel/x",
+    "https://www.whatsapp.com/",
+    "https://wa.link/abc123",
+    "https://l.instagram.com/?u=https%3A%2F%2Fkickoffarena.in",
+    "https://l.facebook.com/l.php?u=https%3A%2F%2Fkickoffarena.in",
+    "https://bit.ly/3abcdef",
+    "https://rb.gy/abc",
+    "https://abr.ge/abc",
+    "https://tinyurl.com/abc",
+    "https://maps.app.goo.gl/abc",
+    "https://z34v4.app.goo.gl/abc",
+    "https://www.google.com/maps/place/Kick+Off+Arena",
+    "https://maps.google.co.in/?q=20,73",
+    "https://g.page/kickoffarena",
+    // Not https links at all.
+    "data:text/html,<a>x</a>",
+    "tel:+919800000009",
+    "mailto:a@b.com",
+    "+91 98000 00009",
+    "9800000009",
+    "a@b.com",
+    "javascript:alert(1)",
+  ]) {
+    assert.equal(websiteLink(bad), null, bad);
+  }
+  // A venue's own site, a Google Sites page, a Linktree and a Facebook page stay.
+  for (const good of ["https://kickoffarena.in/", "https://sites.google.com/view/kickoffarena", "https://linktr.ee/kickoffarena", "https://www.facebook.com/kickoffarena"]) {
+    assert.equal(websiteLink(good), good, good);
+  }
+  // Look-alike hosts are other sites.
+  assert.equal(websiteLink("https://notwa.me/"), "https://notwa.me/");
+  assert.equal(websiteLink("https://whatsappturf.in/"), "https://whatsappturf.in/");
+  assert.equal(isNotTurfSite("https://wa.me.example.in/"), false);
+  assert.equal(isNotTurfSite("http://wa.link/abc"), true, "http too, for Turf details");
+  assert.equal(isNotTurfSite("not a link"), false);
+  assert.equal(isNotTurfSite(null), false);
+});
+
+test("Turf details' links: as before with a number; without one, no chat, redirect or map link", () => {
+  for (const hasContact of [true, false]) {
+    assert.equal(detailsLink("https://kickoffarena.in/", hasContact), "https://kickoffarena.in/");
+    assert.equal(detailsLink("http://kickoffarena.in", hasContact), "http://kickoffarena.in", "http stays, as publicLink keeps it");
+    assert.equal(detailsLink("https://playo.co/venue/x", hasContact), null);
+    assert.equal(detailsLink("external-listing", hasContact), null);
+  }
+  // A page with a number: exactly what it showed before (publicLink).
+  assert.equal(detailsLink("https://api.whatsapp.com/send?phone=919800000009", true), "https://api.whatsapp.com/send?phone=919800000009");
+  // A page with none opens no chat to a number nobody checked.
+  for (const bad of ["https://api.whatsapp.com/send?phone=919800000009", "http://wa.link/abc", "https://wa.me/919800000009", "https://g.page/x", "https://bit.ly/x"]) {
+    assert.equal(detailsLink(bad, false), null, bad);
+  }
+});
+
+test("confirm lines: with the turf where there is a number, at the turf where there is none", () => {
+  assert.equal(turfCheck(true), "confirm with the turf");
+  assert.equal(turfCheck(true, "the rate"), "confirm the rate with the turf");
+  assert.equal(turfCheck(false), "check at the turf");
+  assert.equal(turfCheck(false, "the rate"), "check the rate at the turf");
+  // The lines as the page writes them, word for word as before with a number.
+  assert.equal(`See Pricing below. Unverified, ${turfCheck(true)}.`, "See Pricing below. Unverified, confirm with the turf.");
+  assert.equal(`A guide from the sizes; ${turfCheck(true)}.`, "A guide from the sizes; confirm with the turf.");
+  for (const line of [turfCheck(false), turfCheck(false, "the rate")]) assert.doesNotMatch(line, /\b(call|book|booking|reserve|with the turf)\b/i);
+});
+
 const turf = (o: Partial<Turf> = {}) =>
   ({
     id: "11111111-2222-4333-8444-555555555555",
@@ -141,6 +233,11 @@ test("no-number links: directions, the turf's own links, the claim on myTapturf 
   assert.equal(none_.website, null);
   assert.equal(none_.instagram, null);
   assert.equal(noContactLinks(turf({ website_url: "https://playo.co/venues/x" }), false).website, null);
+  // A WhatsApp chat or a map stored as the website, a post as the Instagram: no button.
+  const chat = noContactLinks(turf({ website_url: "https://api.whatsapp.com/send?phone=919800000009", instagram_url: "https://www.instagram.com/p/abc123/" }), false);
+  assert.equal(chat.website, null);
+  assert.equal(chat.instagram, null);
+  assert.equal(noContactLinks(turf({ website_url: "https://g.page/kickoffarena" }), false).website, null);
   assert.equal(noContactLinks(turf({ lat: null, lng: null, google_place_id: "ChIJ0000000000000000000000" }), false).directions,
     "https://www.google.com/maps/dir/?api=1&destination=Kick%20Off%20Arena%207%2C%20Plot%207%2C%20Made-up%20Road%2C%20Nashik&destination_place_id=ChIJ0000000000000000000000");
 });

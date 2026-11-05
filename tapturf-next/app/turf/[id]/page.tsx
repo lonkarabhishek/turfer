@@ -44,7 +44,7 @@ import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
 import { TurfGames } from "@/components/turf/TurfGames";
 import { sportPageForLabel } from "@/lib/sports";
 import { TurfSuggestions, NoContactNotice } from "@/components/turf/TurfSuggestions";
-import { bookingFeeLine, membersNote, noContactLinks } from "@/lib/turfPage/noContact";
+import { bookingFeeLine, membersNote, noContactLinks, turfCheck } from "@/lib/turfPage/noContact";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 
 // A day: since the 20 Oct outage the cache queue purges a turf's page
@@ -193,7 +193,9 @@ export default async function TurfDetailPage({
   const cityId = isCity(turf.city) ? turf.city : null;
 
   return (
-    <div className="has-bottom-cta">
+    // data-no-contact: a page with no number. The site footer's tagline (it says to call or
+    // WhatsApp the turf) is hidden on it (app/globals.css); a page with a number keeps its markup.
+    <div className="has-bottom-cta" {...(hasContact ? {} : { "data-no-contact": "" })}>
       <TurfJsonLd turf={turf} reviewStats={page.reviewStats} reviews={page.reviews} managerIds={page.managerIds} />
       <NoteInterest city={turf.city} sports={turf.sports} turfId={turf.id} />
 
@@ -347,9 +349,9 @@ export default async function TurfDetailPage({
             )}
 
             <TurfAmenities turf={turf} />
-            <TurfDetails turf={turf} />
+            <TurfDetails turf={turf} hasContact={hasContact} />
             {/* The owner's ground sizes, drawn and benchmarked (none: nothing). */}
-            {turf.ground_sizes && <GroundSize turf={turf} sizes={turf.ground_sizes} peers={peers} renderedAt={page.renderedAt} />}
+            {turf.ground_sizes && <GroundSize turf={turf} sizes={turf.ground_sizes} peers={peers} renderedAt={page.renderedAt} hasContact={hasContact} />}
             <TurfPricing turf={turf} claimed={claimed} contact={contact} playerPrice={playerPrice} priceNote={priceNote} />
 
             {/* Upcoming games here, with "Host a game here" right below. */}
@@ -464,7 +466,7 @@ export default async function TurfDetailPage({
                       Reported prices
                     </span>
                     <p className="text-[13px] text-primary-500 mt-1">
-                      See Pricing below. Unverified, confirm with the turf.
+                      {`See Pricing below. Unverified, ${turfCheck(hasContact)}.`}
                     </p>
                   </div>
                 ) : (

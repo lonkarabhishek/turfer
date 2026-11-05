@@ -55,7 +55,8 @@ export function TurfPricing({
     return (
       <div className="section-divider">
         <h2 className="text-[22px] font-bold text-primary-800 mb-5 font-serif">Pricing</h2>
-        <PriceBands bands={bandRows(turf.pricing_bands)} checked={bandsCheckedOn(turf.pricing_bands)} />
+        {/* noNumber only on a page with no number, so a page with one sends PriceBands the props it had. */}
+        <PriceBands bands={bandRows(turf.pricing_bands)} checked={bandsCheckedOn(turf.pricing_bands)} {...(contact.call || contact.whatsapp ? {} : { noNumber: true })} />
       </div>
     );
   }

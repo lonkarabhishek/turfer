@@ -1,5 +1,6 @@
 import { labelFor, isCity } from "@/lib/city";
 import { istDate } from "@/lib/turfPage/owner";
+import { turfCheck } from "@/lib/turfPage/noContact";
 import {
   MID_TURF,
   benchmarkOf,
@@ -38,11 +39,14 @@ export function GroundSize({
   sizes,
   peers,
   renderedAt,
+  hasContact = true,
 }: {
   turf: { id: string; city: string | null; sports: string[] };
   sizes: GroundSizes;
   peers: readonly PeerTurf[];
   renderedAt: number;
+  /** False on a page with no number: the note says to check at the turf, not with it. */
+  hasContact?: boolean;
 }) {
   const grounds = sizes.grounds;
   const frame = { length: Math.max(...grounds.map((g) => g.length_ft)), width: Math.max(...grounds.map((g) => g.width_ft)) };
@@ -84,7 +88,7 @@ export function GroundSize({
       </div>
       <p className="mt-3 text-[12px] text-primary-400 leading-snug">
         Drawn to scale from above (dashed: {refLabel}, {shown(refSize.length)} × {shown(refSize.width)} ft) and from the side, against a 6 ft player.{" "}
-        {note ? `${note} ` : ""}A guide from the sizes; confirm with the turf.
+        {note ? `${note} ` : ""}{`A guide from the sizes; ${turfCheck(hasContact)}.`}
       </p>
     </section>
   );
