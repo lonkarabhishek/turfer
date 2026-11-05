@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Bell, Check, MapPin, UserPlus, XCircle } from "lucide-react";
+import { Bell, Check, ChevronRight, Info, MapPin, Store, UserPlus, XCircle } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { quietToken } from "@/lib/account/client";
 import { getUserNotifications, markAsRead, markAllAsRead } from "@/lib/queries/notifications";
+import { CLAIM_APPROVED, CLAIM_REJECTED, notificationLink } from "@/lib/my/claimNotice";
 import type { Notification } from "@/types/notification";
 
 const ICON_MAP: Record<string, typeof Bell> = {
@@ -14,18 +15,10 @@ const ICON_MAP: Record<string, typeof Bell> = {
   game_request_declined: XCircle,
   game_venue_changed: MapPin,
   game_cancelled: XCircle,
+  // A turf claim TapTurf decided (20261106_owner_claims_clarity.sql admin_answer_owner_claim).
+  [CLAIM_APPROVED]: Store,
+  [CLAIM_REJECTED]: Info,
 };
-
-/**
- * Reads a game id off a notification's metadata. Older rows stored
- * either { gameId } or { game_id }; be tolerant of both.
- */
-function gameIdOf(notif: Notification): string | null {
-  const meta = notif.metadata as Record<string, unknown> | null | undefined;
-  if (!meta) return null;
-  const v = meta.gameId ?? meta.game_id;
-  return typeof v === "string" ? v : null;
-}
 
 /** onUnread: how many are unread, after each load and change (the Me tab's Alerts count). */
 export function NotificationsList({ userId, onUnread }: { userId: string; onUnread?: (n: number) => void }) {
@@ -114,7 +107,8 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
       <div className="space-y-2">
         {notifications.map((notif) => {
           const Icon = ICON_MAP[notif.type] || Bell;
-          const gameId = gameIdOf(notif);
+          // A game's page, or for a claim decision myTapturf or the turf's page (lib/my/claimNotice.ts).
+          const link = notificationLink(notif.type, notif.metadata);
 
           const inner = (
             <div className="flex items-start gap-3">
@@ -128,6 +122,12 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
                   {notif.title}
                 </p>
                 <p className="text-[12px] text-primary-500 mt-0.5">{notif.message}</p>
+                {link?.label && (
+                  <p className="mt-1.5 inline-flex items-center gap-0.5 text-[13px] font-semibold text-accent-700">
+                    {link.label}
+                    <ChevronRight className="w-3.5 h-3.5" aria-hidden />
+                  </p>
+                )}
                 <p className="text-[11px] text-primary-400 mt-1 font-mono">
                   {new Date(notif.created_at).toLocaleDateString("en-IN", {
                     month: "short",
@@ -149,13 +149,13 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
               : "border-accent-500/30 bg-accent-50 hover:border-accent-500"
           }`;
 
-          // If the notification points at a game, tap opens that game.
+          // If the notification points somewhere (a game, a claimed turf), tap opens it.
           // Otherwise it's still tappable to mark as read.
-          if (gameId) {
+          if (link) {
             return (
               <Link
                 key={notif.id}
-                href={`/game/${gameId}`}
+                href={link.href}
                 onClick={() => { if (!notif.is_read) handleMarkRead(notif.id); }}
                 className={cardClass}
               >

@@ -71,8 +71,11 @@ export function RepeatSheet({
   value,
   onChange,
   onClose,
+  place = "turf",
 }: {
   open: boolean;
+  /** What the game is at: a turf on TapTurf, or a venue the host typed in. */
+  place?: "turf" | "venue";
   /** The first day (the create flow's date), YYYY-MM-DD. */
   start: string;
   startTime: string;
@@ -270,7 +273,7 @@ export function RepeatSheet({
               <p className="flex gap-2 text-[12px] text-primary-600 px-1 pt-4 leading-snug">
                 <Info className="w-4 h-4 shrink-0 text-primary-400 mt-px" aria-hidden />
                 <span>
-                  Each game goes up 4 weeks ahead and players join each one. Book the turf for each date yourself: TapTurf lists games, it doesn&apos;t book turfs.
+                  Each game goes up 4 weeks ahead and players join each one. For bookings, contact the {place} directly for each date.
                 </span>
               </p>
             </>

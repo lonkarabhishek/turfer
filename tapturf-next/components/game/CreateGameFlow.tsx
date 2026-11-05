@@ -518,6 +518,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
         value={repeat}
         onChange={setRepeat}
         onClose={() => setRepeatOpen(false)}
+        place={what}
       />
 
       {/* ─── Step 4: Success ───────────────────────────────── */}

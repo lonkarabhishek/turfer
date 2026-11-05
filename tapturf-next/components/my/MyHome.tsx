@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { RecaptchaVerifier } from "firebase/auth";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { BarChart3, CheckCircle2, ChevronRight, Clock, Loader2, Phone, Search, Store } from "lucide-react";
+import { BarChart3, CheckCircle2, ChevronRight, Clock, Loader2, Navigation, Phone, Search, Store, Users } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { createClient } from "@/lib/supabase/client";
 import { labelFor, isCity } from "@/lib/city";
@@ -12,16 +12,33 @@ import { ownerRpc, refreshTurfPage, type ClaimInfo, type ClaimResult, type Owner
 import { sendClaimCode, type ClaimCode } from "@/lib/firebase/proof";
 import { firstImageUrl, imageUrlForCard } from "@/lib/utils/images";
 import { cleanVenueName } from "@/lib/utils/bookingApps";
+import { contactFieldsOf, hasUsableContact } from "@/lib/utils/contact";
+import {
+  CLAIM_FLOW_COPY as COPY,
+  CLAIM_ROLES,
+  ROLE_LABELS,
+  asksRunsQuestion,
+  claimLoginUrl,
+  claimOwnerUrl,
+  claimTurfId,
+  turfPhone10,
+  type ClaimRole,
+} from "@/lib/my/claimFlow";
 import { ManagerNameNote } from "./ManagerNameNote";
 
 const place = (t: { area: string | null; city: string | null }) =>
   [t.area, t.city && isCity(t.city) ? labelFor(t.city) : t.city].filter(Boolean).join(", ");
 
-/** myTapturf home: a pitch when signed out; your turfs, numbers we recognise and claim search when signed in. */
+/**
+ * myTapturf home: a pitch when signed out; your turfs, numbers we recognise and claim search when signed in.
+ * From a turf page's claim link (?claim=<turf id>) it first asks "Do you own or manage <turf>?"
+ * (lib/my/claimFlow.ts): players who came to book are sent back to the turf's page; owners answer once.
+ */
 export function MyHome() {
   const { user, loading } = useAuth();
   const params = useSearchParams();
-  const claimId = params?.get("claim") ?? null;
+  const claimId = claimTurfId(params?.get("claim"));
+  const saidOwner = params?.get("owner") === "1";
   const [home, setHome] = useState<OwnerHome | null>(null);
   const [error, setError] = useState("");
 
@@ -40,7 +57,15 @@ export function MyHome() {
   }, [user, load]);
 
   if (loading) return <Shell><p className="text-primary-500">Loading…</p></Shell>;
-  if (!user) return <Landing claimId={claimId} />;
+  if (!user) return claimId && !saidOwner ? <ClaimQuestion claimId={claimId} signedIn={false} /> : <Landing claimId={claimId} />;
+
+  // Signed in from a claim link: the question too, unless they answered it, run the turf already,
+  // have a claim waiting, or their own number is on the listing.
+  if (claimId && home?.signed_in) {
+    const mine = home.turfs.find((t) => t.id === claimId);
+    const state = { admin: home.admin, status: mine?.status ?? null, match: home.matches.some((t) => t.id === claimId) };
+    if (asksRunsQuestion({ saidOwner, home: state })) return <ClaimQuestion claimId={claimId} signedIn />;
+  }
 
   // Claims are made as the signed-in account (its name, never this device's copy). None to claim as: no claim form.
   // A database from before accounts on claims sends no account at all: claim as before.
@@ -93,7 +118,7 @@ export function MyHome() {
                         <span className="min-w-0 flex-1">
                           <span className="block font-semibold text-primary-900 truncate">{t.name}</span>
                           <span className="block text-[13px] text-primary-500 inline-flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" /> Waiting for TapTurf to confirm, usually within a day
+                            <Clock className="w-3.5 h-3.5 shrink-0" /> {COPY.waiting}
                           </span>
                         </span>
                       </div>
@@ -163,26 +188,121 @@ function Thumb({ src }: { src: string | null }) {
   );
 }
 
+/** One public listing: its name, place, photo, page and whether its page shows Call or WhatsApp (the page's own rule). */
+type PublicTurf = OwnerTurfRef & { slug: string | null; hasNumber: boolean };
+
 /** Name, place and photo of one public listing. */
 function usePublicTurf(id: string | null) {
-  const [turf, setTurf] = useState<OwnerTurfRef | null>(null);
+  const [turf, setTurf] = useState<PublicTurf | null>(null);
   useEffect(() => {
     if (!id) return;
     let live = true;
     createClient()
       .from("turfs")
-      .select("id, name, city, area, cover_image")
+      .select("id, name, slug, city, area, cover_image, owner_phone, contact_info, landline_phone, whatsapp_phone")
       .eq("id", id)
       .eq("is_active", true)
       .maybeSingle()
       .then(({ data }) => {
-        if (live && data) setTurf({ id: data.id, name: cleanVenueName(data.name), city: data.city, area: data.area, cover: firstImageUrl(data.cover_image) });
+        if (live && data)
+          setTurf({
+            id: data.id,
+            name: cleanVenueName(data.name),
+            slug: data.slug ?? null,
+            city: data.city,
+            area: data.area,
+            cover: firstImageUrl(data.cover_image),
+            hasNumber: hasUsableContact(contactFieldsOf(data)),
+          });
       });
     return () => {
       live = false;
     };
   }, [id]);
   return turf;
+}
+
+/** The turf being claimed, as a card: photo, name, place. */
+function TurfCard({ turf, label }: { turf: PublicTurf; label?: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-primary-200 bg-white p-3">
+      <Thumb src={turf.cover} />
+      <span className="min-w-0">
+        {label && <span className="block text-[12px] font-semibold text-accent-700">{label}</span>}
+        <span className="block font-semibold text-primary-900 truncate">{turf.name}</span>
+        <span className="block text-[13px] text-primary-500 truncate">{place(turf)}</span>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Before the sign-in and before the form: "Do you own or manage <turf>?". Yes is one tap (to the
+ * sign-in, or to the form when signed in; owner=1 keeps the answer). No: the site owner's line for
+ * players and the way back to the turf's page, where they call, WhatsApp or get directions (or, on
+ * a page with no number, tell us the number).
+ */
+function ClaimQuestion({ claimId, signedIn }: { claimId: string; signedIn: boolean }) {
+  const turf = usePublicTurf(claimId);
+  const [playing, setPlaying] = useState(false);
+  const name = turf?.name ?? "this turf";
+  const hasNumber = turf?.hasNumber ?? true;
+  const yesHref = signedIn ? claimOwnerUrl(claimId) : claimLoginUrl(claimId);
+  const turfHref = turf ? `/turf/${turf.slug ?? turf.id}` : null;
+  const answer = "press-tight flex w-full min-h-[64px] items-center gap-3 rounded-2xl border-2 bg-white px-4 py-3 text-left transition-colors cursor-pointer";
+  return (
+    <Shell>
+      <p className="text-[13px] font-semibold text-accent-700">{COPY.label}</p>
+      {turf && (
+        <div className="mt-3">
+          <TurfCard turf={turf} />
+        </div>
+      )}
+      <h1 className="mt-5 font-display text-[28px] md:text-[36px] leading-[1.1] text-primary-900 [overflow-wrap:anywhere]">{COPY.question(name)}</h1>
+      {!playing ? (
+        <>
+          <p className="mt-2 text-[15px] text-primary-600 leading-snug">{COPY.lead}</p>
+          <div className="mt-6 space-y-3" role="group" aria-label={COPY.question(name)}>
+            <Link href={yesHref} className={`${answer} border-primary-200 hover:border-primary-400`}>
+              <span className="size-11 shrink-0 rounded-full bg-accent-50 text-accent-700 flex items-center justify-center">
+                <Store className="w-5 h-5" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[16px] font-semibold text-primary-900 leading-snug">{COPY.yes}</span>
+                <span className="block text-[13px] text-primary-500 leading-snug">{COPY.yesSub}</span>
+              </span>
+              <ChevronRight className="w-5 h-5 shrink-0 text-primary-400" aria-hidden />
+            </Link>
+            <button type="button" onClick={() => setPlaying(true)} className={`${answer} border-primary-200 hover:border-primary-400`}>
+              <span className="size-11 shrink-0 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center">
+                <Users className="w-5 h-5" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[16px] font-semibold text-primary-900 leading-snug">{COPY.no}</span>
+                {turf && <span className="block text-[13px] text-primary-500 leading-snug">{COPY.noSub(hasNumber)}</span>}
+              </span>
+              <ChevronRight className="w-5 h-5 shrink-0 text-primary-400" aria-hidden />
+            </button>
+          </div>
+          <p className="mt-6 text-[13px] text-primary-500">Questions? Email <a href="mailto:info@tapturf.in" className="underline">info@tapturf.in</a>.</p>
+        </>
+      ) : (
+        <section aria-live="polite" className="mt-6 rounded-3xl border border-primary-200 bg-primary-50/60 p-5">
+          <p className="font-serif text-[22px] font-bold leading-tight text-primary-900">{COPY.playTitle}</p>
+          <p className="mt-2 text-[15px] text-primary-600 leading-snug">{COPY.playBody(name, hasNumber)}</p>
+          {turfHref && (
+            <Link href={turfHref} className="press-tight mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-accent-500 hover:bg-accent-600 px-5 text-[15px] font-semibold text-white transition-colors">
+              {hasNumber ? <Phone className="w-4 h-4" aria-hidden /> : <Navigation className="w-4 h-4" aria-hidden />}
+              {COPY.playButton(hasNumber)}
+            </Link>
+          )}
+          <button type="button" onClick={() => setPlaying(false)} className="mt-3 inline-flex min-h-11 items-center text-[14px] font-semibold text-primary-700 underline underline-offset-2 cursor-pointer">
+            {COPY.playUndo}
+          </button>
+        </section>
+      )}
+    </Shell>
+  );
 }
 
 /** Who claims are made as: the signed-in TapTurf account, never a name typed in. */
@@ -210,7 +330,7 @@ function ClaimFocus({ claimId, home, me, onDone }: { claimId: string; home: Extr
         </Link>
       ) : (
         <ul>
-          <ClaimRow turf={turf} me={me} onDone={onDone} instant={match} pending={mine?.status === "pending"} startOpen />
+          <ClaimRow turf={turf} me={me} onDone={onDone} instant={match} pending={mine?.status === "pending"} pageHasNumber={turf.hasNumber} startOpen />
         </ul>
       )}
     </section>
@@ -220,7 +340,7 @@ function ClaimFocus({ claimId, home, me, onDone }: { claimId: string; home: Extr
 /** Find your turf by name and claim it. */
 function ClaimSearch({ me, onDone, owned, matches, admin = false }: { me: Me | null; onDone: () => void; owned: Set<string>; matches: Set<string>; admin?: boolean }) {
   const [q, setQ] = useState("");
-  const [hits, setHits] = useState<OwnerTurfRef[]>([]);
+  const [hits, setHits] = useState<(OwnerTurfRef & { hasNumber: boolean })[]>([]);
   const [busy, setBusy] = useState(false);
 
   const search = async (term: string) => {
@@ -229,13 +349,13 @@ function ClaimSearch({ me, onDone, owned, matches, admin = false }: { me: Me | n
     setBusy(true);
     const { data } = await createClient()
       .from("turfs")
-      .select("id, name, city, area, cover_image")
+      .select("id, name, city, area, cover_image, owner_phone, contact_info, landline_phone, whatsapp_phone")
       .eq("is_active", true)
       .ilike("name", `%${s.replace(/[%_,()]/g, " ")}%`)
       .order("total_reviews", { ascending: false })
       .limit(8);
     // The name as the turf page shows it: no booking app's attribution ("FS Turf, Churchgate - by SPORLOC").
-    setHits((data ?? []).map((t) => ({ id: t.id, name: cleanVenueName(t.name), city: t.city, area: t.area, cover: firstImageUrl(t.cover_image) })));
+    setHits((data ?? []).map((t) => ({ id: t.id, name: cleanVenueName(t.name), city: t.city, area: t.area, cover: firstImageUrl(t.cover_image), hasNumber: hasUsableContact(contactFieldsOf(t)) })));
     setBusy(false);
   };
 
@@ -275,7 +395,7 @@ function ClaimSearch({ me, onDone, owned, matches, admin = false }: { me: Me | n
                 </Link>
               </li>
             ) : owned.has(t.id) || !me ? null : (
-              <ClaimRow key={t.id} turf={t} me={me} onDone={onDone} instant={matches.has(t.id)} />
+              <ClaimRow key={t.id} turf={t} me={me} onDone={onDone} instant={matches.has(t.id)} pageHasNumber={t.hasNumber} />
             ),
           )}
         </ul>
@@ -289,9 +409,8 @@ function ClaimSearch({ me, onDone, owned, matches, admin = false }: { me: Me | n
   );
 }
 
-const ROLES = ["owner", "manager", "staff"] as const;
-type Role = (typeof ROLES)[number];
 type Step = "verify" | "code" | "manual" | "sent";
+type PhoneListed = { listed?: boolean; blocked?: boolean; status?: string; retry_in?: number; error?: string };
 
 const CLAIM_ERRORS: Record<string, string> = {
   sign_in: "Please sign in again.",
@@ -312,9 +431,27 @@ const RESEND_S = 120;
 /** A proof is good for 10 minutes on the server; reuse it a little less than that. */
 const PROOF_MS = 9 * 60_000;
 
-function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpen = false }: { turf: OwnerTurfRef; me: Me; onDone: () => void; instant?: boolean; pending?: boolean; startOpen?: boolean }) {
+function ClaimRow({
+  turf,
+  me,
+  onDone,
+  instant = false,
+  pending = false,
+  startOpen = false,
+  pageHasNumber = false,
+}: {
+  turf: OwnerTurfRef;
+  me: Me;
+  onDone: () => void;
+  instant?: boolean;
+  pending?: boolean;
+  startOpen?: boolean;
+  /** The turf's page shows Call or WhatsApp (the page's rule): with no mobile a code can go to, that number is a landline or one an owner or a suggestion put there. */
+  pageHasNumber?: boolean;
+}) {
   const [open, setOpen] = useState(startOpen);
-  const [role, setRole] = useState<Role>("owner");
+  // No default: the claimant says whether they are the owner, a manager or staff (a preset Owner told the admin nothing).
+  const [role, setRole] = useState<ClaimRole | null>(null);
   const [note, setNote] = useState("");
   const [info, setInfo] = useState<{ mobiles: number; endings: string[] } | null>(null);
   const [step, setStep] = useState<Step>("verify");
@@ -340,6 +477,12 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
     return () => clearTimeout(t);
   }, [resendIn]);
   const captchaId = `claim-captcha-${useId().replace(/:/g, "")}`;
+  const phoneId = `claim-phone-${useId().replace(/:/g, "")}`;
+  const noteId = `claim-note-${useId().replace(/:/g, "")}`;
+  // No mobile on the listing: checked by hand, and the turf's number (the one players should call) is asked for;
+  // when the page shows a number that can't get a code (a landline), a mobile at the turf instead.
+  const byHand = info?.mobiles === 0;
+  const listed = byHand && pageHasNumber;
 
   // What the listing has: no mobile means only a check by hand can help.
   useEffect(() => {
@@ -353,7 +496,7 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
           if (r.mobiles === 0) {
             // Nothing to verify with: a waiting claim just waits; a new one goes for a check.
             setStep(pending ? "sent" : "manual");
-            setWhy("This listing has no mobile number, so we'll check your claim by hand, usually within a day.");
+            setWhy(pageHasNumber ? COPY.byHandWhyListed : COPY.byHandWhy);
           }
         } else setInfo({ mobiles: 0, endings: [] });
       })
@@ -361,7 +504,7 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
     return () => {
       live = false;
     };
-  }, [open, instant, info, turf.id, pending]);
+  }, [open, instant, info, turf.id, pending, pageHasNumber]);
 
   const opened = async () => {
     await refreshTurfPage(turf.id);
@@ -387,15 +530,34 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
     setBusy(false);
   };
 
+  /** A listed number checked by owner_phone_listed: send it the SMS and wait for the code. */
+  const startCode = async (p10: string, retryIn?: number) => {
+    const sent = await sendClaimCode(p10, captchaId, sender.current?.verifier);
+    if ("error" in sent) {
+      setMsg(sent.error);
+      // No SMS went out: the next try needn't wait 2 minutes (it still counts for the day).
+      void ownerRpc("owner_phone_code_failed", { p_turf_id: turf.id, p_phone: p10 }).catch(() => null);
+    } else {
+      sender.current = sent;
+      keepProof(null);
+      setSentTo(p10);
+      setResendIn(retryIn ?? RESEND_S);
+      setCode("");
+      setStep("code");
+    }
+  };
+
   const sendCode = async () => {
     setMsg("");
+    // A claim already waiting keeps the role it was sent with: only a new one asks.
+    if (!pending && !role) return setMsg(COPY.roleNeeded);
     const p10 = phone.replace(/\D/g, "").slice(-10);
     if (!/^[6-9]\d{9}$/.test(p10)) return setMsg(CLAIM_ERRORS.bad_phone);
     // Signed in with this very number, and it opens this turf: it proved it already, no code needed.
     if (instant && me.kind === "phone" && p10 === me.who) return void openInstant();
     setBusy(true);
     try {
-      const r = await ownerRpc<{ listed?: boolean; blocked?: boolean; status?: string; retry_in?: number; error?: string }>("owner_phone_listed", { p_turf_id: turf.id, p_phone: p10 });
+      const r = await ownerRpc<PhoneListed>("owner_phone_listed", { p_turf_id: turf.id, p_phone: p10 });
       if (r.status === "active") return void (await opened());
       if (r.error) {
         fail(r.error === "too_many" ? undefined : r.error);
@@ -412,19 +574,7 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
         setWhy(`+91 ${spaced(p10)} isn't on this listing, so we'll check your claim by hand, usually within a day.`);
         setStep("manual");
       } else {
-        const sent = await sendClaimCode(p10, captchaId, sender.current?.verifier);
-        if ("error" in sent) {
-          setMsg(sent.error);
-          // No SMS went out: the next try needn't wait 2 minutes (it still counts for the day).
-          void ownerRpc("owner_phone_code_failed", { p_turf_id: turf.id, p_phone: p10 }).catch(() => null);
-        } else {
-          sender.current = sent;
-          keepProof(null);
-          setSentTo(p10);
-          setResendIn(r.retry_in ?? RESEND_S);
-          setCode("");
-          setStep("code");
-        }
+        await startCode(p10, r.retry_in);
       }
     } catch {
       fail();
@@ -469,9 +619,30 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
   };
 
   const sendForCheck = async () => {
-    setBusy(true);
     setMsg("");
+    if (!pending && !role) return setMsg(COPY.roleNeeded);
+    // A listing with no mobile: the turf's own number, for our team to call. It is kept where the admin's
+    // "Number they gave" reads it (owner_phone_listed records a number that is not on the listing).
+    const p10 = byHand ? turfPhone10(phone) : null;
+    if (byHand && !p10) return setMsg(listed ? COPY.phoneNeededListed : COPY.phoneNeeded);
+    setBusy(true);
     try {
+      if (p10) {
+        const c = await ownerRpc<PhoneListed>("owner_phone_listed", { p_turf_id: turf.id, p_phone: p10 });
+        if (c.status === "active") return void (await opened());
+        if (c.error) {
+          if (c.error === "too_many") setMsg("Too many tries for now. Wait an hour and try again.");
+          else fail(c.error);
+          setBusy(false);
+          return;
+        }
+        // On the listing after all (added since this form opened): a code gets them in now.
+        if (c.listed) {
+          await startCode(p10, c.retry_in);
+          setBusy(false);
+          return;
+        }
+      }
       const r = await ownerRpc<ClaimResult>("owner_claim", { p_turf_id: turf.id, p_note: note || null, p_role: role });
       if (r.status === "active") return void (await opened());
       if (r.status === "pending") {
@@ -486,6 +657,7 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
 
   const done = step === "sent" || (pending && step !== "code");
   const endings = info?.endings.length ? info.endings.map((e) => `…${e}`).join(" or ") : "";
+  const needRole = !role && !done && !pending;
 
   return (
     <li className="rounded-2xl border border-primary-200 bg-white p-3">
@@ -498,11 +670,11 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
         {step === "sent" ? (
           <span className="text-[13px] text-primary-600 inline-flex items-center gap-1"><CheckCircle2 className="w-4 h-4 text-accent-600" /> Sent</span>
         ) : instant ? (
-          <button type="button" onClick={() => void openInstant()} disabled={busy} className="h-10 px-4 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[14px] font-semibold cursor-pointer disabled:opacity-60">
+          <button type="button" onClick={() => void openInstant()} disabled={busy} className="h-11 px-4 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[14px] font-semibold cursor-pointer disabled:opacity-60">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Open"}
           </button>
         ) : !open ? (
-          <button type="button" onClick={() => setOpen(true)} className="h-10 px-4 rounded-full bg-primary-100 hover:bg-primary-200 text-primary-900 text-[14px] font-semibold cursor-pointer">
+          <button type="button" onClick={() => setOpen(true)} className="h-11 px-4 rounded-full bg-primary-100 hover:bg-primary-200 text-primary-900 text-[14px] font-semibold cursor-pointer">
             This is mine
           </button>
         ) : null}
@@ -515,28 +687,38 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
               Your claim is with us. We&rsquo;ll confirm it, usually within a day. Have the phone with the listed number? Verify below to get in now.
             </p>
           )}
-          <div className="rounded-xl bg-primary-50/60 px-3 py-2 text-[13px] text-primary-700">
-            Claiming as <span className="font-semibold text-primary-900">{me.name || "your account"}</span>
-            <span className="text-primary-500"> · {me.kind === "email" ? `Google, ${me.who}` : `phone, +91 ${spaced(me.who)}`}</span>
-            <span className="block mt-0.5 text-primary-500">
-              Once it&rsquo;s yours, the turf&rsquo;s page shows the Claimed badge, and says &ldquo;Managed by @your-username&rdquo; if you have a username. Your number and email never show.
-            </span>
-          </div>
+          {step !== "sent" && (
+            <div className="rounded-xl bg-primary-50/60 px-3 py-2 text-[13px] text-primary-700">
+              Claiming as <span className="font-semibold text-primary-900">{me.name || "your account"}</span>
+              <span className="text-primary-500"> · {me.kind === "email" ? `Google, ${me.who}` : `phone, +91 ${spaced(me.who)}`}</span>
+              <span className="block mt-0.5 text-primary-500">
+                Once it&rsquo;s yours, the turf&rsquo;s page shows the Claimed badge, and says &ldquo;Managed by @your-username&rdquo; if you have a username. Your number and email never show.
+              </span>
+            </div>
+          )}
 
           {!done && !pending && (
-            <div className="inline-flex rounded-full bg-primary-100 p-0.5" role="radiogroup" aria-label="Your role">
-              {ROLES.map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  role="radio"
-                  aria-checked={role === r}
-                  onClick={() => setRole(r)}
-                  className={`h-9 px-4 rounded-full text-[14px] font-medium capitalize cursor-pointer transition-colors ${role === r ? "bg-white text-primary-900 shadow-soft" : "text-primary-600"}`}
-                >
-                  {r}
-                </button>
-              ))}
+            <div>
+              <p className="text-[14px] font-semibold text-primary-900" id={`${captchaId}-role`}>{COPY.rolePick(turf.name)}</p>
+              {/* One row down to 320px: each chip as wide as its word, the rest of the row shared out. */}
+              <div className="mt-1.5 flex gap-1.5 max-w-sm" role="radiogroup" aria-labelledby={`${captchaId}-role`}>
+                {CLAIM_ROLES.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    role="radio"
+                    aria-checked={role === r}
+                    onClick={() => {
+                      setRole(r);
+                      setMsg("");
+                    }}
+                    className={`flex-auto h-11 px-2.5 rounded-full border-2 text-[14px] min-[360px]:text-[15px] font-semibold whitespace-nowrap cursor-pointer transition-colors ${role === r ? "border-primary-900 bg-primary-900 text-white" : "border-primary-200 bg-white text-primary-800 hover:border-primary-400"}`}
+                  >
+                    {ROLE_LABELS[r]}
+                  </button>
+                ))}
+              </div>
+              {needRole && <p className="mt-1.5 text-[13px] text-primary-500">{COPY.roleNeeded}</p>}
             </div>
           )}
 
@@ -564,11 +746,11 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
                   className="min-w-0 flex-1 h-12 px-4 rounded-xl border border-primary-200 text-[16px] focus:outline-none focus:border-primary-400"
                 />
               </div>
-              <button type="button" onClick={() => void sendCode()} disabled={busy || phone.length !== 10 || (resendIn > 0 && phone === sentTo)} className="mt-2 w-full h-12 rounded-full bg-primary-900 text-white text-[15px] font-semibold cursor-pointer disabled:opacity-50">
+              <button type="button" onClick={() => void sendCode()} disabled={busy || (!pending && !role) || phone.length !== 10 || (resendIn > 0 && phone === sentTo)} className="mt-2 w-full h-12 rounded-full bg-primary-900 text-white text-[15px] font-semibold cursor-pointer disabled:opacity-50">
                 {busy ? "Checking…" : resendIn > 0 && phone === sentTo ? `Send a new code in ${resendIn}s` : "Send code"}
               </button>
               {!pending && (
-                <button type="button" onClick={() => { setWhy(""); setMsg(""); setStep("manual"); }} className="mt-2 text-[13px] font-semibold text-primary-700 underline underline-offset-2 cursor-pointer">
+                <button type="button" onClick={() => { setWhy(""); setMsg(""); setStep("manual"); }} className="mt-2 inline-flex min-h-11 items-center text-[13px] font-semibold text-primary-700 underline underline-offset-2 cursor-pointer">
                   I don&rsquo;t have that phone. Send my claim for a check
                 </button>
               )}
@@ -600,7 +782,7 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
               <button type="button" onClick={() => void verify()} disabled={busy || (code.length !== 6 && !hasProof)} className="mt-2 w-full h-12 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[15px] font-semibold cursor-pointer disabled:opacity-50">
                 {busy ? "Checking…" : "Verify and open"}
               </button>
-              <button type="button" onClick={() => { setStep("verify"); setMsg(""); }} className="mt-2 text-[13px] font-semibold text-primary-700 underline underline-offset-2 cursor-pointer">
+              <button type="button" onClick={() => { setStep("verify"); setMsg(""); }} className="mt-2 inline-flex min-h-11 items-center text-[13px] font-semibold text-primary-700 underline underline-offset-2 cursor-pointer">
                 Change number or send a new code
               </button>
             </div>
@@ -609,12 +791,40 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
           {step === "manual" && (
             <div className="space-y-2">
               {why && <p className="text-[13px] text-primary-700 leading-snug">{why}</p>}
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Anything that helps us confirm it, e.g. the number players call" maxLength={400} rows={2} className="w-full px-4 py-2.5 rounded-xl border border-primary-200 text-[15px] focus:outline-none focus:border-primary-400" />
-              <button type="button" onClick={() => void sendForCheck()} disabled={busy} className="h-11 px-5 rounded-full bg-primary-900 text-white text-[14px] font-semibold cursor-pointer disabled:opacity-50">
-                {busy ? "Sending…" : "Claim this turf"}
+              {byHand && (
+                <div>
+                  <label htmlFor={phoneId} className="block text-[14px] font-semibold text-primary-900">{listed ? COPY.phoneLabelListed : COPY.phoneLabel}</label>
+                  <p className="text-[13px] text-primary-500 leading-snug">{listed ? COPY.phoneHintListed : COPY.phoneHint}</p>
+                  <div className="mt-1.5 flex gap-2">
+                    <span className="inline-flex items-center h-12 px-3 rounded-xl border border-primary-200 bg-primary-50 text-[15px] text-primary-600">+91</span>
+                    <input
+                      id={phoneId}
+                      type="tel"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      required
+                      aria-required="true"
+                      value={phone}
+                      onChange={(e) => {
+                        const d = e.target.value.replace(/\D/g, "");
+                        setPhone(d.length > 10 ? d.slice(-10) : d);
+                        setMsg("");
+                      }}
+                      placeholder="10-digit number"
+                      className="min-w-0 flex-1 h-12 px-4 rounded-xl border border-primary-200 text-[16px] focus:outline-none focus:border-primary-400"
+                    />
+                  </div>
+                </div>
+              )}
+              <div>
+                <label htmlFor={noteId} className="block text-[13px] font-semibold text-primary-700">{COPY.noteLabel}</label>
+                <textarea id={noteId} value={note} onChange={(e) => setNote(e.target.value)} placeholder={COPY.notePlaceholder} maxLength={400} rows={2} className="mt-1 w-full px-4 py-2.5 rounded-xl border border-primary-200 text-[16px] focus:outline-none focus:border-primary-400" />
+              </div>
+              <button type="button" onClick={() => void sendForCheck()} disabled={busy || (!pending && !role) || (byHand && phone.length !== 10)} className="w-full sm:w-auto h-12 px-6 rounded-full bg-primary-900 text-white text-[15px] font-semibold cursor-pointer disabled:opacity-50">
+                {busy ? "Sending…" : COPY.sendForCheck}
               </button>
               {info && info.mobiles > 0 && (
-                <button type="button" onClick={() => { setMsg(""); setStep("verify"); }} className="block text-[13px] font-semibold text-primary-700 underline underline-offset-2 cursor-pointer">
+                <button type="button" onClick={() => { setMsg(""); setStep("verify"); }} className="flex min-h-11 items-center text-[13px] font-semibold text-primary-700 underline underline-offset-2 cursor-pointer">
                   I have the turf&rsquo;s phone. Verify with a code
                 </button>
               )}
@@ -625,19 +835,18 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
         </div>
       )}
       {step === "sent" && (
-        <p className="mt-2 text-[13px] text-primary-600">
-          Thanks. We&rsquo;ll check it and confirm, usually within a day. It will show under Your turfs.
-          {me.kind === "email" ? ` If we need anything, we'll email you at ${me.who}.` : ` If we need anything, we'll call or WhatsApp you on +91 ${spaced(me.who)}.`}
-        </p>
+        <div className="mt-3 rounded-xl bg-accent-50/60 px-3 py-2.5">
+          <p className="text-[14px] text-primary-800 leading-snug">{COPY.thanks(turf.name)}</p>
+          <p className="mt-0.5 text-[13px] text-primary-500 leading-snug">{COPY.thanksMore}</p>
+        </div>
       )}
       {msg && <p className="mt-2 text-[13px] text-hot-600" role="alert">{msg}</p>}
     </li>
   );
 }
 
-/** Signed out: what myTapturf is, and one way in. */
+/** Signed out: what myTapturf is, and one way in. From a claim link the question comes first (ClaimQuestion). */
 function Landing({ claimId }: { claimId: string | null }) {
-  const next = claimId ? `/my?claim=${encodeURIComponent(claimId)}` : "/my";
   const claiming = usePublicTurf(claimId);
   const points = [
     { icon: BarChart3, title: "See who finds you", text: "Page views, calls and WhatsApp taps, and how often Ask TapTurf shows your turf, day by day." },
@@ -665,19 +874,15 @@ function Landing({ claimId }: { claimId: string | null }) {
         ))}
       </ul>
       {claiming && (
-        <div className="mt-8 flex items-center gap-3 rounded-2xl border border-primary-200 bg-white p-3">
-          <Thumb src={claiming.cover} />
-          <span className="min-w-0">
-            <span className="block text-[12px] font-semibold text-accent-700">You&rsquo;re claiming</span>
-            <span className="block font-semibold text-primary-900 truncate">{claiming.name}</span>
-            <span className="block text-[13px] text-primary-500 truncate">{place(claiming)}</span>
-          </span>
+        <div className="mt-8">
+          <TurfCard turf={claiming} label="You run this turf" />
         </div>
       )}
-      <Link href={`/login?next=${encodeURIComponent(next)}`} className={`press-tight ${claiming ? "mt-4" : "mt-8"} inline-flex h-12 items-center rounded-full bg-accent-500 hover:bg-accent-600 px-7 text-[16px] font-semibold text-white transition-colors`}>
-        {claiming ? "Sign in to claim it" : "Sign in to start"}
+      <Link href={claimId ? claimLoginUrl(claimId) : "/login?next=%2Fmy"} className={`press-tight ${claiming ? "mt-4" : "mt-8"} inline-flex h-12 items-center rounded-full bg-accent-500 hover:bg-accent-600 px-7 text-[16px] font-semibold text-white transition-colors`}>
+        {claiming ? "Sign in to manage it" : "Sign in to start"}
       </Link>
-      {claiming && <p className="mt-2 text-[13px] text-primary-500">Have the phone with the number on this listing? A code to it gets you in straight away.</p>}
+      {/* Only where the listing has a number: a page with none is checked by hand. */}
+      {claiming?.hasNumber && <p className="mt-2 text-[13px] text-primary-500">Have the phone with the number on this listing? A code to it gets you in straight away.</p>}
       <p className="mt-3 text-[13px] text-primary-500">Questions? Email <a href="mailto:info@tapturf.in" className="underline">info@tapturf.in</a>.</p>
     </Shell>
   );

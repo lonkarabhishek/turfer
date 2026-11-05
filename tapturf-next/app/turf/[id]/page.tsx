@@ -14,7 +14,8 @@ import { NO_MANAGERS } from "@/lib/turfPage/managers";
 import { ownerPriceNote, ownerPriceText } from "@/lib/turfPage/owner";
 import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { turfPhotos } from "@/lib/utils/images";
-import { playerPriceRange, positivePrice, priceRangeText, summarisePagePrice } from "@/lib/utils/prices";
+import { playerPriceRange, positivePrice, priceRangeText, showsNoPrices, summarisePagePrice } from "@/lib/utils/prices";
+import { CLAIM_COPY, claimPrompts } from "@/lib/turfPage/claimPrompts";
 import { getPhone, getWhatsAppPhone, turfContact } from "@/lib/utils/seo";
 import { normPlace, turfMeta } from "@/lib/seo/turfMeta";
 import { sharedNameKey } from "@/lib/seo/turfFacts";
@@ -156,6 +157,9 @@ export default async function TurfDetailPage({
   // the turf's own site or Instagram, the claim). Only then, so a page
   // with a number renders exactly as before.
   const noContact = hasContact ? undefined : noContactLinks(turf);
+  // Which claim prompts an unclaimed page shows: at most two on a phone, no hint without a number
+  // (lib/turfPage/claimPrompts.ts).
+  const prompts = claimPrompts({ claimed, hasNumber: hasContact, noPrices: showsNoPrices(turf) });
   const sidebarPrice = summarisePagePrice(turf);
   // Rates players shared (From players): the Pricing section points to
   // them when the turf lists none.
@@ -328,8 +332,8 @@ export default async function TurfDetailPage({
             </div>
           )}
 
-          {/* An unclaimed turf: one quiet line for its owner, down to the invite. */}
-          {!claimed && <ClaimHint />}
+          {/* An unclaimed turf with a number: one quiet line for its owner or manager, down to the invite. */}
+          {prompts.hint && <ClaimHint />}
         </div>
 
         {/* Image gallery: alt text from the turf's own name, type and place; the cover (as the share card picks it) says so. */}
@@ -352,7 +356,7 @@ export default async function TurfDetailPage({
             <TurfDetails turf={turf} hasContact={hasContact} />
             {/* The owner's ground sizes, drawn and benchmarked (none: nothing). */}
             {turf.ground_sizes && <GroundSize turf={turf} sizes={turf.ground_sizes} peers={peers} renderedAt={page.renderedAt} hasContact={hasContact} />}
-            <TurfPricing turf={turf} claimed={claimed} contact={contact} playerPrice={playerPrice} priceNote={priceNote} />
+            <TurfPricing turf={turf} claimed={claimed} contact={contact} playerPrice={playerPrice} priceNote={priceNote} ownerLine={prompts.pricingLine} />
 
             {/* Upcoming games here, with "Host a game here" right below. */}
             <TurfGames
@@ -422,7 +426,7 @@ export default async function TurfDetailPage({
                 name jumps here; last, as the owner asked on 29 Oct), then one
                 line for the owner of another turf, and no "request access"
                 link (its owner adds people). */}
-            {!claimed && <ClaimInvite turfId={turf.id} turfName={meta.name} hasNumber={hasContact} />}
+            {prompts.invite && <ClaimInvite turfId={turf.id} turfName={meta.name} hasNumber={hasContact} hasMobile={!!whatsappPhone} />}
             {claimed && (
               <>
                 <OwnerPanel managers={managers} priceNote={priceNote} className="mt-10" />
@@ -534,11 +538,11 @@ export default async function TurfDetailPage({
               )}
               <p className="text-xs text-center text-primary-500 mt-2 leading-relaxed">
                 {/* Not on a page with no number: players there were claiming turfs to book them (5 Nov 2026); its owner has the invite lower on the page. */}
-                {!claimed && hasContact && (
+                {prompts.sidebar && (
                   <>
-                    Own this turf?{" "}
+                    {CLAIM_COPY.sidebar.ask}{" "}
                     <a href="#claim" className="font-semibold text-accent-800 hover:underline underline-offset-2">
-                      Claim it free
+                      {CLAIM_COPY.sidebar.link}
                     </a>
                     {" · "}
                   </>

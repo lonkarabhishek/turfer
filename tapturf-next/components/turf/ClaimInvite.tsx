@@ -1,22 +1,26 @@
 import Link from "next/link";
 import { ArrowRight, ChartColumn, ChevronRight, MessageSquareText, PencilLine } from "lucide-react";
+import { BOOKINGS_LINE, CLAIM_COPY } from "@/lib/turfPage/claimPrompts";
 import { OwnerMark, OwnerMedallion } from "./OwnerMark";
 
 /**
- * Under the sport chips of an unclaimed turf's page: one quiet line for
- * its owner, down to the invite (#claim). The grey outline mark: the
+ * Under the sport chips of an unclaimed turf's page with a usable number:
+ * one quiet text link for its owner or manager, down to the invite
+ * (#claim). It names the role first: a bare "Claim it free" read like a
+ * free offer to players (5 Nov 2026), and a page with no number shows no
+ * hint at all (lib/turfPage/claimPrompts.ts). The grey outline mark: the
  * green one is only for turfs an owner manages. Kept out of snippets.
  */
 export function ClaimHint() {
   return (
     <div data-nosnippet className="mt-1.5 -mb-2">
-      <a href="#claim" className="inline-flex min-h-11 items-center gap-1.5 text-[13px] rounded-full">
+      <a href="#claim" className="inline-flex min-h-11 items-center gap-1.5 text-[13px] leading-snug rounded-full">
         <OwnerMark size={16} tone="grey" />
         <span>
-          <span className="text-primary-500">Own this turf? </span>
-          <span className="font-semibold text-accent-800">Claim it free</span>
+          <span className="text-primary-500">{CLAIM_COPY.hint.ask} </span>
+          <span className="whitespace-nowrap font-semibold text-accent-800">{CLAIM_COPY.hint.link}</span>
         </span>
-        <ChevronRight className="w-3.5 h-3.5 text-accent-800" aria-hidden />
+        <ChevronRight className="w-3.5 h-3.5 shrink-0 text-accent-800" aria-hidden />
       </a>
     </div>
   );
@@ -28,12 +32,16 @@ export function ClaimHint() {
  * frame marked Preview, and said to screen readers as a preview: this
  * turf is not claimed), and the free claim on myTapturf. A neutral
  * border on purpose: the green rim is what the page gets once claimed.
- * No numbers, no deadlines; TapTurf takes no bookings. A page with no
+ * No numbers, no deadlines. It says it is for the turf's owner or manager,
+ * and ends with the site owner's line for players who came to book ("For
+ * bookings, contact the turf directly.", 5 Nov 2026). A page with no
  * usable number (hasNumber false) says neither "call" nor "a code to the
  * number on this page": players can't call it, and its claim is checked by
- * hand (as myTapturf says for a listing with no mobile).
+ * hand (myTapturf then asks for the turf's number, which our team calls).
+ * A page whose only number is a landline (hasMobile false) doesn't promise
+ * a code either: our team calls a mobile at the turf the owner gives.
  */
-export function ClaimInvite({ turfId, turfName, hasNumber = true }: { turfId: string; turfName: string; hasNumber?: boolean }) {
+export function ClaimInvite({ turfId, turfName, hasNumber = true, hasMobile = true }: { turfId: string; turfName: string; hasNumber?: boolean; /** A mobile on the page (a landline alone can't get a code). */ hasMobile?: boolean }) {
   return (
     <section
       id="claim"
@@ -42,13 +50,11 @@ export function ClaimInvite({ turfId, turfName, hasNumber = true }: { turfId: st
       className="mt-10 scroll-mt-24 rounded-2xl border border-primary-200 bg-linear-to-b from-accent-50 via-white via-40% to-white p-5 md:p-7 md:grid md:grid-cols-[1fr_280px] md:grid-rows-[auto_1fr] md:gap-x-8 lg:block xl:grid"
     >
       <div className="md:col-start-1 md:row-start-1">
-        <p className="text-[13px] font-semibold text-accent-800">For the owner</p>
+        <p className="text-[13px] font-semibold text-accent-800">{CLAIM_COPY.invite.label}</p>
         <h2 id="claim-h" className="mt-1 text-[22px] font-bold text-primary-900 font-serif leading-tight">
-          Is this your turf?
+          {CLAIM_COPY.invite.title}
         </h2>
-        <p className="mt-1.5 text-[15px] text-primary-600 leading-snug">
-          Claim it free. Players then see it&rsquo;s a claimed turf, and you see how they find you.
-        </p>
+        <p className="mt-1.5 text-[15px] text-primary-600 leading-snug">{CLAIM_COPY.invite.lead}</p>
       </div>
 
       <div className="mt-6 md:mt-1 md:col-start-2 md:row-start-1 md:row-span-2 md:self-start lg:mt-6 xl:mt-1">
@@ -72,13 +78,13 @@ export function ClaimInvite({ turfId, turfName, hasNumber = true }: { turfId: st
           prefetch={false}
           className="press-tight mt-6 flex w-full sm:inline-flex sm:w-auto items-center justify-center gap-1.5 h-12 px-6 rounded-full bg-primary-900 hover:bg-primary-700 text-white text-[15px] font-semibold transition-colors"
         >
-          Claim this turf, free
+          {CLAIM_COPY.invite.button}
           <ArrowRight className="w-4 h-4" aria-hidden />
         </Link>
-        <p className="mt-3 text-[13px] text-primary-500 leading-snug">
-          {hasNumber
-            ? "Have the phone with the number on this page? A code to it gets you in at once. If not, our team checks by hand."
-            : "This page has no number yet, so our team checks your claim by hand, usually within a day. Add your numbers once you're in."}
+        <p className="mt-3 text-[13px] text-primary-500 leading-snug">{!hasNumber ? CLAIM_COPY.invite.noNumber : hasMobile ? CLAIM_COPY.invite.withNumber : CLAIM_COPY.invite.landline}</p>
+        {/* For a player who came here to book: no number promised on a page that has none. */}
+        <p className="mt-4 border-t border-primary-100 pt-3 text-[14px] text-primary-600 leading-snug">
+          {CLAIM_COPY.invite.players} <span className="font-semibold text-primary-900">{BOOKINGS_LINE}</span>
         </p>
       </div>
     </section>

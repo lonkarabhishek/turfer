@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { digits10, editorLabel, keyLabel, toClaims, typedNameDiffers, type AdminClaim, type ClaimStatus } from "@/lib/admin/claims";
+import { claimFacts, playerSignalLine, playerSignals } from "@/lib/admin/claimSignals";
+import { KIND_LINE_MAX, claimDecisionNotice } from "@/lib/my/claimNotice";
 import { METHOD_NAMES, ago, istDateTime, whatsappLink } from "@/lib/admin/people";
 import { adminFetch } from "@/lib/admin/adminFetch";
 import { claimCounts } from "@/lib/admin/claimed";
@@ -17,12 +19,22 @@ const shownNumber = (n: string | null) => {
   return !n ? "none" : !d ? n : /^[6-9]/.test(d) ? `+91 ${spaced(d)}` : `0${d}`;
 };
 
-/** myTapturf claims: pending ones to approve or reject, then everyone with access. Each shows the account it came from. */
+/**
+ * myTapturf claims: pending ones to approve or reject, then everyone with access. Each shows the
+ * account it came from and, when a waiting claim looks like a player's, one line saying why
+ * (lib/admin/claimSignals.ts). Approving or rejecting a waiting claim tells the claimant in the app;
+ * Reject first shows what they will read, with room for one kind line of the admin's own.
+ */
 export function OwnerClaims() {
   const [claims, setClaims] = useState<AdminClaim[] | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  // The claim whose Reject is open, and the admin's kind line for it.
+  const [rejecting, setRejecting] = useState<string | null>(null);
+  const [kind, setKind] = useState("");
+  // Claims whose claimant was just told, by key.
+  const [told, setTold] = useState<Record<string, string>>({});
   const [now, setNow] = useState(0);
   // The fold around this panel: its line and waiting count follow each reload (after an approve, too).
   const report = useFoldReport();
@@ -55,7 +67,7 @@ export function OwnerClaims() {
     report?.({ line: claimsLine(n), waiting: n.waiting });
   }, [claims, report]);
 
-  const decide = async (c: AdminClaim, status: ClaimStatus) => {
+  const decide = async (c: AdminClaim, status: ClaimStatus, message?: string) => {
     const key = c.turfId + c.userKey;
     setBusy(key);
     setFailed(null);
@@ -64,14 +76,19 @@ export function OwnerClaims() {
       const r = await fetch("/api/admin/owner-claims", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ turfId: c.turfId, userKey: c.userKey, status }),
+        body: JSON.stringify({ turfId: c.turfId, userKey: c.userKey, status, ...(message ? { message } : {}) }),
       });
-      const j = (await r.json().catch(() => ({}))) as { ok?: boolean };
+      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; notified?: boolean };
       ok = r.ok && j.ok === true;
+      if (ok && j.notified) setTold((t) => ({ ...t, [key]: status === "active" ? "Approved. They were told on TapTurf." : "Rejected. They were told on TapTurf." }));
     } catch {
       /* shown below */
     }
     setBusy(null);
+    if (ok && rejecting === key) {
+      setRejecting(null);
+      setKind("");
+    }
     if (!ok) setFailed(key);
     void load();
     // The page's own numbers (the glance at the top: claimed, this week, waiting) read anew, so they agree with this panel.
@@ -96,6 +113,10 @@ export function OwnerClaims() {
         const key = c.turfId + c.userKey;
         const a = c.account;
         const wa = a?.phone ? whatsappLink(a.phone) : null;
+        // Only on a waiting claim, and only when a fact points to a player.
+        const facts = c.status === "pending" ? claimFacts(c, c.signals) : null;
+        const playerLine = facts ? playerSignalLine(playerSignals(facts)) : null;
+        const preview = rejecting === key ? claimDecisionNotice("rejected", c.turfName, kind) : null;
         return (
           <li key={key} className={`rounded-2xl border p-3 ${c.status === "pending" ? "border-amber-300 bg-amber-50" : "border-primary-200 bg-white"}`}>
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -106,6 +127,9 @@ export function OwnerClaims() {
                 <p className="text-[13px] text-primary-500">
                   {[c.area, c.city].filter(Boolean).join(", ")} · listed: {c.listedPhones.length ? c.listedPhones.map(spaced).join(", ") : "no mobile listed"}
                 </p>
+                {playerLine && (
+                  <p className="rounded-xl border border-amber-300 bg-white/70 px-2.5 py-1.5 text-[13px] font-semibold text-amber-900 leading-snug">{playerLine}</p>
+                )}
 
                 {a ? (
                   <p className="text-[13px] text-primary-800">
@@ -176,7 +200,9 @@ export function OwnerClaims() {
                     Number they gave: <span className="font-semibold">+91 {spaced(c.phoneGiven)}</span>{" "}
                     {c.listedPhones.includes(c.phoneGiven)
                       ? "(on the listing, but it can't open the turf at once: an owner or a suggestion put it there, or it was on a revoked claim)"
-                      : "(not on the listing)"}
+                      : c.listedPhones.length === 0
+                        ? "(the turf's number, they say: the listing has no mobile, so call it to check)"
+                        : "(not on the listing)"}
                   </p>
                 )}
                 {c.numberEdits.length > 0 && (
@@ -204,27 +230,58 @@ export function OwnerClaims() {
                   </p>
                 )}
                 {typedNameDiffers(c) && <p className="text-[12px] text-primary-500">Name typed on the claim: {c.storedName}</p>}
+                {told[key] && <p className="text-[13px] font-semibold text-accent-800" role="status">{told[key]}</p>}
                 {failed === key && <p className="text-[13px] text-red-700">Couldn&rsquo;t save that. Reload admin and try again.</p>}
               </div>
               <div className="flex gap-2">
-                {c.status === "pending" && (
+                {c.status === "pending" && rejecting !== key && (
                   <>
-                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "active")} className="h-10 px-3 rounded-full bg-primary-900 text-white text-[13px] font-semibold cursor-pointer disabled:opacity-50">Approve</button>
-                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "rejected")} className="h-10 px-3 rounded-full bg-primary-100 text-primary-900 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Reject</button>
+                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "active")} className="h-11 px-4 rounded-full bg-primary-900 text-white text-[13px] font-semibold cursor-pointer disabled:opacity-50">Approve</button>
+                    <button type="button" disabled={busy === key} onClick={() => { setRejecting(key); setKind(""); }} className="h-11 px-4 rounded-full bg-primary-100 text-primary-900 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Reject</button>
                   </>
                 )}
                 {c.status === "active" && (
-                  <button type="button" disabled={busy === key} onClick={() => void decide(c, "revoked")} className="h-10 px-3 rounded-full bg-primary-100 text-red-700 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Revoke</button>
+                  <button type="button" disabled={busy === key} onClick={() => void decide(c, "revoked")} className="h-11 px-4 rounded-full bg-primary-100 text-red-700 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Revoke</button>
                 )}
                 {c.status === "revoked" && (
                   <>
-                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "active")} className="h-10 px-3 rounded-full bg-primary-100 text-primary-900 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Restore</button>
+                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "active")} className="h-11 px-4 rounded-full bg-primary-100 text-primary-900 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Restore</button>
                     {/* Rejected, not revoked: their number stops being held back from instant claims. */}
-                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "rejected")} className="h-10 px-3 rounded-full bg-primary-100 text-primary-700 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Close, don&rsquo;t block</button>
+                    <button type="button" disabled={busy === key} onClick={() => void decide(c, "rejected")} className="h-11 px-4 rounded-full bg-primary-100 text-primary-700 text-[13px] font-semibold cursor-pointer disabled:opacity-50">Close, don&rsquo;t block</button>
                   </>
                 )}
               </div>
             </div>
+            {/* Reject: what the claimant will read in their TapTurf alerts, and one kind line of the admin's own. */}
+            {c.status === "pending" && rejecting === key && preview && (
+              <div className="mt-3 rounded-xl border border-primary-200 bg-white p-3">
+                <p className="text-[13px] font-semibold text-primary-800">They&rsquo;ll get this in their TapTurf alerts</p>
+                <div className="mt-1.5 rounded-lg bg-primary-50 px-3 py-2">
+                  <p className="text-[14px] font-semibold text-primary-900">{preview.title}</p>
+                  <p className="mt-0.5 text-[13px] text-primary-600 leading-snug">{preview.message}</p>
+                </div>
+                <label htmlFor={`kind-${key}`} className="mt-2.5 block text-[13px] font-semibold text-primary-700">
+                  A kind line of your own (optional)
+                </label>
+                <textarea
+                  id={`kind-${key}`}
+                  value={kind}
+                  onChange={(e) => setKind(e.target.value)}
+                  maxLength={KIND_LINE_MAX}
+                  rows={2}
+                  placeholder="e.g. If you run this turf, write to info@tapturf.in and we'll call its number."
+                  className="mt-1 w-full rounded-xl border border-primary-200 px-3 py-2 text-[16px] md:text-[14px] focus:outline-none focus:border-primary-400"
+                />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" disabled={busy === key} onClick={() => void decide(c, "rejected", kind)} className="h-11 px-4 rounded-full bg-primary-900 text-white text-[13px] font-semibold cursor-pointer disabled:opacity-50">
+                    {busy === key ? "Sending…" : "Reject and tell them"}
+                  </button>
+                  <button type="button" disabled={busy === key} onClick={() => { setRejecting(null); setKind(""); }} className="h-11 px-4 rounded-full bg-primary-100 text-primary-900 text-[13px] font-semibold cursor-pointer disabled:opacity-50">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </li>
         );
       })}
