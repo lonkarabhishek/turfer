@@ -6,10 +6,12 @@
 // on a turf with no mobile, with the turf's number given through
 // owner_phone_listed, shows as the admin's "Number they gave";
 // admin_owner_claim_signals (the site owner only; waiting claims only;
-// counts and yes or no, nothing about a person; games made, join requests
-// sent, a contact tap and turfs opened before signing up, or null when not
-// recorded); admin_answer_owner_claim (the site owner only; decides through
-// admin_decide_owner_claim; one notification to the claimant's account when
+// keyed by turf_id and user_key as admin_owner_claims gives them, otherwise
+// counts and yes or no, no name, note or other contact; games made, join
+// requests sent, a contact tap and turf pages opened before signing up, or
+// null when not recorded); admin_answer_owner_claim (the site owner only;
+// decides through admin_decide_owner_claim, whose own check is the only one:
+// one site-owner check per decision; one notification to the claimant's account when
 // a waiting claim is approved or rejected, typed, with the turf's id and
 // slug, cut to the table's limits; nothing for a revoke, a restore, closing
 // a revoked claim, deciding twice, an empty message, a claim with no
@@ -98,8 +100,11 @@ create or replace function private.firebase_phone10(p_token text) returns text l
   $$ select case when p_token ~ '^proof:[6-9][0-9]{9}$' then substr(p_token, 7) end $$;
 create or replace function public._caller_key(p_token text) returns text language sql security definer set search_path = public as $$
   select case when p_token ~ '^phone:[6-9][0-9]{9}$' then 'p:' || substr(p_token, 7) end $$;
-create or replace function public._is_site_owner(p_firebase_token text default null) returns boolean language sql stable as
-  $$ select coalesce(current_setting('test.owner', true), '') = 'yes' $$;
+-- The site owner check, counted: a phone token's check is a call to Google, so a decision makes one.
+create table private.owner_checks (n int not null);
+insert into private.owner_checks values (0);
+create or replace function public._is_site_owner(p_firebase_token text default null) returns boolean language plpgsql as
+  $$ begin update private.owner_checks set n = n + 1; return coalesce(current_setting('test.owner', true), '') = 'yes'; end $$;
 `);
 
 // Every function before the file: its source and its grants.
@@ -166,7 +171,8 @@ eq(await rpc("admin_owner_claim_signals", [null]), { error: "forbidden" }, "sign
 await owner(true);
 const sig = await rpc("admin_owner_claim_signals", [null]);
 eq(sig.length, 5, "one row per waiting claim");
-for (const r of sig) eq(Object.keys(r).sort(), ["games", "games_here", "pre_contact_tap", "pre_turfs_opened", "requests", "turf_id", "user_key"], "counts and yes or no only");
+for (const r of sig) eq(Object.keys(r).sort(), ["games", "games_here", "pre_contact_tap", "pre_turfs_opened", "requests", "turf_id", "user_key"], "keyed by turf_id and user_key; otherwise counts and yes or no only");
+for (const r of sig) ok(claims.some((c) => c.turf_id === r.turf_id && c.user_key === r.user_key), "each key is one admin_owner_claims already gives");
 const sigOf = (turf, key) => sig.find((r) => r.turf_id === turf && r.user_key === key);
 eq(sigOf(T(1), "p:9000000502"), { turf_id: T(1), user_key: "p:9000000502", games: 1, games_here: 1, requests: 2, pre_contact_tap: true, pre_turfs_opened: 5 }, "Q: a game here, two requests, a tap and 5 turfs before signing up");
 eq(sigOf(T(1), "p:9000000501"), { turf_id: T(1), user_key: "p:9000000501", games: 1, games_here: 0, requests: 0, pre_contact_tap: null, pre_turfs_opened: null }, "P: a game elsewhere; no sign-up context: not recorded, never false");
@@ -179,11 +185,16 @@ const status = async (turf, key) => (await one(`select status from public.turf_o
 const answer = (turf, key, st, title, message) => rpc("admin_answer_owner_claim", [null, turf, key, st, title, message]);
 const REJ = ["We couldn't confirm your claim", "TapTurf could not confirm that you run No Number Box. If you wanted to play there: For bookings, contact the turf directly."];
 
+const checks = async () => (await one(`select n from private.owner_checks`)).n;
 await owner(false);
-eq(await answer(T(1), "p:9000000501", "rejected", ...REJ), { error: "forbidden" }, "answer: not for anyone but the site owner");
+let n0 = await checks();
+eq(await answer(T(1), "p:9000000501", "rejected", ...REJ), { error: "forbidden", notified: false }, "answer: not for anyone but the site owner");
+eq(await checks() - n0, 1, "one site-owner check, before anything is read");
 eq(await status(T(1), "p:9000000501"), "pending", "nothing decided");
 await owner(true);
+n0 = await checks();
 eq(await answer(T(1), "p:9000000501", "rejected", ...REJ), { ok: true, notified: true }, "reject P: decided and told");
+eq(await checks() - n0, 1, "one site-owner check per decision (admin_decide_owner_claim's own)");
 eq(await status(T(1), "p:9000000501"), "rejected", "rejected");
 eq(await notes(), [{ user_id: P, type: "owner_claim_rejected", title: REJ[0], message: REJ[1], metadata: { turfId: T(1), slug: "no-number-box" }, is_read: false }], "one notification to P's account, with the turf's id and slug");
 eq((await one(`select from_status, to_status, how from private.turf_owner_events where turf_id = $1 and user_key = $2 order by id desc limit 1`, [T(1), "p:9000000501"])), { from_status: "pending", to_status: "rejected", how: "admin" }, "logged as admin_decide_owner_claim logs it");

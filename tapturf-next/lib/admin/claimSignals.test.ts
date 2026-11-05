@@ -26,7 +26,7 @@ test("withSignals: each waiting claim gets its row and whether its page shows a 
     "phone sign-in on a turf with no number",
     "made 1 game",
     "tapped Call or WhatsApp before signing up",
-    "opened 5 turfs before signing up",
+    "opened turf pages 5 times before signing up",
   ]);
 });
 
@@ -56,6 +56,28 @@ const BOOKING = [
   "WE WANT TO BOOK",
   "One slot for tomorrow 7 pm please",
   "can we book at 7 pm",
+  // Hinglish and Hindi (made up, in the forms players type)
+  "booking karwani hai",
+  "book karwana hai",
+  "booking krwani h",
+  "booking kar do sunday ki",
+  "booking hogi kya",
+  "booking ho jayegi?",
+  "kal ki booking",
+  "booking hai kya",
+  "मुझे बुकिंग करनी है",
+  "बुकिंग करनी है",
+  "बुक करवाना है शाम को",
+  "rate kya hai",
+  "price kya hai",
+  // English shapes the owner strips must leave alone
+  "book for my team on sunday",
+  "can you book a slot for me",
+  "can players book the turf for 2 hours?",
+  "booking at 7 pm tomorrow",
+  "booking for tomorrow evening",
+  "book karo please",
+  "need slot for 2 hours at 7 pm",
 ];
 const NOT_BOOKING = [
   "",
@@ -82,6 +104,35 @@ const NOT_BOOKING = [
   "Slots for weekends are 1200",
   "Booking on WhatsApp only",
   "Booking at the counter or on call",
+  // Owners' notes that a looser list flagged (review, 5 Nov 2026)
+  "Booking from 6 am to midnight",
+  "booking from 6am daily",
+  "I am the owner, booking for my turf is on whatsapp",
+  "Minimum booking for 2 hours",
+  "Minimum booking 1 hour",
+  "Booking for corporate events too",
+  "I am managing booking for this turf",
+  "For reservation, call the number on the page",
+  "Reservation on call only",
+  "We book the slot for our customers",
+  "we book slots for our customers",
+  "we book slot for our customers",
+  "Customers can book a slot by calling us",
+  "Players can book the turf on call",
+  "we book the ground for corporate teams",
+  "You can book a slot on WhatsApp",
+  "Open for 12 hours every day",
+  "We are 3 people running this turf",
+  "We have a team of 5 staff",
+  "Our team of 4 manages the turf",
+  "Turf available now, newly opened",
+  "I'm the manager, we take reservations by phone",
+  "We run this turf since 2019, slots for 2 hours cost 1200",
+  "slots for 2 hours cost 1200",
+  "We take online bookings too",
+  "Bookings are open from 6 am",
+  "Booking timings 6am to 12am",
+  "I own this turf",
 ];
 
 test("booking-like notes: requests to book or play count, in English and Hinglish", () => {
@@ -110,7 +161,7 @@ test("signals: each fact in plain words, in a fixed order", () => {
     "made 1 game",
     "sent 3 join requests",
     "tapped Call or WhatsApp before signing up",
-    "opened 5 turfs before signing up",
+    "opened turf pages 5 times before signing up",
   ]);
   assert.equal(playerSignalLine(all.slice(0, 2)), "Looks like a player: note reads like a booking, phone sign-in on a turf with no number.");
   assert.deepEqual(playerSignals({ ...none, games: 2, requests: 1 }), ["made 2 games", "sent 1 join request"]);
@@ -123,7 +174,8 @@ test("signals: a Google sign-in on a no-number turf, or an unknown number, is no
 
 test("signals: turfs opened count from the threshold; not recorded is not a signal", () => {
   assert.deepEqual(playerSignals({ ...none, turfsOpenedBeforeSignup: MANY_TURFS_OPENED - 1 }), []);
-  assert.deepEqual(playerSignals({ ...none, turfsOpenedBeforeSignup: MANY_TURFS_OPENED }), [`opened ${MANY_TURFS_OPENED} turfs before signing up`]);
+  assert.deepEqual(playerSignals({ ...none, turfsOpenedBeforeSignup: MANY_TURFS_OPENED }), [`opened turf pages ${MANY_TURFS_OPENED} times before signing up`]);
+  assert.deepEqual(playerSignals({ ...none, turfsOpenedBeforeSignup: 4 }), [], "an owner opening their own page a few times stays under it");
   assert.deepEqual(playerSignals({ ...none, turfsOpenedBeforeSignup: null, tappedBeforeSignup: null }), []);
 });
 

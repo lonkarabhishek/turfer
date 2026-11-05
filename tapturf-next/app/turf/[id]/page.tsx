@@ -426,7 +426,7 @@ export default async function TurfDetailPage({
                 name jumps here; last, as the owner asked on 29 Oct), then one
                 line for the owner of another turf, and no "request access"
                 link (its owner adds people). */}
-            {prompts.invite && <ClaimInvite turfId={turf.id} turfName={meta.name} hasNumber={hasContact} />}
+            {prompts.invite && <ClaimInvite turfId={turf.id} turfName={meta.name} hasNumber={hasContact} hasMobile={!!whatsappPhone} />}
             {claimed && (
               <>
                 <OwnerPanel managers={managers} priceNote={priceNote} className="mt-10" />

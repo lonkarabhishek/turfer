@@ -55,7 +55,7 @@ test("the flow's words: the site owner's line for players, nothing that reads li
     c.label, c.question("Green Box"), c.lead, c.yes, c.yesSub, c.noSub(true), c.noSub(false), c.no, c.playTitle,
     c.playBody("Green Box", true), c.playBody("Green Box", false), c.playButton(true), c.playButton(false), c.playUndo,
     c.loginTitle("Green Box"), c.loginLead, c.loginDefault, c.rolePick("Green Box"), c.roleNeeded, c.byHandWhy,
-    c.phoneLabel, c.phoneHint, c.phoneNeeded, c.noteLabel, c.notePlaceholder, c.sendForCheck, c.thanks("Green Box"), c.thanksMore, c.waiting,
+    c.phoneLabel, c.phoneHint, c.phoneNeeded, c.byHandWhyListed, c.phoneLabelListed, c.phoneHintListed, c.phoneNeededListed, c.noteLabel, c.notePlaceholder, c.sendForCheck, c.thanks("Green Box"), c.thanksMore, c.waiting,
   ];
   assert.equal(words.length, Object.keys(c).length + 3, "every entry read (the three that take a yes or no read twice)");
   for (const s of words) assert.equal(claimCopyProblem(s), null, s);
@@ -63,4 +63,12 @@ test("the flow's words: the site owner's line for players, nothing that reads li
   assert.doesNotMatch(thanks, /call|whatsapp/i, "the thanks screen reads like no booking reply");
   assert.match(thanks, /check that you run Green Box/);
   assert.doesNotMatch(CLAIM_FLOW_COPY.loginDefault, /book/i, "the sign-in page says nothing about booking");
+});
+
+test("a page whose number can't get a code (a landline): it asks for a mobile at the turf, not the number players call", () => {
+  assert.doesNotMatch(CLAIM_FLOW_COPY.phoneLabelListed, /players/i);
+  assert.doesNotMatch(CLAIM_FLOW_COPY.phoneHintListed, /players should call/i);
+  assert.match(CLAIM_FLOW_COPY.phoneLabelListed, /mobile/i);
+  assert.match(CLAIM_FLOW_COPY.phoneNeededListed, /mobile/i);
+  assert.doesNotMatch(CLAIM_FLOW_COPY.byHandWhyListed, /no mobile number/i, "the page does show a number");
 });

@@ -12,23 +12,59 @@
  */
 
 /**
- * A note that reads like a booking. Careful on purpose: an owner writes
- * "open 24 hours", "we take bookings on WhatsApp" or "I manage bookings
- * here", and none of those may count. Each pattern is a request to play
- * or to book, in English or the Hinglish players type.
+ * A note that reads like a booking. Careful on purpose: a wrong "Looks like
+ * a player" on a real owner's claim costs more than a missed one (the admin
+ * reads every note anyway), so an owner's own talk about bookings is taken
+ * out first ("open 24 hours", "we take bookings on WhatsApp", "booking from
+ * 6 am", "minimum booking 2 hours", "customers can book a slot by calling
+ * us"), a note in which the writer says they own or run the turf never
+ * counts, and each pattern left is a request to play or to book, in
+ * English, the Hinglish players type, or Hindi.
  */
-const OWNER_BOOKING_TALK = [
-  /\b(?:we|i)\s+(?:take|handle|manage|accept|get|run|do)\s+(?:all\s+)?(?:the\s+)?bookings?\b/g,
-  /\bbookings?\s+(?:number|no\.?|contact|desk|manager|team|line)\b/g,
-  /\bfor\s+bookings?\b/g,
+const NUM_WORD = "(?:\\d{1,2}(?:\\.\\d)?|one|two|three|four|five|half\\s+an?|an?)";
+const OWNER_BOOKING_TALK: RegExp[] = [
+  // "we take bookings", "I am managing booking", "we also accept reservations"
+  /\b(?:we|i)\s+(?:also\s+)?(?:am\s+|are\s+)?(?:take|taking|handle|handling|manage|managing|accept|accepting|get|getting|run|running|do|doing|look\s+after|looking\s+after)\s+(?:all\s+)?(?:the\s+)?(?:bookings?|reservations?)\b/g,
+  // "booking on WhatsApp", "reservation by call", "booking at the counter"; not "booking at 7" or "booking on sunday"
+  /\b(?:bookings?|reservations?)\s+(?:number|no\.?|contact|desk|manager|team|line|via|by|through|are|is\s+(?:on|via|by|through|open|available)|(?:on|at)(?!\s+(?:\d|sun|mon|tue|wed|thu|fri|sat|tomorrow|today|tonight)))\b/g,
+  /\bfor\s+(?:bookings?|reservations?)\b/g,
+  /\bbookings?\s+for\s+(?:my|our)\s+(?:turf|ground|venue|arena|box|place|court)\b/g,
+  // "we book the slot for our customers" (never "can we book", "do we book" or "want to book")
+  /(?<!\b(?:can|could|may|shall|should|will|do|to)\s)\b(?:we|i)\s+(?:also\s+)?book\b(?:\s+(?:a|the|your|any|our)\s+(?:slot|turf|ground|court|box|pitch)s?\b)?/g,
+  // "customers can book a slot by calling us"; never "can players book" or "can you book"
+  /(?<!\b(?:can|could|may|shall|should|will|do|to)\s)\b(?:customers?|players?|people|teams?|anyone|everyone)\s+(?:can\s+)?(?:also\s+)?book\b(?:\s+(?:a|the|your|any|our)\s+(?:slot|turf|ground|court|box|pitch)s?\b)?/g,
+  /\byou\s+can\s+(?:also\s+)?book\b(?:\s+(?:a|the|your|any|our)\s+(?:slot|turf|ground|court|box|pitch)s?\b)?/g,
+  new RegExp(`\\b(?:minimum|min\\.?)\\s+(?:booking|slot|time)?\\s*(?:is\\s+)?(?:for\\s+|of\\s+)?${NUM_WORD}\\s*(?:hours?|hrs?)\\b`, "g"),
+  /\b(?:minimum|min\.?)\s+booking\b/g,
+  /\bopen(?:ed)?\s+for\b/g,
+  // a slot's length and its price: "slots for 2 hours cost 1200"
+  new RegExp(`\\bslots?\\s+(?:of|for)\\s+${NUM_WORD}\\s*(?:hours?|hrs?)\\s+(?=cost|price|priced|charged|rs\\b|inr\\b|₹|=|-|:|\\d{3,})`, "g"),
+  /\bbooking\s+(?:from|starts?|timings?|hours?|open)\b/g,
 ];
+
+/** The writer says the turf is theirs to run: their note is never a player's booking. */
+const OWNER_VOICE: RegExp[] = [
+  /\b(?:i\s+am|i'm|im|we\s+are|we're)\s+(?:the\s+|its\s+|a\s+)?(?:co-?)?(?:owners?|partners?)\b/,
+  /\b(?:i\s+am|i'm|im|we\s+are|we're)\s+(?:the\s+|its\s+|a\s+)?(?:turf\s+|ground\s+)?(?:managers?|staff)\b(?!\s+of\s+(?:my|our|the|a)\s+(?:team|club|group|company|office))/,
+  /\b(?:my|our|mera|meri|hamara|hamari)\s+(?:own\s+)?(?:turf|ground|arena|academy|venue)\b/,
+  /\b(?:i|we)\s+(?:own|run|manage)\s+(?:it\b|(?:this|the)\s+(?:turf|ground|arena|place|venue|box|academy)\b)/,
+];
+
+const PEOPLE = "(?:players|people|persons|boys|girls|friends|guys|ppl|log|members)";
 const BOOKING_REQUESTS: RegExp[] = [
   /\b(?:want|wanna|would like|like|need|have|planning|plan|looking)\s+to\s+(?:book|reserve|play)\b/,
   /\b(?:can|could|may)\s+(?:i|we|u|you)\s+(?:book|reserve|play|get\s+(?:a\s+)?slot)\b/,
   /\bbook(?:ing)?\s+(?:a\s+|the\s+|one\s+|this\s+|your\s+)?(?:slot|ground|turf|court|box|pitch|game|match)\b/,
-  // "book for", "booking at 7"; not an owner's "booking on WhatsApp" or "booking at the counter"
-  /\bbook(?:ing)?\s+(?:for|from|tomorrow|today|tonight|at\s+\d)/,
-  /\bbook(?:ing)?\s*(?:karna|krna|karni|krni|karo|kro|kar|chahiye|chaiye|hai)\b/,
+  // "book for 2 hours", "booking for tomorrow", "book for my team"; not an owner's "booking for corporate events"
+  /\bbook(?:ing)?\s+for\s+(?:me\b|us\b|tomorrow|today|tonight|this\s+(?:evening|morning|night|weekend|sunday|saturday)|next\s+(?:week|sunday|saturday)|kal\b|sunday|monday|tuesday|wednesday|thursday|friday|saturday|\d|(?:one|two|three|four|five|half\s+an?|an?)\s*(?:hours?|hrs?)\b|my\s+(?:team|friends|group|kids|son|daughter|office|company|birthday))/,
+  /\bbook(?:ing)?\s+(?:tomorrow|today|tonight|at\s+\d)/,
+  // Hinglish: "book karna hai", "booking karwani hai", "booking krwani h", "booking chahiye", "booking hogi kya"
+  /\bbook(?:ing)?\s*(?:karna|krna|karni|krni|karne|krne|karo|kro|kar\s+(?:do|dijiye|dena|doge|denge)|k(?:a)?r(?:wa|va)(?:na|ni|ne|o|do|dena|dijiye)?|chahiye|chaiye|chahie|hogi|ho\s+(?:jayegi|jaegi|jaayegi|sakti|skti|jayega)|milegi|mil\s+(?:jayegi|sakti))\b/,
+  /\bbook(?:ing)?\s+(?:hai|h|he)\s+kya\b/,
+  /\b(?:kal|aaj|parso|parson)\s+(?:ki|ka|ke)\s+(?:booking|slot)\b/,
+  // Hindi: बुकिंग करनी है, बुक करवाना, बुकिंग चाहिए (no \b: JavaScript's word edges are ASCII only)
+  /(?:बुकिंग|बुक)\s*(?:कर(?!\s*सकते)|चाहिए|चाहिये|होगी|हो\s*जा)/,
+  /खेल(?:ना|नी|ने|ें)/,
   // asking for a slot; not an owner's "slots available from 6 am" or "slots for weekends are 1200"
   /\bslots?\s+(?:chahiye|chaiye|milega|book)\b/,
   /\b(?:a|one|1|any)\s+slot\s+(?:for|at|on|from|tomorrow|today|tonight)\b/,
@@ -37,11 +73,14 @@ const BOOKING_REQUESTS: RegExp[] = [
   // "for 2 hours", never "open 24 hours" or "for 24 hours"
   /\bfor\s+(?:[1-9]|1[0-2]|1\.5|2\.5|one|two|three|four|five|half\s+an?|an?)\s*(?:hours?|hrs?)\b/,
   /\b(?:is|are)\s+(?:it|the\s+\w+|slots?|ground|turf)\s+(?:available|free|open)\s+(?:today|tomorrow|tonight|now|this|on|at|for)\b/,
-  /\b(?:available|availability)\s+(?:today|tomorrow|tonight|now|this\s+\w+)\b/,
+  /\b(?:available|availability)\s+(?:today|tomorrow|tonight|this\s+(?:evening|morning|night|weekend|sunday|saturday))\b/,
   /\bhow\s+much\s+(?:for|per|is\s+(?:it|the)|an?\s+hour)\b/,
   /\bwhat(?:'s|\s+is|\s+are)\s+(?:the\s+)?(?:price|rate|cost|charge)s?\b/,
-  /\bwe\s+are\s+\d{1,2}\s*(?:players|people|persons|boys|girls|friends|guys|ppl|log|members)\b/,
-  /\b(?:team|group)\s+of\s+\d{1,2}\b/,
+  /\b(?:rate|price|prices|charges?)\s+(?:kya|kitna|kitne)\b/,
+  // "we are 12 players"; not "we are 3 people running this turf"
+  new RegExp(`\\bwe\\s+are\\s+\\d{1,2}\\s*${PEOPLE}\\b(?!\\s+(?:running|managing|owning|working|who\\s+(?:run|manage|own|work)|in\\s+charge))`),
+  // "team of 10 for football"; not "a team of 5 staff" or "our team of 4 manages the turf"
+  new RegExp(`\\b(?:team|group)\\s+of\\s+\\d{1,2}\\s*(?:${PEOPLE}\\s*)?(?:for|want|wants|need|needs|looking|to\\s+play|will\\s+play)\\b`),
   /\bkhel(?:na|ne|enge)\b/,
   /\bneed\s+(?:a\s+)?(?:slot|turf|ground|court|pitch)\b/,
 ];
@@ -50,6 +89,7 @@ const BOOKING_REQUESTS: RegExp[] = [
 export function bookingLikeNote(note: string | null | undefined): boolean {
   if (!note) return false;
   let s = ` ${note.toLowerCase().replace(/[’`]/g, "'").replace(/\s+/g, " ")} `;
+  if (OWNER_VOICE.some((re) => re.test(s))) return false;
   for (const re of OWNER_BOOKING_TALK) s = s.replace(re, " ");
   return BOOKING_REQUESTS.some((re) => re.test(s));
 }
@@ -67,12 +107,16 @@ export type ClaimFacts = {
   requests: number;
   /** A Call or WhatsApp tap before signing up (the sign-up context); null: not recorded. */
   tappedBeforeSignup: boolean | null;
-  /** Turfs opened before signing up (the sign-up context); null: not recorded. */
+  /** Turf pages opened before signing up (the sign-up context counts each page load, not different turfs); null: not recorded. */
   turfsOpenedBeforeSignup: number | null;
 };
 
-/** Opening this many turfs before signing up counts: an owner opens their own, a player looks around. */
-export const MANY_TURFS_OPENED = 3;
+/**
+ * Opening turf pages this many times before signing up counts. The visit note counts page loads
+ * (lib/analytics/visitor.ts noteInterest), not different turfs, so an owner who reloads their own
+ * page a few times must stay under it; a player looking around goes past it.
+ */
+export const MANY_TURFS_OPENED = 5;
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -84,7 +128,7 @@ export function playerSignals(f: ClaimFacts): string[] {
   if (f.games > 0) out.push(`made ${plural(f.games, "game", "games")}`);
   if (f.requests > 0) out.push(`sent ${plural(f.requests, "join request", "join requests")}`);
   if (f.tappedBeforeSignup === true) out.push("tapped Call or WhatsApp before signing up");
-  if (f.turfsOpenedBeforeSignup !== null && f.turfsOpenedBeforeSignup >= MANY_TURFS_OPENED) out.push(`opened ${f.turfsOpenedBeforeSignup} turfs before signing up`);
+  if (f.turfsOpenedBeforeSignup !== null && f.turfsOpenedBeforeSignup >= MANY_TURFS_OPENED) out.push(`opened turf pages ${f.turfsOpenedBeforeSignup} times before signing up`);
   return out;
 }
 

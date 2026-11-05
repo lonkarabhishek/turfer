@@ -8,12 +8,18 @@
 --    games the claimant's account created (anywhere, and at this turf), join
 --    requests it sent, and from its sign-up context (public.user_signup_context,
 --    saved once at sign-up) whether it tapped Call or WhatsApp before signing
---    up and how many turfs it opened. Counts and yes or no only: no name,
---    number, email or note leaves here. The account is the claim's user_id,
+--    up and how many turf pages it opened. Each row is keyed by the claim's
+--    turf_id and user_key, the sign-in key ('p:' and a mobile, or 'e:' and
+--    an email) that admin_owner_claims already gives the site owner, so the
+--    route can match the two; otherwise counts and yes or no only: no name,
+--    note or other contact leaves here. The account is the claim's user_id,
 --    else the one its sign-in opens (private.account_for_key), as in
 --    admin_owner_claims.
 -- 2. admin_answer_owner_claim: the admin's decision, made by the unchanged
---    admin_decide_owner_claim, and when it takes a waiting claim to active
+--    admin_decide_owner_claim first (its own site-owner check runs before it
+--    reads or locks anything, so a phone sign-in's token goes to Google once
+--    per decision and no claim row is held while it does), and when it took
+--    a waiting claim to active
 --    (approved) or rejected, one in-app notification to the claimant's
 --    account in public.notifications, as the games functions make them
 --    (type owner_claim_approved or owner_claim_rejected; title and message
@@ -98,17 +104,22 @@ declare
   v_out jsonb;
   v_sent integer := 0;
 begin
-  if not public._is_site_owner(p_firebase_token) then
-    return jsonb_build_object('error', 'forbidden');
-  end if;
-  -- The claim as it stands, held until this transaction ends (admin_decide_owner_claim holds it the same way).
-  select o.status, coalesce(o.user_id, private.account_for_key(o.user_key)) into v_prev, v_uid
-    from public.turf_owners o
-   where o.turf_id = p_turf_id and o.user_key = p_user_key
-   for update;
+  -- The decision, with its own site-owner check first: anyone else gets {error: forbidden}
+  -- before any row is read or locked.
   v_out := public.admin_decide_owner_claim(p_firebase_token, p_turf_id, p_user_key, p_status);
-  if coalesce(v_out ->> 'ok', '') = 'true'
-     and v_prev = 'pending' and p_status in ('active', 'rejected')
+  if coalesce(v_out ->> 'ok', '') = 'true' and p_status in ('active', 'rejected') then
+    -- What the claim was before: the event admin_decide_owner_claim just logged. It holds the claim
+    -- row (for update) until this transaction ends, so no other decision on it comes between.
+    select e.from_status into v_prev
+      from private.turf_owner_events e
+     where e.turf_id = p_turf_id and e.user_key = p_user_key and e.how = 'admin' and e.to_status = p_status
+     order by e.id desc
+     limit 1;
+    select coalesce(o.user_id, private.account_for_key(o.user_key)) into v_uid
+      from public.turf_owners o
+     where o.turf_id = p_turf_id and o.user_key = p_user_key;
+  end if;
+  if v_prev = 'pending'
      and nullif(btrim(coalesce(p_title, '')), '') is not null
      and nullif(btrim(coalesce(p_message, '')), '') is not null
      and v_uid is not null and exists (select 1 from public.users u where u.id = v_uid) then

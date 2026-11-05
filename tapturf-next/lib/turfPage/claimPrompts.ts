@@ -49,6 +49,8 @@ export const CLAIM_COPY = {
     button: "Claim this turf",
     withNumber: "Have the phone with the number on this page? A code to it gets you in at once. If not, our team checks by hand.",
     noNumber: "This page has no number yet, so our team checks your claim by hand: you give us the turf's number and we call it, usually within a day.",
+    // The page's only number is a landline: no code can go to it.
+    landline: "This page's number is a landline, so our team checks your claim by hand: you give us a mobile at the turf and we call it, usually within a day.",
     players: "Here to play?",
   },
 } as const;

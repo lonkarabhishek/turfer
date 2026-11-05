@@ -285,13 +285,14 @@ function NoPrices({
                 {reported ? "Paid a different rate? Share it" : "Played here? Share the rate"}
               </SuggestInfoButton>
             </div>
+            {/* A div: Google honours data-nosnippet on span, div and section only. */}
             {ownerLine && (
-              <p data-nosnippet className="mt-1 text-[13px] text-primary-500">
+              <div data-nosnippet className="mt-1 text-[13px] text-primary-500">
                 {CLAIM_COPY.pricingLine.ask}{" "}
                 <Link href={`/my?claim=${turfId}`} prefetch={false} className="inline-flex min-h-11 items-center font-semibold text-accent-700 hover:text-accent-800">
                   {CLAIM_COPY.pricingLine.link}
                 </Link>
-              </p>
+              </div>
             )}
           </>
         )}

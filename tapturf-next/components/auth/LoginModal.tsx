@@ -88,7 +88,7 @@ export function LoginModal() {
             Sign in to TapTurf
           </h2>
           <p className="text-[13px] text-primary-500 text-center mt-1 mb-6">
-            Host games, join a squad, book turfs
+            Host games, join a squad, find turfs
           </p>
 
           {/* Google first: one tap with the account already on the phone. Phone right under it. */}

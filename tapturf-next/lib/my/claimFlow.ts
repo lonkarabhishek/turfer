@@ -92,6 +92,12 @@ export const CLAIM_FLOW_COPY = {
   phoneLabel: "The turf's phone number",
   phoneHint: "The number players should call. Our team calls it to check that you run the turf. It isn't shown on the page.",
   phoneNeeded: "Enter the turf's 10-digit mobile number, like 98765 43210.",
+  // The page shows a number, but none a code can go to (a landline, or a mobile an owner or a
+  // suggestion put there): our team can call the page's number, and asks for a mobile at the turf.
+  byHandWhyListed: "The number on this page can't get a code, so our team checks your claim by hand, usually within a day.",
+  phoneLabelListed: "A mobile number at the turf",
+  phoneHintListed: "Our team calls it to check that you run the turf. It isn't shown on the page.",
+  phoneNeededListed: "Enter a 10-digit mobile number, like 98765 43210.",
   noteLabel: "Note for TapTurf's team (optional)",
   notePlaceholder: "e.g. I run it with my brother",
   sendForCheck: "Send for a check",

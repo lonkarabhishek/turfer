@@ -330,7 +330,7 @@ function ClaimFocus({ claimId, home, me, onDone }: { claimId: string; home: Extr
         </Link>
       ) : (
         <ul>
-          <ClaimRow turf={turf} me={me} onDone={onDone} instant={match} pending={mine?.status === "pending"} startOpen />
+          <ClaimRow turf={turf} me={me} onDone={onDone} instant={match} pending={mine?.status === "pending"} pageHasNumber={turf.hasNumber} startOpen />
         </ul>
       )}
     </section>
@@ -340,7 +340,7 @@ function ClaimFocus({ claimId, home, me, onDone }: { claimId: string; home: Extr
 /** Find your turf by name and claim it. */
 function ClaimSearch({ me, onDone, owned, matches, admin = false }: { me: Me | null; onDone: () => void; owned: Set<string>; matches: Set<string>; admin?: boolean }) {
   const [q, setQ] = useState("");
-  const [hits, setHits] = useState<OwnerTurfRef[]>([]);
+  const [hits, setHits] = useState<(OwnerTurfRef & { hasNumber: boolean })[]>([]);
   const [busy, setBusy] = useState(false);
 
   const search = async (term: string) => {
@@ -349,13 +349,13 @@ function ClaimSearch({ me, onDone, owned, matches, admin = false }: { me: Me | n
     setBusy(true);
     const { data } = await createClient()
       .from("turfs")
-      .select("id, name, city, area, cover_image")
+      .select("id, name, city, area, cover_image, owner_phone, contact_info, landline_phone, whatsapp_phone")
       .eq("is_active", true)
       .ilike("name", `%${s.replace(/[%_,()]/g, " ")}%`)
       .order("total_reviews", { ascending: false })
       .limit(8);
     // The name as the turf page shows it: no booking app's attribution ("FS Turf, Churchgate - by SPORLOC").
-    setHits((data ?? []).map((t) => ({ id: t.id, name: cleanVenueName(t.name), city: t.city, area: t.area, cover: firstImageUrl(t.cover_image) })));
+    setHits((data ?? []).map((t) => ({ id: t.id, name: cleanVenueName(t.name), city: t.city, area: t.area, cover: firstImageUrl(t.cover_image), hasNumber: hasUsableContact(contactFieldsOf(t)) })));
     setBusy(false);
   };
 
@@ -395,7 +395,7 @@ function ClaimSearch({ me, onDone, owned, matches, admin = false }: { me: Me | n
                 </Link>
               </li>
             ) : owned.has(t.id) || !me ? null : (
-              <ClaimRow key={t.id} turf={t} me={me} onDone={onDone} instant={matches.has(t.id)} />
+              <ClaimRow key={t.id} turf={t} me={me} onDone={onDone} instant={matches.has(t.id)} pageHasNumber={t.hasNumber} />
             ),
           )}
         </ul>
@@ -431,7 +431,24 @@ const RESEND_S = 120;
 /** A proof is good for 10 minutes on the server; reuse it a little less than that. */
 const PROOF_MS = 9 * 60_000;
 
-function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpen = false }: { turf: OwnerTurfRef; me: Me; onDone: () => void; instant?: boolean; pending?: boolean; startOpen?: boolean }) {
+function ClaimRow({
+  turf,
+  me,
+  onDone,
+  instant = false,
+  pending = false,
+  startOpen = false,
+  pageHasNumber = false,
+}: {
+  turf: OwnerTurfRef;
+  me: Me;
+  onDone: () => void;
+  instant?: boolean;
+  pending?: boolean;
+  startOpen?: boolean;
+  /** The turf's page shows Call or WhatsApp (the page's rule): with no mobile a code can go to, that number is a landline or one an owner or a suggestion put there. */
+  pageHasNumber?: boolean;
+}) {
   const [open, setOpen] = useState(startOpen);
   // No default: the claimant says whether they are the owner, a manager or staff (a preset Owner told the admin nothing).
   const [role, setRole] = useState<ClaimRole | null>(null);
@@ -462,8 +479,10 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
   const captchaId = `claim-captcha-${useId().replace(/:/g, "")}`;
   const phoneId = `claim-phone-${useId().replace(/:/g, "")}`;
   const noteId = `claim-note-${useId().replace(/:/g, "")}`;
-  // No mobile on the listing: checked by hand, and the turf's number (the one players should call) is asked for.
+  // No mobile on the listing: checked by hand, and the turf's number (the one players should call) is asked for;
+  // when the page shows a number that can't get a code (a landline), a mobile at the turf instead.
   const byHand = info?.mobiles === 0;
+  const listed = byHand && pageHasNumber;
 
   // What the listing has: no mobile means only a check by hand can help.
   useEffect(() => {
@@ -477,7 +496,7 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
           if (r.mobiles === 0) {
             // Nothing to verify with: a waiting claim just waits; a new one goes for a check.
             setStep(pending ? "sent" : "manual");
-            setWhy(COPY.byHandWhy);
+            setWhy(pageHasNumber ? COPY.byHandWhyListed : COPY.byHandWhy);
           }
         } else setInfo({ mobiles: 0, endings: [] });
       })
@@ -485,7 +504,7 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
     return () => {
       live = false;
     };
-  }, [open, instant, info, turf.id, pending]);
+  }, [open, instant, info, turf.id, pending, pageHasNumber]);
 
   const opened = async () => {
     await refreshTurfPage(turf.id);
@@ -530,7 +549,8 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
 
   const sendCode = async () => {
     setMsg("");
-    if (!role) return setMsg(COPY.roleNeeded);
+    // A claim already waiting keeps the role it was sent with: only a new one asks.
+    if (!pending && !role) return setMsg(COPY.roleNeeded);
     const p10 = phone.replace(/\D/g, "").slice(-10);
     if (!/^[6-9]\d{9}$/.test(p10)) return setMsg(CLAIM_ERRORS.bad_phone);
     // Signed in with this very number, and it opens this turf: it proved it already, no code needed.
@@ -600,11 +620,11 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
 
   const sendForCheck = async () => {
     setMsg("");
-    if (!role) return setMsg(COPY.roleNeeded);
+    if (!pending && !role) return setMsg(COPY.roleNeeded);
     // A listing with no mobile: the turf's own number, for our team to call. It is kept where the admin's
     // "Number they gave" reads it (owner_phone_listed records a number that is not on the listing).
     const p10 = byHand ? turfPhone10(phone) : null;
-    if (byHand && !p10) return setMsg(COPY.phoneNeeded);
+    if (byHand && !p10) return setMsg(listed ? COPY.phoneNeededListed : COPY.phoneNeeded);
     setBusy(true);
     try {
       if (p10) {
@@ -726,7 +746,7 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
                   className="min-w-0 flex-1 h-12 px-4 rounded-xl border border-primary-200 text-[16px] focus:outline-none focus:border-primary-400"
                 />
               </div>
-              <button type="button" onClick={() => void sendCode()} disabled={busy || !role || phone.length !== 10 || (resendIn > 0 && phone === sentTo)} className="mt-2 w-full h-12 rounded-full bg-primary-900 text-white text-[15px] font-semibold cursor-pointer disabled:opacity-50">
+              <button type="button" onClick={() => void sendCode()} disabled={busy || (!pending && !role) || phone.length !== 10 || (resendIn > 0 && phone === sentTo)} className="mt-2 w-full h-12 rounded-full bg-primary-900 text-white text-[15px] font-semibold cursor-pointer disabled:opacity-50">
                 {busy ? "Checking…" : resendIn > 0 && phone === sentTo ? `Send a new code in ${resendIn}s` : "Send code"}
               </button>
               {!pending && (
@@ -773,8 +793,8 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
               {why && <p className="text-[13px] text-primary-700 leading-snug">{why}</p>}
               {byHand && (
                 <div>
-                  <label htmlFor={phoneId} className="block text-[14px] font-semibold text-primary-900">{COPY.phoneLabel}</label>
-                  <p className="text-[13px] text-primary-500 leading-snug">{COPY.phoneHint}</p>
+                  <label htmlFor={phoneId} className="block text-[14px] font-semibold text-primary-900">{listed ? COPY.phoneLabelListed : COPY.phoneLabel}</label>
+                  <p className="text-[13px] text-primary-500 leading-snug">{listed ? COPY.phoneHintListed : COPY.phoneHint}</p>
                   <div className="mt-1.5 flex gap-2">
                     <span className="inline-flex items-center h-12 px-3 rounded-xl border border-primary-200 bg-primary-50 text-[15px] text-primary-600">+91</span>
                     <input
@@ -800,7 +820,7 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
                 <label htmlFor={noteId} className="block text-[13px] font-semibold text-primary-700">{COPY.noteLabel}</label>
                 <textarea id={noteId} value={note} onChange={(e) => setNote(e.target.value)} placeholder={COPY.notePlaceholder} maxLength={400} rows={2} className="mt-1 w-full px-4 py-2.5 rounded-xl border border-primary-200 text-[16px] focus:outline-none focus:border-primary-400" />
               </div>
-              <button type="button" onClick={() => void sendForCheck()} disabled={busy || !role || (byHand && phone.length !== 10)} className="w-full sm:w-auto h-12 px-6 rounded-full bg-primary-900 text-white text-[15px] font-semibold cursor-pointer disabled:opacity-50">
+              <button type="button" onClick={() => void sendForCheck()} disabled={busy || (!pending && !role) || (byHand && phone.length !== 10)} className="w-full sm:w-auto h-12 px-6 rounded-full bg-primary-900 text-white text-[15px] font-semibold cursor-pointer disabled:opacity-50">
                 {busy ? "Sending…" : COPY.sendForCheck}
               </button>
               {info && info.mobiles > 0 && (

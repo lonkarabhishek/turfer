@@ -38,8 +38,10 @@ export function ClaimHint() {
  * usable number (hasNumber false) says neither "call" nor "a code to the
  * number on this page": players can't call it, and its claim is checked by
  * hand (myTapturf then asks for the turf's number, which our team calls).
+ * A page whose only number is a landline (hasMobile false) doesn't promise
+ * a code either: our team calls a mobile at the turf the owner gives.
  */
-export function ClaimInvite({ turfId, turfName, hasNumber = true }: { turfId: string; turfName: string; hasNumber?: boolean }) {
+export function ClaimInvite({ turfId, turfName, hasNumber = true, hasMobile = true }: { turfId: string; turfName: string; hasNumber?: boolean; /** A mobile on the page (a landline alone can't get a code). */ hasMobile?: boolean }) {
   return (
     <section
       id="claim"
@@ -79,7 +81,7 @@ export function ClaimInvite({ turfId, turfName, hasNumber = true }: { turfId: st
           {CLAIM_COPY.invite.button}
           <ArrowRight className="w-4 h-4" aria-hidden />
         </Link>
-        <p className="mt-3 text-[13px] text-primary-500 leading-snug">{hasNumber ? CLAIM_COPY.invite.withNumber : CLAIM_COPY.invite.noNumber}</p>
+        <p className="mt-3 text-[13px] text-primary-500 leading-snug">{!hasNumber ? CLAIM_COPY.invite.noNumber : hasMobile ? CLAIM_COPY.invite.withNumber : CLAIM_COPY.invite.landline}</p>
         {/* For a player who came here to book: no number promised on a page that has none. */}
         <p className="mt-4 border-t border-primary-100 pt-3 text-[14px] text-primary-600 leading-snug">
           {CLAIM_COPY.invite.players} <span className="font-semibold text-primary-900">{BOOKINGS_LINE}</span>
