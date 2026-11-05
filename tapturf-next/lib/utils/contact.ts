@@ -1,5 +1,5 @@
 import type { Turf } from "../../types/turf";
-import { normalizeIndianMobile, normalizeIndianPhone } from "./phone";
+import { normalizeIndianMobile, normalizeIndianPhone, type NormalizedIndianPhone } from "./phone";
 
 // Relative imports only, so node --test runs this (lib/turfPage/noContact.test.ts, lib/admin/noPhone.test.ts).
 
@@ -57,4 +57,19 @@ export function whatsAppNumber(turf: ContactFields): string | null {
 /** True when the page shows Call or WhatsApp. A WhatsApp number alone is a way to reach the turf too. */
 export function hasUsableContact(turf: ContactFields): boolean {
   return !!(callNumber(turf) || whatsAppNumber(turf));
+}
+
+/**
+ * The page's two links from its numbers (callNumber, whatsAppNumber): Call
+ * dials `phone` (mobile or landline); WhatsApp opens `whatsappPhone` when it
+ * is a mobile, else the call number when that is one. A landline alone is
+ * Call only. The Call and WhatsApp buttons (components/ui/CTAButtons.tsx) and
+ * the free slots card (components/turf/FreeSlotsCard.tsx) both use this.
+ */
+export function contactLinks(
+  phone: string | null | undefined,
+  whatsappPhone: string | null | undefined,
+): { call: NormalizedIndianPhone | null; whatsapp: NormalizedIndianPhone | null } {
+  const call = normalizeIndianPhone(phone);
+  return { call, whatsapp: normalizeIndianMobile(whatsappPhone) ?? (call?.type === "mobile" ? call : null) };
 }

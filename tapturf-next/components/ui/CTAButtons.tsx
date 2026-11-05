@@ -3,7 +3,7 @@
 import { Phone, MessageCircle } from "lucide-react";
 import { buildWhatsAppLink, generateTurfInquiryMessage } from "@/lib/utils/whatsapp";
 import { logContactClick, type ContactKind } from "@/lib/analytics/contactClicks";
-import { normalizeIndianMobile, normalizeIndianPhone } from "@/lib/utils/phone";
+import { contactLinks } from "@/lib/utils/contact";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 interface CTAButtonsProps {
@@ -55,10 +55,9 @@ export function CTAButtons({
   note,
 }: CTAButtonsProps) {
   const { user, login } = useAuth();
-  const normalized = normalizeIndianPhone(phone);
   // WhatsApp needs a mobile: the dedicated whatsapp_phone, else the call
   // number itself when it is one. Landline-only turfs get Call alone.
-  const wa = normalizeIndianMobile(whatsappPhone) ?? (normalized?.type === "mobile" ? normalized : null);
+  const { call: normalized, whatsapp: wa } = contactLinks(phone, whatsappPhone);
   if (!normalized && !wa) return null;
 
   const telHref = normalized ? `tel:${normalized.e164}` : null;

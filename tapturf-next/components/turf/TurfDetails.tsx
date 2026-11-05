@@ -10,7 +10,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import type { Turf } from "@/types/turf";
-import { normaliseOpeningHours, formatSpan } from "@/lib/utils/hours";
+import { normaliseOpeningHours, formatSpan, isClosedDay } from "@/lib/utils/hours";
 import { HoursList } from "@/components/turf/HoursList";
 import { formatLabel } from "@/lib/utils/formats";
 import { scrubBookingApps } from "@/lib/utils/bookingApps";
@@ -113,7 +113,6 @@ export function TurfDetails({ turf, hasContact = true }: { turf: Turf; hasContac
 
   // "Closed Mondays": mark that day in the table too.
   const closedDays = turf.closed_days?.trim() || null;
-  const isClosedDay = (day: string) => !!closedDays && new RegExp(`\\b${day}`, "i").test(closedDays);
 
   const hasHours = hoursRows.length > 0;
   // Say so when hours are unknown rather than leave players guessing.
@@ -191,7 +190,7 @@ export function TurfDetails({ turf, hasContact = true }: { turf: Turf; hasContac
           </div>
           <HoursList
             rows={hoursRows.map((row) => {
-              const closed = row.closed || isClosedDay(row.day);
+              const closed = row.closed || isClosedDay(closedDays, row.day);
               return {
                 day: row.day,
                 closed,
