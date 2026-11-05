@@ -31,6 +31,7 @@
     "lib/admin/readers.test.ts",
     "lib/admin/glance.test.ts",
     "lib/admin/fold.test.ts",
-    "lib/admin/noPhone.test.ts"
+    "lib/admin/noPhone.test.ts",
+    "lib/admin/claimSignals.test.ts"
   ]
 }

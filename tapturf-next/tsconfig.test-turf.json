@@ -11,5 +11,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./*"] }
   },
-  "files": ["lib/turfPage/turfPage.test.ts", "lib/turfPage/managers.test.ts", "lib/turfPage/owner.test.ts", "lib/utils/prices.test.ts", "lib/utils/cardSport.test.ts", "lib/utils/images.test.ts", "lib/utils/bookingApps.test.ts", "lib/utils/hours.test.ts", "lib/turfSize/sizes.test.ts", "lib/turfSize/benchmark.test.ts", "lib/turfPage/noContact.test.ts"]
+  "files": ["lib/turfPage/turfPage.test.ts", "lib/turfPage/managers.test.ts", "lib/turfPage/owner.test.ts", "lib/utils/prices.test.ts", "lib/utils/cardSport.test.ts", "lib/utils/images.test.ts", "lib/utils/bookingApps.test.ts", "lib/utils/hours.test.ts", "lib/turfSize/sizes.test.ts", "lib/turfSize/benchmark.test.ts", "lib/turfPage/noContact.test.ts", "lib/turfPage/claimPrompts.test.ts"]
 }

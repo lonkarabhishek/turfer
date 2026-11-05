@@ -253,6 +253,15 @@ export function showsPriceBands(turf: Turf): boolean {
 }
 
 /**
+ * The turf page's Pricing section has nothing to show: no listed bands,
+ * no slot price and no reported price (TurfPricing's empty state, "Prices
+ * not listed yet"). The claim prompts there follow it (lib/turfPage/claimPrompts.ts).
+ */
+export function showsNoPrices(turf: Turf): boolean {
+  return !showsPriceBands(turf) && !hasRealPrices(turf) && reportedMentions(turf).length === 0;
+}
+
+/**
  * The turf page's price summary: the same numbers as its Pricing table.
  * When the table lists the bands, the header, sidebar, title, meta and
  * JSON-LD priceRange follow the bands too, so a page never quotes a rate

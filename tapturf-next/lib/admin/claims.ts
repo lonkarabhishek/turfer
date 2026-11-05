@@ -1,4 +1,5 @@
 import type { Method } from "./people";
+import type { RawSignals } from "./claimSignals";
 
 /**
  * myTapturf claims for admin, from admin_owner_claims (20261025_claims_account.sql):
@@ -68,6 +69,8 @@ export type AdminClaim = {
   account: ClaimAccount | null;
   /** The last 5 call or WhatsApp number changes on this turf, newest first ([] on an older database). */
   numberEdits: NumberEdit[];
+  /** A waiting claim's player signals (admin_owner_claim_signals, merged in by the admin route); null when not read. */
+  signals: RawSignals | null;
 };
 
 const STATUSES: readonly string[] = ["active", "pending", "rejected", "revoked"];
@@ -148,6 +151,7 @@ export function toClaims(data: unknown): AdminClaim[] {
       userId: str(r.user_id),
       account: toAccount(r.account),
       numberEdits: toNumberEdits(r.number_edits),
+      signals: obj(r.signals) as RawSignals | null,
     });
   }
   return out;
