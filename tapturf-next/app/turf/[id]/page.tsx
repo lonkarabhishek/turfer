@@ -155,7 +155,7 @@ export default async function TurfDetailPage({
   // No number: what the no-number card and bar offer instead (directions,
   // the turf's own site or Instagram, the claim). Only then, so a page
   // with a number renders exactly as before.
-  const noContact = hasContact ? undefined : noContactLinks(turf, claimed);
+  const noContact = hasContact ? undefined : noContactLinks(turf);
   const sidebarPrice = summarisePagePrice(turf);
   // Rates players shared (From players): the Pricing section points to
   // them when the turf lists none.
@@ -533,7 +533,7 @@ export default async function TurfDetailPage({
                 </p>
               )}
               <p className="text-xs text-center text-primary-500 mt-2 leading-relaxed">
-                {/* The no-number card has its own claim link. */}
+                {/* Not on a page with no number: players there were claiming turfs to book them (5 Nov 2026); its owner has the invite lower on the page. */}
                 {!claimed && hasContact && (
                   <>
                     Own this turf?{" "}

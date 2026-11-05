@@ -213,32 +213,30 @@ const turf = (o: Partial<Turf> = {}) =>
     ...o,
   }) as Turf;
 
-test("no-number links: directions, the turf's own links, the claim on myTapturf unless claimed", () => {
-  assert.deepEqual(noContactLinks(turf(), false), {
+test("no-number links: directions and the turf's own links, never a claim link", () => {
+  assert.deepEqual(noContactLinks(turf()), {
     directions: "https://www.google.com/maps/dir/?api=1&destination=20.01,73.79",
     website: null,
     instagram: null,
-    claim: "/my?claim=11111111-2222-4333-8444-555555555555",
   });
-  assert.equal(noContactLinks(turf(), true).claim, null, "a claimed turf has its owner");
-  const both = noContactLinks(turf({ website_url: "https://kickoffarena.in", instagram_url: "https://www.instagram.com/kickoffarena/" }), false);
+  const both = noContactLinks(turf({ website_url: "https://kickoffarena.in", instagram_url: "https://www.instagram.com/kickoffarena/" }));
   assert.equal(both.website, "https://kickoffarena.in/");
   assert.equal(both.instagram, "https://www.instagram.com/kickoffarena/");
   // An Instagram profile stored as the website is the Instagram button, once.
-  const instaAsSite = noContactLinks(turf({ website_url: "https://www.instagram.com/kickoffarena/" }), false);
+  const instaAsSite = noContactLinks(turf({ website_url: "https://www.instagram.com/kickoffarena/" }));
   assert.equal(instaAsSite.website, null);
   assert.equal(instaAsSite.instagram, "https://www.instagram.com/kickoffarena/");
   // http, a booking app and junk give no button.
-  const none_ = noContactLinks(turf({ website_url: "http://kickoffarena.in", instagram_url: "external-listing" }), false);
+  const none_ = noContactLinks(turf({ website_url: "http://kickoffarena.in", instagram_url: "external-listing" }));
   assert.equal(none_.website, null);
   assert.equal(none_.instagram, null);
-  assert.equal(noContactLinks(turf({ website_url: "https://playo.co/venues/x" }), false).website, null);
+  assert.equal(noContactLinks(turf({ website_url: "https://playo.co/venues/x" })).website, null);
   // A WhatsApp chat or a map stored as the website, a post as the Instagram: no button.
-  const chat = noContactLinks(turf({ website_url: "https://api.whatsapp.com/send?phone=919800000009", instagram_url: "https://www.instagram.com/p/abc123/" }), false);
+  const chat = noContactLinks(turf({ website_url: "https://api.whatsapp.com/send?phone=919800000009", instagram_url: "https://www.instagram.com/p/abc123/" }));
   assert.equal(chat.website, null);
   assert.equal(chat.instagram, null);
-  assert.equal(noContactLinks(turf({ website_url: "https://g.page/kickoffarena" }), false).website, null);
-  assert.equal(noContactLinks(turf({ lat: null, lng: null, google_place_id: "ChIJ0000000000000000000000" }), false).directions,
+  assert.equal(noContactLinks(turf({ website_url: "https://g.page/kickoffarena" })).website, null);
+  assert.equal(noContactLinks(turf({ lat: null, lng: null, google_place_id: "ChIJ0000000000000000000000" })).directions,
     "https://www.google.com/maps/dir/?api=1&destination=Kick%20Off%20Arena%207%2C%20Plot%207%2C%20Made-up%20Road%2C%20Nashik&destination_place_id=ChIJ0000000000000000000000");
 });
 

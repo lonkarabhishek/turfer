@@ -9,8 +9,9 @@ import { directionsUrl } from "../utils/maps";
  * hasUsableContact false: no Call, no WhatsApp) offers instead, in this
  * order: directions, the turf's own website or Instagram, "I know the
  * number" (the suggestion sheet, whose numbers are checked before they
- * show) and, on an unclaimed turf, the claim on myTapturf. Plain links
- * only, built on the server, so the card says nothing it cannot back and
+ * show). No claim link: players on these pages were claiming turfs to
+ * book them (5 Nov 2026), so the owner's way in is the invite lower on
+ * the page (components/turf/ClaimInvite.tsx). Plain links only, built on the server, so the card says nothing it cannot back and
  * nothing loads from Google or Instagram before a tap.
  */
 export type NoContactLinks = {
@@ -20,8 +21,6 @@ export type NoContactLinks = {
   website: string | null;
   /** The turf's Instagram profile: https on instagram.com. */
   instagram: string | null;
-  /** The claim on myTapturf, as the page's invite links it; null on a claimed turf. */
-  claim: string | null;
 };
 
 const INSTAGRAM_HOSTS = new Set(["instagram.com", "www.instagram.com", "m.instagram.com"]);
@@ -109,10 +108,9 @@ export function detailsLink(url: unknown, hasContact: boolean): string | null {
   return s && (hasContact || !isNotTurfSite(s)) ? s : null;
 }
 
-/** The no-number card's links for a turf (claimed: an owner runs it, so no claim link). */
+/** The no-number card's links for a turf. */
 export function noContactLinks(
-  turf: Pick<Turf, "id" | "name" | "address" | "lat" | "lng" | "google_place_id" | "website_url" | "instagram_url">,
-  claimed: boolean,
+  turf: Pick<Turf, "name" | "address" | "lat" | "lng" | "google_place_id" | "website_url" | "instagram_url">,
 ): NoContactLinks {
   const website = websiteLink(turf.website_url);
   // An Instagram profile stored as the website is the Instagram button.
@@ -121,8 +119,6 @@ export function noContactLinks(
     directions: directionsUrl({ lat: turf.lat, lng: turf.lng, name: turf.name, address: turf.address, placeId: turf.google_place_id }),
     website,
     instagram,
-    // As the invite on the page links it (components/turf/ClaimInvite.tsx).
-    claim: claimed ? null : `/my?claim=${turf.id}`,
   };
 }
 

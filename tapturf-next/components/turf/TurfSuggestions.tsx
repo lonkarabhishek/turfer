@@ -1,7 +1,6 @@
 "use client";
 
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -23,7 +22,6 @@ import {
   Sparkles,
   Trophy,
 } from "lucide-react";
-import { OwnerMark } from "@/components/turf/OwnerMark";
 import type { NoContactLinks } from "@/lib/turfPage/noContact";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { UserAvatar } from "@/components/account/UserAvatar";
@@ -144,14 +142,15 @@ function tally(lists: string[][]): { value: string; count: number }[] {
 
 /* ─── No-contact notice ────────────────────────────────── */
 
-const NO_LINKS: NoContactLinks = { directions: null, website: null, instagram: null, claim: null };
+const NO_LINKS: NoContactLinks = { directions: null, website: null, instagram: null };
 const OPENS_NEW_TAB = <span className="sr-only"> (opens in a new tab)</span>;
 
 /**
  * Shown wherever Call / WhatsApp would be when a turf has no number, with
  * what a player can do instead, in this order: get directions, the turf's
  * own website or Instagram, tell us the number (the suggestion sheet; a
- * number shows after a check) and, for its owner, the claim. The links
+ * number shows after a check). No claim link here: players were claiming
+ * turfs to book them (5 Nov 2026); the owner's invite is lower on the page. The links
  * come from the server (lib/turfPage/noContact.ts) and are plain links:
  * nothing loads from Google or Instagram before a tap. `fixed-bottom`
  * replaces the phone's Call / WhatsApp bar and keeps to two buttons, so it
@@ -241,17 +240,7 @@ export function NoContactNotice({ variant = "card", links }: { variant?: "card" 
           I know the number
         </button>
       </div>
-      {l.claim && (
-        <Link href={l.claim} prefetch={false} className="mt-3 inline-flex min-h-11 items-center gap-1.5 text-[14px] rounded-full">
-          <OwnerMark size={16} tone="grey" />
-          <span>
-            <span className="text-primary-500">Own this turf? </span>
-            <span className="font-semibold text-accent-800">Claim it</span>
-          </span>
-          <ChevronRight className="w-3.5 h-3.5 text-accent-800" aria-hidden />
-        </Link>
-      )}
-      <p className={`${l.claim ? "mt-1" : "mt-3"} text-[12px] text-primary-400`}>
+      <p className="mt-3 text-[12px] text-primary-400">
         Or email{" "}
         <a href={CONTACT_MAILTO} className="underline underline-offset-2 hover:text-primary-600">
           {CONTACT_EMAIL}
