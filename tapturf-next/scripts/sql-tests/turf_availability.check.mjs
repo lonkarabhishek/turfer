@@ -5,10 +5,12 @@
 // (20261025_turf_claimed.sql, with private.mark_dirty recording what it is
 // asked to refresh), then 20261105_turf_availability.sql twice, and checks
 // free slots: only a manager of an active claimed turf marks hours or
-// confirms them, anyone else is refused with nothing written; the public
+// confirms them, anyone else is refused with nothing written, the site
+// owner too unless they hold a claim of their own; the public
 // read gives slot status and the last update only, while the marks are less
 // than 24 hours old, and never an hour that has started; after-midnight and
-// 24-hour keys; a batch is checked whole before anything is written; no
+// 24-hour keys; a batch is checked whole before anything is written; at
+// most 384 marks per turf in the window, and the public read lists no more; no
 // availability call writes public.turfs (no cache purge), the edit log or
 // anything personal; the file runs again with the rows kept; the grants.
 // Never touches a real database. Made-up numbers only.
@@ -127,10 +129,12 @@ await phoneAccount("9000000202", "Somebody Else");
 eq(await rpc("owner_claim", ["phone:9000000101", T(1), null, null, "owner"]), { status: "active" }, "A's own number is on One: in at once");
 
 
-// ── More stand-ins: a made-up site owner key, an inactive turf, a pending claim. ──
+// ── More stand-ins: a made-up site owner key, an inactive turf, a pending claim, A's second turf. ──
 await db.exec(`create or replace function public._is_admin_key(p_key text) returns boolean language sql immutable as $$ select p_key = 'p:9000000099' $$`);
 await q(`insert into public.turfs (id, name, slug, city, owner_phone, is_active) values ('${T(3)}', 'Three', 'three', 'nashik', '9000000301', false)`);
 eq(await rpc("owner_claim", ["phone:9000000202", T(2), null, null, "owner"]), { status: "pending" }, "B's claim on Two waits for the team");
+await q(`insert into public.turfs (id, name, slug, city, owner_phone) values ('${T(4)}', 'Four', 'four', 'nashik', '9000000101')`);
+eq(await rpc("owner_claim", ["phone:9000000101", T(4), null, null, "owner"]), { status: "active" }, "A claims Four too");
 
 // ── Before the file: no functions. Then the file, twice. ──
 eq((await q(`select 1 from pg_proc where proname in ('owner_slots', 'owner_set_slots', 'owner_confirm_slots', 'turf_availability')`)).length, 0, "before: no functions");
@@ -150,8 +154,8 @@ for (const f of ["owner_slots", "owner_set_slots", "owner_confirm_slots", "turf_
 }
 const priv = await q(`select p.proname, p.proconfig, has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('public', p.oid, 'execute') open
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'private' and p.proname = any($1)`,
-  [["slots_fresh", "slots_ahead", "slot_at", "slot_key", "turf_booked", "turf_slots_state", "slots_guard", "turf_slots_apply", "turf_slots_confirm", "turf_availability_at"]]);
-eq([priv.length, priv.filter((r) => r.open).length, priv.filter((r) => String(r.proconfig) !== 'search_path=""').length], [10, 0, 0], "the 10 private helpers: nobody may call them, search_path ''");
+  [["slots_fresh", "slots_ahead", "slots_max", "slot_at", "slot_key", "turf_booked", "turf_slots_state", "slots_guard", "turf_slots_apply", "turf_slots_confirm", "turf_availability_at"]]);
+eq([priv.length, priv.filter((r) => r.open).length, priv.filter((r) => String(r.proconfig) !== 'search_path=""').length], [11, 0, 0], "the 11 private helpers: nobody may call them, search_path ''");
 
 // ── Nothing personal: the columns. ──
 eq((await q(`select table_name, column_name from information_schema.columns where table_schema = 'private' and table_name in ('turf_slots', 'turf_availability') order by table_name, ordinal_position`)).map((r) => `${r.table_name}.${r.column_name}`),
@@ -167,20 +171,22 @@ const ch = (...xs) => JSON.stringify(xs.map(([at, status]) => ({ at, status })))
 const apply = async (id, changes, now) => (await one(`select private.turf_slots_apply($1, $2, $3) r`, [id, changes, now])).r;
 const readAt = async (id, now) => (await one(`select private.turf_availability_at($1, $2) r`, [id, now])).r;
 
-// ── 1. Who may: a manager of an active claimed turf. Everyone else: refused, nothing written. ──
+// ── 1. Who may: a manager of an active claimed turf. Everyone else, the site owner without a claim of their own too: refused, nothing written. ──
 const A = "phone:9000000101", B = "phone:9000000202", ADMIN = "phone:9000000099";
 const first = await rpc("owner_slots", [A, T(1)]);
 eq([first.ok, first.updated_at, first.booked, Object.keys(first.hours).sort()], [true, null, [], ["closed_days", "end_time", "is_24x7", "opening_hours", "start_time"]], "A opens One: never used, nothing booked, the page's hours");
 const future = new Date(Date.now() + 26 * 3600e3).toLocaleString("sv-SE", { timeZone: "Asia/Kolkata" }).slice(0, 13).replace(" ", "T") + ":00";
 for (const [who, id, want, why] of [[B, T(1), "forbidden", "B does not run One"], [null, T(1), "forbidden", "nobody signed in"], [B, T(2), "forbidden", "B's claim is pending"],
-  [A, T(2), "forbidden", "A does not run Two"], [ADMIN, T(2), "not_claimed", "the site owner on an unclaimed turf"], [ADMIN, T(3), "not_claimed", "an inactive turf"],
+  [A, T(2), "forbidden", "A does not run Two"], [ADMIN, T(1), "forbidden", "the site owner on a claimed turf they hold no claim on"],
+  [ADMIN, T(4), "forbidden", "the site owner on a claimed turf whose owner never used free slots"],
+  [ADMIN, T(2), "forbidden", "the site owner on an unclaimed turf"], [ADMIN, T(3), "forbidden", "the site owner on an inactive turf"],
   [ADMIN, "cccccccc-0000-4000-8000-000000009999", "forbidden", "no such turf"]]) {
   eq(await rpc("owner_slots", [who, id]), { error: want }, `read: ${why}`);
   eq(await rpc("owner_set_slots", [who, id, ch([future, "booked"])]), { error: want }, `write: ${why}`);
   eq(await rpc("owner_confirm_slots", [who, id]), { error: want }, `confirm: ${why}`);
 }
 eq([(await q(`select count(*)::int n from private.turf_slots`))[0].n, (await q(`select count(*)::int n from private.turf_availability`))[0].n], [0, 0], "nothing written by a refused call");
-eq((await rpc("owner_slots", [ADMIN, T(1)])).ok, true, "the site owner on a claimed turf may");
+eq([await rpc("turf_availability", [T(1)]), await rpc("turf_availability", [T(4)])], [{ fresh: false }, { fresh: false }], "the site owner's tries put nothing in front of players");
 const w = await rpc("owner_set_slots", [A, T(1), ch([future, "booked"])]);
 eq([w.ok, w.saved, w.changed, w.skipped, w.booked], [true, 1, 1, 0, [future]], "A marks an hour tomorrow booked");
 eq((await rpc("turf_availability", [T(1)])).booked, [future], "the public read lists it");
@@ -207,6 +213,19 @@ eq(await apply(T(1), JSON.stringify(Array.from({ length: 101 }, () => ({ at: "20
 eq((await rows(T(1))).length, n0, "nothing written by a refused batch");
 eq((await apply(T(1), ch(["2026-11-05T22:00", "booked"]), "2026-11-06 23:00+05:30")).saved, 0, "only started hours: nothing saved");
 
+// ── 2b. At most 384 marks per turf in the window (Four, A's second turf). ──
+eq(await one(`select private.slots_max() n`), { n: 384 }, "slots_max: 384");
+const minuteKeys = (date, n) => Array.from({ length: n }, (_, i) => [`${date}T${String(10 + Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}`, "booked"]);
+for (const date of ["2026-11-06", "2026-11-07", "2026-11-08", "2026-11-09"]) eq((await apply(T(4), ch(...minuteKeys(date, 96)), P)).saved, 96, `96 minute-level marks on ${date}`);
+eq((await rows(T(4))).length, 384, "384 marks stored");
+eq(await apply(T(4), ch(["2026-11-10T10:00", "booked"]), P), { error: "too_many" }, "the 385th mark in the window: refused");
+eq(await apply(T(4), ch(["2026-11-10T10:00", "booked"], ["2026-11-06T10:00", "free"]), P), { error: "too_many" }, "a batch with one new mark past the limit: refused whole");
+eq([(await rows(T(4))).length, (await rows(T(4)))[0]], [384, { at: "2026-11-06T10:00", status: "booked" }], "nothing written by it");
+eq((await apply(T(4), ch(["2026-11-06T10:00", "free"]), P)).changed, 1, "a stored mark may still change");
+await q(`insert into private.turf_slots (turf_id, starts_at, status) select $1, timestamptz '2026-11-11 10:00+05:30' + i * interval '1 minute', 'booked' from generate_series(0, 9) i`, [T(4)]);
+eq((await readAt(T(4), P)).booked.length, 384, "the public read lists at most 384, whatever is stored");
+eq((await apply(T(4), ch(["2026-11-16T10:00", "booked"]), "2026-11-15 00:00+05:30")).saved, 1, "marks past their hour stop counting");
+
 // ── 3. Fresh for 24 hours after the last change or All correct. ──
 await q(`update private.turf_availability set updated_at = '2026-11-05 23:30+05:30' where turf_id = $1`, [T(1)]);
 eq((await readAt(T(1), "2026-11-06 23:29+05:30")).fresh, true, "23 h 59 min later: shown");
@@ -232,6 +251,8 @@ await q(`update public.turf_owners set status = 'active' where turf_id = $1`, [T
 await rpc("owner_confirm_slots", [A, T(1)]);
 await q(`update public.turfs set is_active = false where id = $1`, [T(1)]);
 eq(await rpc("turf_availability", [T(1)]), { fresh: false }, "inactive: hidden");
+eq([await rpc("owner_slots", [A, T(1)]), await rpc("owner_set_slots", [A, T(1), ch([future, "booked"])]), await rpc("owner_confirm_slots", [A, T(1)])],
+  [{ error: "not_claimed" }, { error: "not_claimed" }, { error: "not_claimed" }], "inactive: A's claim stands, but no reads or marks");
 await q(`update public.turfs set is_active = true where id = $1`, [T(1)]);
 
 // ── 6. Any session time zone, the same keys. ──

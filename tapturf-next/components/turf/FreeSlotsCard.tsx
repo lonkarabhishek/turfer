@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { OwnerMark } from "@/components/turf/OwnerMark";
 import { logContactClick, type ContactKind } from "@/lib/analytics/contactClicks";
 import { buildWhatsAppLink } from "@/lib/utils/whatsapp";
+import { availabilityPath } from "@/lib/availability/route";
 import {
   PLAYER_COPY,
   REFETCH_AFTER_MS,
@@ -13,6 +14,7 @@ import {
   contactLinks,
   freeDays,
   isFresh,
+  nextTickMs,
   parsePublic,
   playerDefault,
   playerFooter,
@@ -71,24 +73,34 @@ export function FreeSlotsCard({
   // How far the server's clock is ahead of the device's (never behind: clientNow), kept from the last read.
   const lead = useRef(0);
   const fetchedAt = useRef(0);
+  // The clock, worked out again on each minute (an hour drops off the moment it starts) and when the marks stop being fresh.
+  const updatedRef = useRef<string | null>(null);
+  const clock = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tick = useCallback(function next() {
+    const t = Date.now() + lead.current;
+    setNow(t);
+    if (clock.current) clearTimeout(clock.current);
+    clock.current = setTimeout(next, nextTickMs(t, updatedRef.current));
+  }, []);
 
   const read = useCallback(async () => {
     fetchedAt.current = Date.now();
     try {
-      const res = await fetch(`/api/availability/${turfId}`);
+      const res = await fetch(availabilityPath(turfId));
       const body: unknown = await res.json();
       const serverNow = body && typeof body === "object" ? (body as { now?: unknown }).now : null;
       const t = clientNow(typeof serverNow === "string" ? serverNow : null, Date.now());
       const a = parsePublic(body, t);
       lead.current = Math.max(0, t - Date.now());
+      updatedRef.current = a?.updatedAt ?? null;
       setAvail(a);
-      setNow(t);
+      tick();
     } catch {
       /* no card */
     }
-  }, [turfId]);
+  }, [turfId, tick]);
 
-  // Once the page is idle, then again when the tab comes back after a while; a minute timer drops hours that started.
+  // Once the page is idle, then again when the tab comes back after a while.
   useEffect(() => {
     let idle: number | null = null;
     let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -96,18 +108,17 @@ export function FreeSlotsCard({
     else timeout = setTimeout(() => void read(), 1200);
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
-      setNow(Date.now() + lead.current);
+      if (fetchedAt.current) tick();
       if (fetchedAt.current && Date.now() - fetchedAt.current > REFETCH_AFTER_MS) void read();
     };
     document.addEventListener("visibilitychange", onVisible);
-    const timer = setInterval(() => setNow(Date.now() + lead.current), 60_000);
     return () => {
       if (idle != null) window.cancelIdleCallback?.(idle);
       if (timeout) clearTimeout(timeout);
-      clearInterval(timer);
+      if (clock.current) clearTimeout(clock.current);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [read]);
+  }, [read, tick]);
 
   const days = useMemo(() => {
     if (!avail || now == null || !isFresh(avail.updatedAt, now)) return [];

@@ -31,8 +31,16 @@
 --     fresh.
 -- The owner functions take the caller from public._caller_key (a Google
 -- session or a Firebase phone token the database checks itself) and allow
--- public._can_manage's rule (an active claim, or the site owner), and only
--- on an active claimed turf, as owner_set_roof does.
+-- public._can_manage's rule, and only on an active claimed turf, as
+-- owner_set_roof does, and only for a caller with an active claim of their
+-- own on the turf: _can_manage's site-owner shortcut does not count here.
+-- A mark or "All correct" tells players "Updated just now by the owner",
+-- so only someone who runs the turf may make it (private.slots_guard).
+--
+-- Bounded: one save holds at most 100 marks (MAX_CHANGES), a turf holds
+-- at most 384 marks in the 8 days ahead (private.slots_max, MAX_MARKS in
+-- slots.ts: 8 days of half-hour starts, more than any grid of hours has),
+-- and the public read lists at most that many.
 --
 -- Nothing here writes or locks public.turfs, so private.mark_turf_dirty
 -- never fires on a save and no page cache is purged: marks change far too
@@ -79,6 +87,10 @@ returns interval language sql immutable set search_path = '' as $$ select interv
 create or replace function private.slots_ahead()
 returns interval language sql immutable set search_path = '' as $$ select interval '8 days' $$;
 
+-- MAX_MARKS in lib/availability/slots.ts: the most marks a turf holds in the window, and the public read lists.
+create or replace function private.slots_max()
+returns int language sql immutable set search_path = '' as $$ select 384 $$;
+
 -- A slot key, 'YYYY-MM-DDTHH:MI' in India time, as the instant it names; null for anything else.
 create or replace function private.slot_at(p_key text)
 returns timestamptz
@@ -102,15 +114,18 @@ returns text language sql stable set search_path = '' as $$
   select to_char(p_at at time zone 'Asia/Kolkata', 'YYYY-MM-DD"T"HH24:MI')
 $$;
 
--- The booked slots that have not started yet, within the window, in time order.
+-- The booked slots that have not started yet, within the window, in time order; at most slots_max().
 create or replace function private.turf_booked(p_turf_id uuid, p_now timestamptz)
 returns jsonb language sql stable set search_path = '' as $$
-  select coalesce(jsonb_agg(private.slot_key(s.starts_at) order by s.starts_at), '[]'::jsonb)
-    from private.turf_slots s
-   where s.turf_id = p_turf_id
-     and s.status = 'booked'
-     and s.starts_at > p_now
-     and s.starts_at < p_now + private.slots_ahead()
+  select coalesce(jsonb_agg(private.slot_key(b.starts_at) order by b.starts_at), '[]'::jsonb)
+    from (select s.starts_at
+            from private.turf_slots s
+           where s.turf_id = p_turf_id
+             and s.status = 'booked'
+             and s.starts_at > p_now
+             and s.starts_at < p_now + private.slots_ahead()
+           order by s.starts_at
+           limit private.slots_max()) b
 $$;
 
 -- What the owner's section draws from: the hours the turf page shows, the last update, the booked slots.
@@ -132,7 +147,10 @@ returns jsonb language sql stable set search_path = '' as $$
    where t.id = p_turf_id
 $$;
 
--- Who may use the owner functions: null when allowed, else the error.
+-- Who may use the owner functions: null when allowed, else the error. public._can_manage's rule
+-- and, as well, an active claim of the caller's own (the clause _can_manage uses, without its
+-- site-owner shortcut): what players see is "updated by the owner", so the site owner, who may
+-- open any claimed turf's myTapturf page, is refused here and the section hides for them.
 create or replace function private.slots_guard(p_token text, p_turf_id uuid)
 returns text
 language plpgsql
@@ -143,7 +161,13 @@ declare
   k text := public._caller_key(p_token);
   v_live boolean;
 begin
-  if not coalesce(public._can_manage(k, p_turf_id), false) then
+  if k is null or not coalesce(public._can_manage(k, p_turf_id), false) or not exists (
+    select 1 from public.turf_owners o
+     where o.turf_id = p_turf_id
+       and o.status = 'active'
+       and ((o.user_key = k and o.user_id is null)
+            or (o.user_id is not null and o.user_id = private.account_for_key(k)))
+  ) then
     return 'forbidden';
   end if;
   select (t.claimed and coalesce(t.is_active, false)) into v_live from public.turfs t where t.id = p_turf_id;
@@ -160,6 +184,7 @@ $$;
 -- Marks hours. p_changes: [{"at": "2026-11-05T19:00", "status": "booked"}, ...], 1 to 100 items
 -- (MAX_CHANGES), all checked before anything is written. The same key twice: the last one wins.
 -- Keys that have started (at or before p_now) or lie past the window are skipped, not refused.
+-- A save that would leave the turf more than slots_max() marks in the window is refused whole.
 -- Any key saved counts as a check of every day: updated_at moves to p_now.
 create or replace function private.turf_slots_apply(p_turf_id uuid, p_changes jsonb, p_now timestamptz)
 returns jsonb
@@ -171,6 +196,8 @@ declare
   n_keys int;
   n_in int;
   n_changed int;
+  n_stored int;
+  n_new int;
 begin
   if p_changes is null or jsonb_typeof(p_changes) <> 'array' or jsonb_array_length(p_changes) = 0 then
     return jsonb_build_object('error', 'bad_value');
@@ -187,6 +214,16 @@ begin
         or private.slot_at(e ->> 'at') is null
   ) then
     return jsonb_build_object('error', 'bad_value');
+  end if;
+  select count(*) into n_stored
+    from private.turf_slots s
+   where s.turf_id = p_turf_id and s.starts_at > p_now and s.starts_at < p_now + private.slots_ahead();
+  select count(distinct x.at) into n_new
+    from (select private.slot_at(e ->> 'at') as at from jsonb_array_elements(p_changes) e) x
+   where x.at > p_now and x.at < p_now + private.slots_ahead()
+     and not exists (select 1 from private.turf_slots s where s.turf_id = p_turf_id and s.starts_at = x.at);
+  if n_stored + n_new > private.slots_max() then
+    return jsonb_build_object('error', 'too_many');
   end if;
 
   with c as (
@@ -252,6 +289,7 @@ $$;
 
 revoke all on function private.slots_fresh() from public, anon, authenticated;
 revoke all on function private.slots_ahead() from public, anon, authenticated;
+revoke all on function private.slots_max() from public, anon, authenticated;
 revoke all on function private.slot_at(text) from public, anon, authenticated;
 revoke all on function private.slot_key(timestamptz) from public, anon, authenticated;
 revoke all on function private.turf_booked(uuid, timestamptz) from public, anon, authenticated;

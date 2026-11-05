@@ -58,9 +58,10 @@ const SECTIONS: LegalSection[] = [
           games.
         </p>
         <p>
-          <strong>We are not the venue.</strong> We don&rsquo;t own, run or book any turf. When you tap Call or
-          WhatsApp you contact the venue directly, and your booking, payment, cancellation and refund are
-          between you and them. We don&rsquo;t charge players a booking fee and we don&rsquo;t take payments.
+          <strong>We are not the venue.</strong> We don&rsquo;t own or run any turf. For bookings, contact the
+          turf directly: when you tap Call or WhatsApp you contact the venue, and your booking, payment,
+          cancellation and refund are between you and them. We don&rsquo;t charge players a booking fee and we
+          don&rsquo;t take payments.
         </p>
         <p>
           <strong>Listings can be out of date.</strong> Venue information comes from the venues, from public

@@ -7,6 +7,7 @@ import {
   BOOKING_LINE,
   FRESH_HOURS,
   MAX_CHANGES,
+  MAX_MARKS,
   PLAYER_COPY,
   SLOT_MINUTES,
   agoText,
@@ -23,6 +24,7 @@ import {
   istDate,
   istStamp,
   keyTime,
+  nextTickMs,
   noFreeLine,
   ownerDefault,
   ownerStatus,
@@ -182,6 +184,33 @@ test("10. an hour starting exactly now is over; 18:30 UTC is India midnight", ()
   assert.equal(clockLabel(1500), "1 AM");
 });
 
+test("10b. the screen works the slots out again on the minute an hour starts, and when the marks stop being fresh", () => {
+  const h = H({ start_time: "06:00", end_time: "23:00" });
+  // Mounted at 18:58:59.900: the next recompute is at 18:59:00, then 19:00:00, when 7 PM is gone.
+  let t = ist("2026-11-05 18:58") + 59_900;
+  assert.equal(slotDays(h, t)[0].slots[0].label, "7 PM");
+  const d1 = nextTickMs(t);
+  assert.ok(d1 >= 100 && d1 <= 150, `${d1}`);
+  t += d1;
+  const d2 = nextTickMs(t);
+  assert.ok(d2 >= 59_900 && d2 <= 60_000, `${d2}`);
+  t += d2;
+  assert.ok(t >= ist("2026-11-05 19:00") && t < ist("2026-11-05 19:00") + 1000, "lands just after 7 PM starts");
+  assert.equal(slotDays(h, t)[0].slots[0].label, "8 PM", "7 PM is gone the moment it starts");
+  assert.equal(slotDays(h, ist("2026-11-05 19:00"))[0].slots[0].label, "8 PM", "at 19:00:00.000 exactly");
+  // Exactly on a minute: the next one, a whole minute on.
+  assert.ok(nextTickMs(ist("2026-11-05 19:00")) >= 60_000);
+  // Freshness lapses in 5 s: wait 5 s, not to the minute; once lapsed, back to the minute.
+  const now = ist("2026-11-05 19:00") + 30_000;
+  const updated = iso(now - FRESH_HOURS * HOUR + 5_000);
+  const d3 = nextTickMs(now, updated);
+  assert.ok(d3 >= 5_000 && d3 <= 5_050, `${d3}`);
+  assert.equal(isFresh(updated, now + d3), false, "stale when it fires");
+  const d4 = nextTickMs(now, iso(now - FRESH_HOURS * HOUR - 1));
+  assert.ok(d4 >= 30_000 && d4 <= 30_050, `${d4}`);
+  assert.ok(nextTickMs(now, null) <= 30_050);
+});
+
 test("11. chips across a month end", () => {
   const days = slotDays(H({ start_time: "06:00", end_time: "23:00" }), ist("2026-11-27 10:00"));
   assert.deepEqual(days.map((d) => d.chip), ["Today", "Tomorrow", "Sun", "Mon", "Tue", "Wed", "Thu"]);
@@ -210,7 +239,11 @@ test("12. fresh for 24 hours (a time ahead counts); how long ago", () => {
 
 test("13. the owner's line in all four states", () => {
   const now = ist("2026-11-05 13:00");
-  assert.deepEqual(ownerStatus(null, now), { kind: "never", line: "Players don't see this yet", button: "Show on my page" });
+  assert.deepEqual(ownerStatus(null, now), {
+    kind: "never",
+    line: "Players don't see this yet. Mark what's booked; players will see the rest as free.",
+    button: "Show free hours to players",
+  });
   assert.deepEqual(ownerStatus(iso(now - 12 * 60_000), now), { kind: "live", line: "Players see this · updated 12 min ago", button: "All correct" });
   assert.deepEqual(ownerStatus(iso(now - 21 * HOUR - 10 * 60_000), now), { kind: "ending", line: "Players see this for 3 more h · updated 21 h ago", button: "All correct" });
   assert.deepEqual(ownerStatus("2026-11-03T15:45:00Z", now), { kind: "hidden", line: "Hidden from players · last updated 3 Nov, 9:15 PM", button: "All correct" });
@@ -310,7 +343,7 @@ test("19. the hours picker: Closes lists the 23 hours after the opening; what it
   assert.equal(today.open, "6 AM to 2 AM");
 });
 
-test("20. players' words: honest, with the site owner's booking line (none for a members' club)", () => {
+test("20. players' words: honest, with the site owner's booking line (a members' club says it is one instead)", () => {
   const [today, tomorrow] = slotDays(OVERNIGHT, ist("2026-11-05 12:00"));
   const [night] = slotDays(OVERNIGHT, ist("2026-11-07 00:30"));
   const lines = [...Object.values(PLAYER_COPY), playerFooter(false), playerFooter(true), updatedLine("2 h ago"), updatedLine("just now"), noFreeLine(today), noFreeLine(tomorrow), noFreeLine(night), noFreeLine(slotDays(OVERNIGHT, ist("2026-11-05 12:00"))[3])];
@@ -321,7 +354,7 @@ test("20. players' words: honest, with the site owner's booking line (none for a
   assert.ok(playerFooter(false).includes(BOOKING_LINE));
   assert.equal(BOOKING_LINE, "For bookings, contact the turf directly.");
   assert.ok(!playerFooter(true).includes(BOOKING_LINE));
-  assert.equal(playerFooter(true), PLAYER_COPY.freeMeans);
+  assert.equal(playerFooter(true), `${PLAYER_COPY.freeMeans} Members' club: ask the turf about guest access.`, "a members' club says so");
   assert.equal(noFreeLine(today), "No free slots marked for the rest of today.");
   assert.equal(noFreeLine(night), "No free slots marked for Friday night.");
   assert.equal(noFreeLine(slotDays(OVERNIGHT, ist("2026-11-05 12:00"))[2]), "No free slots marked for Saturday.");
@@ -334,6 +367,8 @@ test("21. the constants match the migration's", () => {
   assert.ok(sql.includes(`interval '${FRESH_HOURS} hours'`), "FRESH_HOURS = private.slots_fresh()");
   assert.ok(sql.includes(`interval '${AHEAD_DAYS} days'`), "AHEAD_DAYS = private.slots_ahead()");
   assert.ok(sql.includes(`jsonb_array_length(p_changes) > ${MAX_CHANGES}`), "MAX_CHANGES = turf_slots_apply's limit");
+  assert.ok(sql.includes(`$$ select ${MAX_MARKS} $$`), "MAX_MARKS = private.slots_max()");
+  assert.ok(MAX_MARKS >= AHEAD_DAYS * 48, "room for 8 days of half-hour starts");
   assert.ok(sql.includes(`'^\\d{4}-\\d{2}-\\d{2}T([01]\\d|2[0-3]):[0-5]\\d$'`), "the same slot key shape as isSlotKey");
 });
 

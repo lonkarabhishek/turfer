@@ -19,10 +19,10 @@ export { BOOKING_LINE };
  * the device's own time zone, so a phone set to another zone shows the same
  * hours as everyone else.
  *
- * The constants are the site owner's to change. FRESH_HOURS, AHEAD_DAYS and
- * MAX_CHANGES are also in the migration (private.slots_fresh,
- * private.slots_ahead, the "> 100" in private.turf_slots_apply); a test ties
- * them together.
+ * The constants are the site owner's to change. FRESH_HOURS, AHEAD_DAYS,
+ * MAX_CHANGES and MAX_MARKS are also in the migration (private.slots_fresh,
+ * private.slots_ahead, the "> 100" in private.turf_slots_apply,
+ * private.slots_max); a test ties them together.
  */
 
 /** One-hour slots. */
@@ -37,6 +37,8 @@ export const DAYS_SHOWN = 7;
 export const AHEAD_DAYS = 8;
 /** The most marks in one save (= the "> 100" in private.turf_slots_apply). */
 export const MAX_CHANGES = 100;
+/** The most marks a turf holds in the AHEAD_DAYS window, and the public read lists (= private.slots_max()): 8 days of half-hour starts, more than any grid has. */
+export const MAX_MARKS = 384;
 /** How long the whole-day Undo stays. */
 export const UNDO_MS = 8000;
 /** India: UTC+05:30, no daylight saving. */
@@ -305,13 +307,29 @@ export function ownerStatus(
   updatedAt: string | null,
   nowMs: number,
 ): { kind: "never" | "live" | "ending" | "hidden"; line: string; button: string } {
-  if (!updatedAt || !Number.isFinite(timeOf(updatedAt))) return { kind: "never", line: "Players don't see this yet", button: "Show on my page" };
+  if (!updatedAt || !Number.isFinite(timeOf(updatedAt)))
+    return { kind: "never", line: "Players don't see this yet. Mark what's booked; players will see the rest as free.", button: "Show free hours to players" };
   if (!isFresh(updatedAt, nowMs)) return { kind: "hidden", line: `Hidden from players · last updated ${istStamp(updatedAt)}`, button: "All correct" };
   const left = hoursLeft(updatedAt, nowMs);
   const ago = agoText(updatedAt, nowMs);
   if (left <= FRESH_WARN_HOURS) return { kind: "ending", line: `Players see this for ${Math.max(1, Math.ceil(left))} more h · updated ${ago}`, button: "All correct" };
   return { kind: "live", line: `Players see this · updated ${ago}`, button: "All correct" };
 }
+
+/**
+ * How long to wait before working the slots out again: to the next minute
+ * of the clock the screen uses (every slot starts on a whole minute, so an
+ * hour drops off the moment it starts), or to the moment the owner's marks
+ * stop being fresh, whichever is sooner, plus a few ms so the timer never
+ * lands just before it.
+ */
+export function nextTickMs(nowMs: number, updatedAt?: string | null): number {
+  const toMinute = MIN_MS - (((nowMs % MIN_MS) + MIN_MS) % MIN_MS);
+  const t = timeOf(updatedAt);
+  const toStale = Number.isFinite(t) ? t + FRESH_HOURS * HOUR_MS - nowMs : Infinity;
+  return Math.max(0, Math.min(toMinute, toStale > 0 ? toStale : Infinity)) + TICK_MARGIN_MS;
+}
+const TICK_MARGIN_MS = 25;
 
 /** The clock to work slots out with: the device's, unless it runs behind the server's (a phone set a day back must not show past hours). */
 export function clientNow(serverIso: string | null | undefined, deviceMs: number): number {
@@ -397,11 +415,12 @@ export const PLAYER_COPY = {
   hintWhatsApp: "Tap a time to ask the turf on WhatsApp.",
   hintCall: "Tap a time to call the turf.",
   freeMeans: "Free means the owner marked the hour free; the turf confirms it.",
+  membersClub: "Members' club: ask the turf about guest access.",
 } as const;
 
-/** The card's last line, with the page's booking line (none for a members' club, as on the page). */
+/** The card's last line, with the page's booking line, or for a members' club (no booking line, as on the page) that it is one. */
 export function playerFooter(membersOnly: boolean): string {
-  return [PLAYER_COPY.freeMeans, bookingLine(membersOnly, true)].filter(Boolean).join(" ");
+  return [PLAYER_COPY.freeMeans, membersOnly ? PLAYER_COPY.membersClub : bookingLine(membersOnly, true)].filter(Boolean).join(" ");
 }
 
 /** "Updated 2 h ago by the owner" */

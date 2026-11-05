@@ -8,6 +8,7 @@ import {
   clockLabel,
   closeChoices,
   hasUsableHours,
+  nextTickMs,
   ownerDefault,
   ownerStatus,
   slotDays,
@@ -95,6 +96,10 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
   const [q, setQ] = useState<Queue>(() => queueOf(first?.booked ?? []));
   const qRef = useRef(q);
   const [updatedAt, setUpdatedAt] = useState<string | null>(first?.updated_at ?? null);
+  const updatedRef = useRef<string | null>(first?.updated_at ?? null);
+  // First use (never updated when the section opened): the status line and its button go under the hours, so the
+  // owner sees the hours before showing them, and stay there until the page is opened again (nothing jumps on a tap).
+  const [firstUse] = useState(() => !!first && !first.updated_at);
   // The database's clock: now = the device's + skew, taken at each answer, so a phone set wrong shows the right hours.
   const skewRef = useRef(0);
   const [now, setNow] = useState<number | null>(null);
@@ -105,23 +110,38 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
   const [undo, setUndo] = useState<{ day: string; status: SlotStatus; changes: SlotChange[] } | null>(null);
   const lastLoad = useRef(0);
   const sending = useRef(false);
-  const timers = useRef<{ flash?: ReturnType<typeof setTimeout>; confirm?: ReturnType<typeof setTimeout>; undo?: ReturnType<typeof setTimeout> }>({});
+  const timers = useRef<{
+    flash?: ReturnType<typeof setTimeout>;
+    confirm?: ReturnType<typeof setTimeout>;
+    undo?: ReturnType<typeof setTimeout>;
+    clock?: ReturnType<typeof setTimeout>;
+  }>({});
 
   const commit = useCallback((next: Queue) => {
     qRef.current = next;
     setQ(next);
   }, []);
-  const tick = useCallback(() => setNow(Date.now() + skewRef.current), []);
-  const clockFrom = useCallback((serverNow: string) => {
-    const t = Date.parse(serverNow);
-    if (Number.isFinite(t)) skewRef.current = t - Date.now();
-    setNow(Date.now() + skewRef.current);
+  // The clock, worked out again on each minute (an hour drops off the moment it starts) and when players stop seeing the marks.
+  const tick = useCallback(function next() {
+    const t = Date.now() + skewRef.current;
+    setNow(t);
+    clearTimeout(timers.current.clock);
+    timers.current.clock = setTimeout(next, nextTickMs(t, updatedRef.current));
   }, []);
+  const clockFrom = useCallback(
+    (serverNow: string) => {
+      const t = Date.parse(serverNow);
+      if (Number.isFinite(t)) skewRef.current = t - Date.now();
+      tick();
+    },
+    [tick],
+  );
   /** An answer from the database: what to draw from, and when it was last updated. */
   const take = useCallback(
     (r: OwnerSlots) => {
       setView(r);
       setUpdatedAt(r.updated_at);
+      updatedRef.current = r.updated_at;
       clockFrom(r.now);
     },
     [clockFrom],
@@ -142,14 +162,13 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
     }
   }, [turfId, commit, take]);
 
-  // The first answer's clock, then a minute timer (the hours that started drop off), and a fresh read when the tab comes back.
+  // The first answer's clock (tick keeps it), and a fresh read when the tab comes back.
   useEffect(() => {
     const t = setTimeout(() => {
       lastLoad.current = Date.now();
       if (first) clockFrom(first.now);
       else tick();
     }, 0);
-    const timer = setInterval(tick, 60_000);
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       tick();
@@ -159,11 +178,11 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
     const tm = timers.current;
     return () => {
       clearTimeout(t);
-      clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
       clearTimeout(tm.flash);
       clearTimeout(tm.confirm);
       clearTimeout(tm.undo);
+      clearTimeout(tm.clock);
     };
     // Once: first is the answer this section opened with.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -180,6 +199,12 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
     return () => clearTimeout(t);
   }, [hoursKey, reload]);
 
+  /** A failure: no "Saved" tick left from an earlier save next to it. */
+  const noFlash = useCallback(() => {
+    clearTimeout(timers.current.flash);
+    setFlash(false);
+  }, []);
+
   /** Save what waits, one batch at a time; taps made meanwhile go in the next. A failure puts every unsaved tap back. */
   const flush = useCallback(async () => {
     if (sending.current) return;
@@ -195,12 +220,14 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
         } catch {
           commit(fail(qRef.current));
           setUndo(null);
+          noFlash();
           setErr("network");
           break;
         }
         if ("error" in r) {
           commit(fail(qRef.current));
           setUndo(null);
+          noFlash();
           setErr(r.error === "forbidden" || r.error === "not_claimed" ? r.error : "other");
           break;
         }
@@ -213,7 +240,7 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
     } finally {
       sending.current = false;
     }
-  }, [turfId, commit, take]);
+  }, [turfId, commit, take, noFlash]);
 
   const onTap = (key: string) => {
     setErr(null);
@@ -230,6 +257,7 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
       const r = await confirmOwnerSlots(turfId);
       if ("error" in r) {
         setConfirm("idle");
+        noFlash();
         setErr(r.error === "forbidden" || r.error === "not_claimed" ? r.error : "other");
         return;
       }
@@ -239,6 +267,7 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
       clearTimeout(timers.current.confirm);
       timers.current.confirm = setTimeout(() => setConfirm("idle"), 2000);
     } catch {
+      noFlash();
       setConfirm("error");
     }
   };
@@ -327,44 +356,50 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
   const dot = status.kind === "live" ? "bg-accent-500" : status.kind === "ending" ? "bg-amber-500" : status.kind === "hidden" ? "bg-red-500" : "bg-primary-300";
   const lineTone = status.kind === "ending" ? "text-amber-800" : status.kind === "hidden" ? "text-red-700" : "text-primary-700";
 
+  // Whether players see it, and the one tap that keeps it showing: on top for the daily check, under the hours on first use.
+  const statusRow = (
+    <>
+      <div className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 ${firstUse ? "mt-4 border-t border-primary-100 pt-4" : ""}`}>
+        <p className={`min-w-0 flex-1 basis-48 inline-flex items-start gap-2 text-[13px] font-semibold leading-snug ${lineTone}`}>
+          <span className={`mt-[5px] w-2 h-2 shrink-0 rounded-full ${dot}`} aria-hidden />
+          <span>{status.line}</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => void onConfirm()}
+          disabled={busy || confirm === "busy"}
+          className="shrink-0 inline-flex items-center justify-center gap-1.5 h-11 px-4 rounded-full bg-primary-900 text-white text-[14px] font-semibold cursor-pointer touch-manipulation disabled:opacity-40"
+        >
+          {confirm === "busy" ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> {status.button}
+            </>
+          ) : confirm === "done" ? (
+            <>
+              <Check className="w-4 h-4" aria-hidden /> Done
+            </>
+          ) : (
+            <>
+              <Check className="w-4 h-4" aria-hidden /> {status.button}
+            </>
+          )}
+        </button>
+      </div>
+      {confirm === "error" && (
+        <p role="alert" className="mt-2 text-[13px] text-red-600">
+          Couldn&rsquo;t update. Check your connection and try again.
+        </p>
+      )}
+    </>
+  );
+
   return (
     <Frame grounds={view.grounds}>
       <div className={CARD}>
-        {/* Whether players see it, and the one tap that keeps it showing. */}
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-          <p className={`min-w-0 flex-1 basis-48 inline-flex items-start gap-2 text-[13px] font-semibold leading-snug ${lineTone}`}>
-            <span className={`mt-[5px] w-2 h-2 shrink-0 rounded-full ${dot}`} aria-hidden />
-            <span>{status.line}</span>
-          </p>
-          <button
-            type="button"
-            onClick={() => void onConfirm()}
-            disabled={busy || confirm === "busy"}
-            className="shrink-0 inline-flex items-center justify-center gap-1.5 h-11 px-4 rounded-full bg-primary-900 text-white text-[14px] font-semibold cursor-pointer touch-manipulation disabled:opacity-40"
-          >
-            {confirm === "busy" ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> {status.button}
-              </>
-            ) : confirm === "done" ? (
-              <>
-                <Check className="w-4 h-4" aria-hidden /> Done
-              </>
-            ) : (
-              <>
-                <Check className="w-4 h-4" aria-hidden /> {status.button}
-              </>
-            )}
-          </button>
-        </div>
-        {confirm === "error" && (
-          <p role="alert" className="mt-2 text-[13px] text-red-600">
-            Couldn&rsquo;t update. Check your connection and try again.
-          </p>
-        )}
+        {!firstUse && statusRow}
 
         {/* Days */}
-        <div role="tablist" aria-label="Day" className="mt-3 -mx-4 px-4 flex gap-2 overflow-x-auto scrollbar-hide">
+        <div role="tablist" aria-label="Day" className={`${firstUse ? "" : "mt-3"} -mx-4 px-4 flex gap-2 overflow-x-auto scrollbar-hide`}>
           {days.map((d) => {
             const on = day && dayKey(d) === dayKey(day);
             const quiet = d.state !== "open" || !d.slots.length;
@@ -476,6 +511,7 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved }: { turfId: string; i
             )}
           </>
         )}
+        {firstUse && statusRow}
       </div>
       {footnote}
     </Frame>

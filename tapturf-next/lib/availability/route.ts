@@ -17,8 +17,11 @@ import { parsePublic } from "./slots";
  * migration, and when the read fails. Never 503, never a stale copy: a card
  * that cannot be read is no card.
  *
- * A query string is refused (400) without a database read, so ?x=1 cannot
- * get past the CDN's copy to the database.
+ * Each turf has one URL, availabilityPath(id): its id in lowercase, as
+ * the card asks for it. Any other spelling of the path (capital letters,
+ * percent-escapes) is 404 and a query string is 400, both without a
+ * database read and kept a day, so neither ?x=1 nor /CCCC... can get past
+ * the CDN's copy to the database.
  */
 
 const JSON_TYPE = "application/json; charset=utf-8";
@@ -32,7 +35,13 @@ export const FAILED_HEADERS: Record<string, string> = { ...OK_HEADERS, "Cache-Co
 /** Never a turf (a bad id, a query string): a day. */
 export const BAD_HEADERS: Record<string, string> = { ...OK_HEADERS, "Cache-Control": "public, max-age=0, s-maxage=86400" };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const PREFIX = "/api/availability/";
+
+/** The one URL of a turf's free slots (lowercase id), which the card fetches. */
+export function availabilityPath(turfId: string): string {
+  return `${PREFIX}${turfId}`;
+}
 /** The database has no turf_availability yet (before the migration): nothing to show, as for any turf without slots. */
 const MISSING = new Set(["PGRST202", "42883"]);
 const NOT_FRESH = JSON.stringify({ fresh: false });
@@ -46,8 +55,14 @@ export type AvailabilityResponse = {
   failed?: string;
 };
 
-export async function availabilityResponse(id: string, search: string, read: Reader, nowMs: number): Promise<AvailabilityResponse> {
-  if (!UUID.test(id)) return { status: 404, headers: BAD_HEADERS, body: JSON.stringify({ error: "not_found" }) };
+/** `id`: the route's param as Next gives it (decoded); `pathname` and `search`: the request URL's own, undecoded. */
+export async function availabilityResponse(
+  req: { id: string; pathname: string; search: string },
+  read: Reader,
+  nowMs: number,
+): Promise<AvailabilityResponse> {
+  const { id, pathname, search } = req;
+  if (!UUID.test(id) || pathname !== availabilityPath(id)) return { status: 404, headers: BAD_HEADERS, body: JSON.stringify({ error: "not_found" }) };
   if (search) return { status: 400, headers: BAD_HEADERS, body: JSON.stringify({ error: "bad_request" }) };
   try {
     const { data, error } = await read(id);
