@@ -31,9 +31,13 @@ for (const f of NEW) {
   assert.doesNotMatch(sql, /[—–]/, `${f}: no em or en dashes`);
 }
 
-// CARD_COLUMNS, as the app selects them.
-const turfsTs = fs.readFileSync(path.join(DIR, "..", "..", "lib", "queries", "turfs.ts"), "utf8");
-const card = [...turfsTs.match(/const CARD_COLUMNS = \[([\s\S]*?)\]\.join/)[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+// CARD_COLUMNS, as the app selects them: lib/build/reads.ts since the build-data step (it was in lib/queries/turfs.ts before).
+const cardList = (...rel) => {
+  const file = path.join(DIR, "..", "..", ...rel);
+  return fs.existsSync(file) ? fs.readFileSync(file, "utf8").match(/const CARD_COLUMNS = \[([\s\S]*?)\](?:\.join|;)/) : null;
+};
+const cardSrc = cardList("lib", "build", "reads.ts") ?? cardList("lib", "queries", "turfs.ts");
+const card = [...cardSrc[1].replace(/\/\/.*$/gm, "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
 assert.ok(card.length > 30, "CARD_COLUMNS found");
 
 const STUBS = `
