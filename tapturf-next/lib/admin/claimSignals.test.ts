@@ -167,6 +167,11 @@ test("signals: each fact in plain words, in a fixed order", () => {
   assert.deepEqual(playerSignals({ ...none, games: 2, requests: 1 }), ["made 2 games", "sent 1 join request"]);
 });
 
+test("signals: a phone sign-in on a no-number turf is never said alone", () => {
+  assert.deepEqual(playerSignals({ ...none, note: "I manage it for the owner", phoneSignIn: true, turfHasNumber: false }), [], "a real manager of a no-number turf: no line");
+  assert.deepEqual(playerSignals({ ...none, phoneSignIn: true, turfHasNumber: false, games: 1 }), ["phone sign-in on a turf with no number", "made 1 game"], "beside another fact, it is said first");
+});
+
 test("signals: a Google sign-in on a no-number turf, or an unknown number, is not the phone signal", () => {
   assert.deepEqual(playerSignals({ ...none, phoneSignIn: false, turfHasNumber: false }), []);
   assert.deepEqual(playerSignals({ ...none, phoneSignIn: true, turfHasNumber: null }), []);

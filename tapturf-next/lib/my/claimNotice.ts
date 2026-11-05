@@ -52,7 +52,7 @@ export function claimDecisionNotice(status: string, turfName: string | null | un
   }
   if (status === "rejected") {
     const line = kindLine(extra);
-    const message = [`TapTurf could not confirm that you run ${name}.`, line, `If you wanted to play there: ${BOOKINGS_LINE}`].filter(Boolean).join(" ");
+    const message = [`TapTurf could not confirm that you run ${name}.`, line, `Want to play there? ${BOOKINGS_LINE}`].filter(Boolean).join(" ");
     return { type: CLAIM_REJECTED, title: "We couldn't confirm your claim".slice(0, TITLE_MAX), message: message.slice(0, MESSAGE_MAX) };
   }
   return null;

@@ -120,15 +120,22 @@ export const MANY_TURFS_OPENED = 5;
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** Each fact that points to a player, in plain words; [] when none does. */
+/**
+ * Each fact that points to a player, in plain words; [] when none does.
+ * A phone sign-in on a turf with no number is weak on its own (a real
+ * owner of such a turf signs in the same way), so it is said only beside
+ * another fact, never alone.
+ */
 export function playerSignals(f: ClaimFacts): string[] {
   const out: string[] = [];
   if (bookingLikeNote(f.note)) out.push("note reads like a booking");
-  if (f.phoneSignIn && f.turfHasNumber === false) out.push("phone sign-in on a turf with no number");
+  const weakPhone = f.phoneSignIn && f.turfHasNumber === false;
   if (f.games > 0) out.push(`made ${plural(f.games, "game", "games")}`);
   if (f.requests > 0) out.push(`sent ${plural(f.requests, "join request", "join requests")}`);
   if (f.tappedBeforeSignup === true) out.push("tapped Call or WhatsApp before signing up");
   if (f.turfsOpenedBeforeSignup !== null && f.turfsOpenedBeforeSignup >= MANY_TURFS_OPENED) out.push(`opened turf pages ${f.turfsOpenedBeforeSignup} times before signing up`);
+  // In its place after the note, only when something else points to a player too.
+  if (weakPhone && out.length) out.splice(bookingLikeNote(f.note) ? 1 : 0, 0, "phone sign-in on a turf with no number");
   return out;
 }
 

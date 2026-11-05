@@ -16,10 +16,10 @@ test("rejected: could not confirm, the site owner's line for players, and the ad
   const n = claimDecisionNotice("rejected", "Green Box Arena");
   assert.ok(n);
   assert.equal(n.type, CLAIM_REJECTED);
-  assert.equal(n.message, `TapTurf could not confirm that you run Green Box Arena. If you wanted to play there: ${BOOKINGS_LINE}`);
+  assert.equal(n.message, `TapTurf could not confirm that you run Green Box Arena. Want to play there? ${BOOKINGS_LINE}`);
   const k = claimDecisionNotice("rejected", "Green Box Arena", "  If you run it,\n send us the turf's number.  ");
   assert.ok(k);
-  assert.equal(k.message, `TapTurf could not confirm that you run Green Box Arena. If you run it, send us the turf's number. If you wanted to play there: ${BOOKINGS_LINE}`);
+  assert.equal(k.message, `TapTurf could not confirm that you run Green Box Arena. If you run it, send us the turf's number. Want to play there? ${BOOKINGS_LINE}`);
   for (const x of [n, k]) assert.equal(claimCopyProblem(`${x.title} ${x.message}`), null);
 });
 

@@ -183,7 +183,7 @@ eq(sigOf(T(3), "e:nobody@example.com"), { turf_id: T(3), user_key: "e:nobody@exa
 const notes = () => q(`select user_id, type, title, message, metadata, is_read from public.notifications order by created_at, id`);
 const status = async (turf, key) => (await one(`select status from public.turf_owners where turf_id = $1 and user_key = $2`, [turf, key]))?.status;
 const answer = (turf, key, st, title, message) => rpc("admin_answer_owner_claim", [null, turf, key, st, title, message]);
-const REJ = ["We couldn't confirm your claim", "TapTurf could not confirm that you run No Number Box. If you wanted to play there: For bookings, contact the turf directly."];
+const REJ = ["We couldn't confirm your claim", "TapTurf could not confirm that you run No Number Box. Want to play there? For bookings, contact the turf directly."];
 
 const checks = async () => (await one(`select n from private.owner_checks`)).n;
 await owner(false);
