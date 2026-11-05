@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Turf } from "../../types/turf";
-import { bookingFeeLine, httpsLink, instagramLink, membersNote, noContactLinks, websiteLink } from "./noContact";
+import { bookingFeeLine, httpsLink, instagramLink, membersNote, noContactLinks, reportedPricesNote, websiteLink } from "./noContact";
 import { callNumber, contactFieldsOf, hasUsableContact, parseContactInfo, whatsAppNumber, type ContactFields } from "../utils/contact";
 import { directionsUrl } from "../utils/maps";
 
@@ -154,6 +154,8 @@ test("sidebar lines: with a number, word for word as before; without one, no cal
   const noNumber = membersNote(null, false);
   assert.equal(noNumber, "For members only. We don't have a number for it yet.");
   assert.doesNotMatch(noNumber, /\b(call|book|booking|reserve)\b/i);
+  assert.equal(reportedPricesNote(true), "Reported prices, not confirmed by the turf. Check the rate with the turf before you book.");
+  assert.doesNotMatch(reportedPricesNote(false), /\b(call|book|booking|reserve)\b/i);
   // The turf's own access notes stay as written, either way.
   assert.equal(membersNote("Members and their guests only.", false), "Members and their guests only.");
   assert.equal(membersNote("Members and their guests only.", true), "Members and their guests only.");

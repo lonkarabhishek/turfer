@@ -14,6 +14,7 @@ import {
 } from "@/lib/utils/prices";
 import { publicLink } from "@/lib/utils/bookingApps";
 import { ownerPriceText, type OwnerPriceNote } from "@/lib/turfPage/owner";
+import { reportedPricesNote } from "@/lib/turfPage/noContact";
 import { OwnerMark } from "./OwnerMark";
 import { PriceBands } from "./PriceBands";
 import { SuggestInfoButton } from "./TurfSuggestions";
@@ -91,7 +92,7 @@ export function TurfPricing({
       <div className="section-divider">
         <h2 className="text-[22px] font-bold text-primary-800 mb-2 font-serif">Pricing</h2>
         <p className="text-[13px] text-primary-500 mb-4">
-          Reported prices, not confirmed by the turf. Check the rate with the turf before you book.
+          {reportedPricesNote(contact.call || contact.whatsapp)}
         </p>
         <ul className="space-y-3">
           {mentions.map((m, i) => {

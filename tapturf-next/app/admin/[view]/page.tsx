@@ -243,16 +243,17 @@ async function noPhoneView(): Promise<{ count: number | null; node: React.ReactN
           </p>
           {viewsNote && <p className="text-[13px] text-amber-800">{viewsNote}</p>}
         </div>
-        <Table head={["Turf", "City", `Views${views ? ` (${views.days} days)` : ""}`, "Number", "Rating", "Photos", "Updated"]} empty={turfs.length === 0}>
+        {/* Views first, so a phone sees them next to the name without scrolling the table. */}
+        <Table head={[`Views${views ? ` (${views.days} days)` : ""}`, "Turf", "City", "Number", "Rating", "Photos", "Updated"]} empty={turfs.length === 0}>
           {turfs.map((t) => (
             <tr key={t.id}>
+              <td className="px-4 py-3 tabular-nums font-semibold text-primary-900">{t.views == null ? "-" : t.views.toLocaleString("en-IN")}</td>
               <td className="px-4 py-3">
                 <Link href={turfPath(t)} className="text-primary-900 hover:text-accent-600">{t.name}</Link>
                 {t.claimed && <Badge className="ml-1.5 bg-accent-50 text-accent-700">Claimed</Badge>}
                 <div className="text-[12px] text-primary-400 max-w-[280px] truncate">{t.address}</div>
               </td>
               <td className="px-4 py-3 text-primary-700">{t.city && isCity(t.city) ? labelFor(t.city) : "-"}</td>
-              <td className="px-4 py-3 tabular-nums font-semibold text-primary-900">{t.views == null ? "-" : t.views.toLocaleString("en-IN")}</td>
               <td className="px-4 py-3 whitespace-nowrap">
                 {t.why === "bad" ? (
                   <Badge className="bg-amber-100 text-amber-800">fails the check</Badge>

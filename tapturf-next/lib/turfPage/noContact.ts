@@ -86,6 +86,13 @@ export function membersNote(accessNotes: string | null, hasContact: boolean): st
   return hasContact ? "Booking is for members. Call to ask about guest access." : "For members only. We don't have a number for it yet.";
 }
 
+/** Pricing's note over prices players reported: checking "with the turf before you book" only where there is a number to check with. */
+export function reportedPricesNote(hasContact: boolean): string {
+  return hasContact
+    ? "Reported prices, not confirmed by the turf. Check the rate with the turf before you book."
+    : "Reported prices, not confirmed by the turf. Check the rate at the turf before you play.";
+}
+
 /** The sidebar's line under the buttons: only where there is a number to contact, and not for a members' club. */
 export function bookingFeeLine(membersOnly: boolean, hasContact: boolean): string | null {
   return !membersOnly && hasContact ? "No booking fee. Contact turf directly to reserve your slot." : null;
