@@ -10,8 +10,10 @@ import {
   priceRangeText,
   priceUnitSuffix,
   reportedMentions,
+  showsNoPrices,
   showsPriceBands,
 } from "@/lib/utils/prices";
+import { CLAIM_COPY } from "@/lib/turfPage/claimPrompts";
 import { publicLink } from "@/lib/utils/bookingApps";
 import { ownerPriceText, type OwnerPriceNote } from "@/lib/turfPage/owner";
 import { reportedPricesNote } from "@/lib/turfPage/noContact";
@@ -39,11 +41,14 @@ export function TurfPricing({
   contact,
   playerPrice = null,
   priceNote = null,
+  ownerLine = false,
 }: {
   turf: Turf;
   claimed?: boolean;
   contact: TurfContact;
   playerPrice?: PlayerPrice;
+  /** An unclaimed turf with no prices: the owner's one small line under players' button (lib/turfPage/claimPrompts.ts pricingLine). */
+  ownerLine?: boolean;
   /** The owner's own prices on a claimed turf, and when they set them (lib/turfPage/owner.ts). */
   priceNote?: OwnerPriceNote | null;
 }) {
@@ -84,8 +89,9 @@ export function TurfPricing({
   const hasWeekday = rows.some((r) => r.weekday != null);
   const hasWeekend = rows.some((r) => r.weekend != null);
 
-  if (rows.length === 0 && mentions.length === 0) {
-    return <NoPrices turfId={turf.id} claimed={claimed} contact={contact} playerPrice={playerPrice} />;
+  // The same rule the page's claim prompts read (rows and mentions both empty).
+  if (showsNoPrices(turf)) {
+    return <NoPrices turfId={turf.id} claimed={claimed} contact={contact} playerPrice={playerPrice} ownerLine={ownerLine} />;
   }
 
   if (rows.length === 0) {
@@ -207,20 +213,24 @@ export function TurfPricing({
 /**
  * No price, band or report at all (1,608 of 3,120 active turfs on 26
  * Oct). Says so plainly where a player looks for the rate, with the two
- * ways it gets filled: the owner adds it on myTapturf, or a player who
- * knows it shares it. When players already shared one (From players,
- * below), it points there instead of asking for the rate again.
+ * ways it gets filled: a player who knows it shares it (the main button),
+ * or the owner adds it on myTapturf (one small line naming the role, only
+ * where the page shows no claim hint up top, so a phone never shows more
+ * than two claim prompts). When players already shared one (From
+ * players, below), it points there instead of asking for the rate again.
  */
 function NoPrices({
   turfId,
   claimed,
   contact,
   playerPrice,
+  ownerLine,
 }: {
   turfId: string;
   claimed: boolean;
   contact: TurfContact;
   playerPrice: PlayerPrice;
+  ownerLine: boolean;
 }) {
   const hint = slotRatesHint(contact);
   const reported = playerPrice ? priceRangeText(playerPrice.min, playerPrice.max) : null;
@@ -267,18 +277,23 @@ function NoPrices({
             </p>
           </>
         ) : (
-          <div className="mt-4 flex flex-col sm:flex-row gap-2">
-            <Link
-              href={`/my?claim=${turfId}`}
-              prefetch={false}
-              className="press-tight inline-flex items-center justify-center h-11 px-5 rounded-full bg-primary-900 hover:bg-primary-700 text-white text-[14px] font-semibold transition-colors"
-            >
-              Own this turf? Add your prices free
-            </Link>
-            <SuggestInfoButton className="press-tight inline-flex items-center justify-center h-11 px-5 rounded-full bg-white border border-primary-200 hover:bg-primary-50 text-primary-900 text-[14px] font-semibold transition-colors cursor-pointer">
-              {reported ? "Paid a different rate? Share it" : "Played here? Share the rate"}
-            </SuggestInfoButton>
-          </div>
+          // Unclaimed: players' action is the main button (players read the owner's dark
+          // "Own this turf? Add your prices free" as theirs, 5 Nov 2026).
+          <>
+            <div className="mt-4 flex flex-col sm:flex-row gap-2">
+              <SuggestInfoButton className="press-tight inline-flex items-center justify-center h-11 px-5 rounded-full bg-primary-900 hover:bg-primary-700 text-white text-[14px] font-semibold transition-colors cursor-pointer">
+                {reported ? "Paid a different rate? Share it" : "Played here? Share the rate"}
+              </SuggestInfoButton>
+            </div>
+            {ownerLine && (
+              <p data-nosnippet className="mt-1 text-[13px] text-primary-500">
+                {CLAIM_COPY.pricingLine.ask}{" "}
+                <Link href={`/my?claim=${turfId}`} prefetch={false} className="inline-flex min-h-11 items-center font-semibold text-accent-700 hover:text-accent-800">
+                  {CLAIM_COPY.pricingLine.link}
+                </Link>
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>
