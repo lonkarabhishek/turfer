@@ -5,7 +5,7 @@ import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
 import { CITY_LIST_AND } from "@/lib/city";
 
-const UPDATED = "2026-11-05";
+const UPDATED = "2026-10-30";
 const PAGE_URL = "https://www.tapturf.in/terms";
 
 export const metadata: Metadata = {
@@ -58,17 +58,14 @@ const SECTIONS: LegalSection[] = [
           games.
         </p>
         <p>
-          <strong>We are not the venue.</strong> We don&rsquo;t own or run any turf. For bookings, contact the
-          turf directly: when you tap Call or WhatsApp you contact the venue, and your booking, payment,
-          cancellation and refund are between you and them. We don&rsquo;t charge players a booking fee and we
-          don&rsquo;t take payments.
+          <strong>We are not the venue.</strong> We don&rsquo;t own, run or book any turf. When you tap Call or
+          WhatsApp you contact the venue directly, and your booking, payment, cancellation and refund are
+          between you and them. We don&rsquo;t charge players a booking fee and we don&rsquo;t take payments.
         </p>
         <p>
           <strong>Listings can be out of date.</strong> Venue information comes from the venues, from public
           sources and from players. We check what we can, but prices, hours and facilities change. Confirm with
-          the venue before you travel. Where a price is marked as reported by players, it is unverified. Free
-          slots on a turf page are hours its owner marked free, shown with when they last updated them; the
-          venue confirms.
+          the venue before you travel. Where a price is marked as reported by players, it is unverified.
         </p>
       </>
     ),
