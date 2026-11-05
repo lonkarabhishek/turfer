@@ -3,7 +3,9 @@ import { gameRows, requestRows, turfsById, type TurfBrief } from "@/lib/queries/
 import { anonRead, ownerRead } from "@/lib/admin/db";
 import { createdSince, gameState, istMinute, latestGames, requestsByGame, type GameRow, type GameState } from "@/lib/admin/home";
 import { isVerified, userCity, type Confirmed, type UserCity } from "@/lib/admin/people";
-import { both, okSection, readAllPages, rowsOf, type Section } from "@/lib/admin/section";
+import { both, dataOf, okSection, readAllPages, rowsOf, type Reason, type Section } from "@/lib/admin/section";
+import { noPhoneList, noPhoneWhy, turfViewsOf, type NoPhoneWhy, type TurfViews } from "@/lib/admin/noPhone";
+import { parseContactInfo } from "@/lib/utils/contact";
 import { isCity } from "@/lib/city";
 import { missingVenueColumn } from "@/lib/games/otherVenue";
 import { toGroundSizes } from "@/lib/turfSize/sizes";
@@ -307,7 +309,10 @@ type TurfListRow = {
   rating: number | null;
   total_reviews: number | null;
   owner_phone: string | null;
-  contact_info: { phone?: string } | null;
+  /** As stored: an object, or the same as JSON text (lib/utils/contact.ts reads both, as the page does). */
+  contact_info: unknown;
+  landline_phone: string | null;
+  whatsapp_phone: string | null;
   images: unknown;
   updated_at: string | null;
   /** An owner manages it on myTapturf (20261025_turf_claimed.sql). */
@@ -318,7 +323,8 @@ type TurfListRow = {
 
 /** Every active turf (paged: there are more than the 1,000 one request returns), by name. */
 export async function getAdminTurfs(filter: TurfFilter = "all") {
-  const cols: string = `id, name, slug, city, address, rating, total_reviews, owner_phone, contact_info, images, updated_at, claimed${filter === "sizes" ? ", ground_sizes" : ""}`;
+  // The four contact columns the page's Call and WhatsApp read (lib/utils/contact.ts), so No phone is the page's rule.
+  const cols: string = `id, name, slug, city, address, rating, total_reviews, owner_phone, contact_info, landline_phone, whatsapp_phone, images, updated_at, claimed${filter === "sizes" ? ", ground_sizes" : ""}`;
   return anonRead("turfs list", async (s, signal) => {
     const all = await readAllPages<TurfListRow>((from, to) => {
       let q = s
@@ -336,12 +342,53 @@ export async function getAdminTurfs(filter: TurfFilter = "all") {
     }, "turfs");
     let rows = all.map((t) => ({
       ...t,
-      phone: t.owner_phone || (t.contact_info?.phone ?? null),
+      phone: t.owner_phone || (parseContactInfo(t.contact_info)?.phone ?? null),
       photos: Array.isArray(t.images) ? t.images.length : 0,
       sizes: toGroundSizes(t.ground_sizes),
     }));
-    if (filter === "nophone") rows = rows.filter((t) => !t.phone);
+    // The page's own rule: no Call and no WhatsApp (a number that fails the format check is none).
+    if (filter === "nophone") rows = rows.filter((t) => noPhoneWhy(t) !== null);
     return rows;
+  });
+}
+
+type AdminTurfRow = Awaited<ReturnType<typeof getAdminTurfs>> extends Section<(infer R)[]> ? R : never;
+export type AdminNoPhoneTurf = AdminTurfRow & { why: NoPhoneWhy; views: number | null };
+
+/** The window the No phone list's views cover (today and the days before it, India days). */
+export const NO_PHONE_VIEW_DAYS = 28;
+
+/**
+ * The No phone list: every active turf whose page shows no Call and no
+ * WhatsApp (exactly the page's rule), most viewed over the last
+ * NO_PHONE_VIEW_DAYS days first (public.turf_daily_views, through
+ * admin_turf_views: the site owner only). The turfs read failing fails the
+ * list; the views read failing (not_set_up before
+ * 20261105_admin_turf_views.sql) only leaves the list by name, and says why.
+ */
+export async function getAdminNoPhoneTurfs(): Promise<
+  Section<{ turfs: AdminNoPhoneTurf[]; views: { days: number; since: string | null } | null; viewsReason: Reason | null }>
+> {
+  const [turfs, views] = await Promise.all([
+    getAdminTurfs("all"),
+    ownerRead("admin_turf_views", async ({ supabase, token }, signal) =>
+      dataOf<unknown>(await supabase.rpc("admin_turf_views", { p_firebase_token: token, p_days: NO_PHONE_VIEW_DAYS }).abortSignal(signal), "admin_turf_views"),
+    ),
+  ]);
+  if (!turfs.ok) return turfs;
+  let parsed: TurfViews | null = null;
+  let viewsReason: Reason | null = null;
+  if (views.ok) {
+    parsed = turfViewsOf(views.data);
+    if (!parsed) {
+      console.warn("admin_turf_views: an answer that isn't one");
+      viewsReason = "error";
+    }
+  } else viewsReason = views.reason;
+  return okSection({
+    turfs: noPhoneList(turfs.data, parsed),
+    views: parsed ? { days: parsed.days, since: parsed.since } : null,
+    viewsReason,
   });
 }
 

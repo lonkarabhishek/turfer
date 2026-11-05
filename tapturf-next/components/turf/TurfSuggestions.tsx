@@ -1,6 +1,7 @@
 "use client";
 
 import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -8,10 +9,13 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Globe,
   History,
   IndianRupee,
+  Instagram,
   Loader2,
   MessageCircle,
+  Navigation,
   Pencil,
   Phone,
   PhoneOff,
@@ -19,6 +23,8 @@ import {
   Sparkles,
   Trophy,
 } from "lucide-react";
+import { OwnerMark } from "@/components/turf/OwnerMark";
+import type { NoContactLinks } from "@/lib/turfPage/noContact";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { UserAvatar } from "@/components/account/UserAvatar";
 import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
@@ -138,33 +144,57 @@ function tally(lists: string[][]): { value: string; count: number }[] {
 
 /* ─── No-contact notice ────────────────────────────────── */
 
+const NO_LINKS: NoContactLinks = { directions: null, website: null, instagram: null, claim: null };
+const OPENS_NEW_TAB = <span className="sr-only"> (opens in a new tab)</span>;
+
 /**
- * Shown wherever Call / WhatsApp would be when a turf has no number.
- * `fixed-bottom` replaces the mobile CTA bar; `card` sits in the
- * desktop sidebar or inline in the page.
+ * Shown wherever Call / WhatsApp would be when a turf has no number, with
+ * what a player can do instead, in this order: get directions, the turf's
+ * own website or Instagram, tell us the number (the suggestion sheet; a
+ * number shows after a check) and, for its owner, the claim. The links
+ * come from the server (lib/turfPage/noContact.ts) and are plain links:
+ * nothing loads from Google or Instagram before a tap. `fixed-bottom`
+ * replaces the phone's Call / WhatsApp bar and keeps to two buttons, so it
+ * fits a 320px screen; `card` sits in the desktop sidebar or inline in the page.
  */
-export function NoContactNotice({ variant = "card" }: { variant?: "card" | "fixed-bottom" }) {
+export function NoContactNotice({ variant = "card", links }: { variant?: "card" | "fixed-bottom"; links?: NoContactLinks }) {
+  const l = links ?? NO_LINKS;
   if (variant === "fixed-bottom") {
     return (
       <div
-        className="fixed bottom-0 left-0 right-0 z-50 material-thick border-t border-primary-200/70 px-4 pt-3 md:hidden animate-slide-up"
+        className="fixed bottom-0 left-0 right-0 z-50 material-thick border-t border-primary-200/70 px-4 pt-2.5 md:hidden animate-slide-up"
         style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
       >
-        <div className="flex items-center gap-3">
-          <p className="flex-1 min-w-0 text-[13px] leading-snug text-primary-500">
-            We don&apos;t have this turf&apos;s contact details yet.
-          </p>
+        <p className="text-[13px] leading-snug text-primary-500">
+          We don&apos;t have this turf&apos;s contact details yet.
+        </p>
+        <div className="mt-2 flex gap-2">
+          {l.directions && (
+            <a
+              href={l.directions}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 flex items-center justify-center gap-1.5 h-11 px-4 max-[359px]:px-3 rounded-full bg-accent-500 active:bg-accent-600 text-white text-[15px] font-semibold"
+            >
+              <Navigation className="w-4 h-4" aria-hidden />
+              Directions
+              {OPENS_NEW_TAB}
+            </a>
+          )}
           <button
+            type="button"
             onClick={openSuggestSheet}
-            className="shrink-0 h-11 px-5 rounded-full bg-accent-500 active:bg-accent-600 text-white text-[15px] font-semibold"
+            className="flex-1 min-w-0 h-11 px-3 rounded-full bg-primary-100 active:bg-primary-200 text-primary-900 text-[15px] max-[359px]:text-[14px] font-semibold whitespace-nowrap"
           >
-            I know it
+            I know the number
           </button>
         </div>
       </div>
     );
   }
 
+  const secondary =
+    "flex items-center justify-center gap-2 h-11 rounded-full bg-white border border-primary-200 hover:bg-primary-100 text-primary-900 text-[15px] font-semibold transition-colors";
   return (
     <div className="rounded-2xl bg-primary-50 p-5 text-center">
       <div className="mx-auto mb-3 w-11 h-11 rounded-full bg-white flex items-center justify-center shadow-soft">
@@ -174,15 +204,54 @@ export function NoContactNotice({ variant = "card" }: { variant?: "card" | "fixe
         Unfortunately, we don&apos;t have the contact details for this turf yet.
       </p>
       <p className="mt-1 text-[14px] text-primary-500 leading-snug">
-        If you know them, let us know and help other players book.
+        If you know them, let us know and help other players reach them.
       </p>
-      <button
-        onClick={openSuggestSheet}
-        className="mt-4 w-full h-11 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[15px] font-semibold transition-colors"
-      >
-        Suggest info for this turf
-      </button>
-      <p className="mt-3 text-[12px] text-primary-400">
+      <div className="mt-4 space-y-2.5">
+        {l.directions && (
+          <a
+            href={l.directions}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-2 h-11 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[15px] font-semibold transition-colors"
+          >
+            <Navigation className="w-4 h-4" aria-hidden />
+            Get directions
+            {OPENS_NEW_TAB}
+          </a>
+        )}
+        {(l.website || l.instagram) && (
+          <div className="flex gap-2.5">
+            {l.website && (
+              <a href={l.website} target="_blank" rel="nofollow noopener noreferrer" className={`flex-1 min-w-0 ${secondary}`}>
+                <Globe className="w-4 h-4 shrink-0 text-primary-500" aria-hidden />
+                Website
+                {OPENS_NEW_TAB}
+              </a>
+            )}
+            {l.instagram && (
+              <a href={l.instagram} target="_blank" rel="nofollow noopener noreferrer" className={`flex-1 min-w-0 ${secondary}`}>
+                <Instagram className="w-4 h-4 shrink-0 text-primary-500" aria-hidden />
+                Instagram
+                {OPENS_NEW_TAB}
+              </a>
+            )}
+          </div>
+        )}
+        <button type="button" onClick={openSuggestSheet} className={`w-full ${secondary}`}>
+          I know the number
+        </button>
+      </div>
+      {l.claim && (
+        <Link href={l.claim} prefetch={false} className="mt-3 inline-flex min-h-11 items-center gap-1.5 text-[14px] rounded-full">
+          <OwnerMark size={16} tone="grey" />
+          <span>
+            <span className="text-primary-500">Own this turf? </span>
+            <span className="font-semibold text-accent-800">Claim it</span>
+          </span>
+          <ChevronRight className="w-3.5 h-3.5 text-accent-800" aria-hidden />
+        </Link>
+      )}
+      <p className={`${l.claim ? "mt-1" : "mt-3"} text-[12px] text-primary-400`}>
         Or email{" "}
         <a href={CONTACT_MAILTO} className="underline underline-offset-2 hover:text-primary-600">
           {CONTACT_EMAIL}
@@ -200,10 +269,13 @@ export function TurfSuggestions({
   hasPhone,
   turfUrl,
   initial,
+  noContact,
 }: {
   turfId: string;
   turfName: string;
   hasPhone: boolean;
+  /** No number (hasPhone false): what the inline no-number card offers instead. Not passed when there is one. */
+  noContact?: NoContactLinks;
   /** The page's canonical URL for the WhatsApp message. Passed in, not
    *  read from window, so the server-rendered link matches the client's. */
   turfUrl: string;
@@ -331,7 +403,7 @@ export function TurfSuggestions({
           <>
             {/* Desktop already shows the full notice in the sidebar. */}
             <div className="lg:hidden">
-              <NoContactNotice />
+              <NoContactNotice links={noContact} />
             </div>
             <div className="hidden lg:block">
               <SuggestRow turfName={turfName} />
@@ -869,7 +941,7 @@ function SuggestSheet({
 
             <Field
               label="Contact number"
-              hint={askPhoneFirst ? "The one thing we're missing. Players will call this to book." : undefined}
+              hint={askPhoneFirst ? "The one thing we're missing. It shows on the page after a quick check." : undefined}
             >
               <Input
                 type="tel"

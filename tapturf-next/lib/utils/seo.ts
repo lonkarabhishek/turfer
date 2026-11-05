@@ -4,7 +4,8 @@ import { summarisePagePrice } from "./prices";
 import { isOwnPhoto, normalizeImageUrl, orderPhotos, ownerPhotosFirst, sitePhotoUrl } from "./images";
 import { googleMapsUrl, publicLink, scrubBookingApps } from "./bookingApps";
 import { guessCityFromAddress, isCity, labelFor, stateFor } from "../city";
-import { normalizeIndianMobile, normalizeIndianPhone } from "./phone";
+import { normalizeIndianPhone } from "./phone";
+import { callNumber, whatsAppNumber, type ContactFields } from "./contact";
 import { openingHoursJsonLd } from "./hours";
 import { turfUrl } from "./turfPath";
 import { areaFor } from "./area";
@@ -187,18 +188,14 @@ export function generateBreadcrumbJsonLd(turf: Turf) {
 /**
  * The first phone number on the turf that is actually dialable
  * (mobile or STD landline). A column holding junk counts as no phone,
- * so the page shows "Suggest contact" instead of an empty button bar.
+ * so the page shows the no-number card instead of an empty button bar.
+ * The rule lives in lib/utils/contact.ts, which the admin's No phone list reads too.
  */
-export function getPhone(turf: Turf): string | null {
-  return (
-    [turf.owner_phone, turf.contact_info?.phone, turf.landline_phone].find((p) => normalizeIndianPhone(p)) ??
-    null
-  );
+export function getPhone(turf: ContactFields): string | null {
+  return callNumber(turf);
 }
 
 /** Number for the WhatsApp button: whatsapp_phone if set, else the call number when it is a mobile. */
-export function getWhatsAppPhone(turf: Turf): string | null {
-  return (
-    [turf.whatsapp_phone, turf.owner_phone, turf.contact_info?.phone].find((p) => normalizeIndianMobile(p)) ?? null
-  );
+export function getWhatsAppPhone(turf: ContactFields): string | null {
+  return whatsAppNumber(turf);
 }

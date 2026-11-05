@@ -37,3 +37,36 @@ export function mapEmbedSrc(p: { embedLink?: string | null; lat?: number | null;
   const address = p.address?.trim();
   return address ? `https://www.google.com/maps?q=${encodeURIComponent(address)}&output=embed` : null;
 }
+
+/**
+ * Google Maps directions to a turf, for the no-number card's "Get
+ * directions": a plain link (it opens in a new tab), so nothing loads
+ * from Google until it is tapped. The destination as the page's own "Get
+ * directions" under the map takes it (TurfMap): the point (lat, lng) when
+ * the turf has one (not 0,0, which is no place), else its name and
+ * address. With the turf's Google place id when it has one, so Maps
+ * opens on the place itself (destination_place_id, which Google reads
+ * only beside a destination). The "Gmap Embed link" is for the map, not
+ * a destination, so it is not read here. Null with nothing to go to.
+ */
+export function directionsUrl(p: {
+  lat?: number | string | null;
+  lng?: number | string | null;
+  name?: string | null;
+  address?: string | null;
+  placeId?: string | null;
+}): string | null {
+  const lat = p.lat == null || p.lat === "" ? NaN : Number(p.lat);
+  const lng = p.lng == null || p.lng === "" ? NaN : Number(p.lng);
+  const point = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
+  const text = [p.name, p.address]
+    .map((x) => (typeof x === "string" ? x.trim() : ""))
+    .filter(Boolean)
+    .join(", ");
+  const destination = point ? `${lat},${lng}` : text ? encodeURIComponent(text) : null;
+  if (!destination) return null;
+  // Place ids are letters, digits, - and _ (ChIJ..., about 27 long; longer forms exist).
+  const id = typeof p.placeId === "string" ? p.placeId.trim() : "";
+  const place = /^[A-Za-z0-9_-]{16,300}$/.test(id) ? id : null;
+  return `https://www.google.com/maps/dir/?api=1&destination=${destination}${place ? `&destination_place_id=${place}` : ""}`;
+}

@@ -14,7 +14,10 @@
     ],
     "types": [
       "node"
-    ]
+    ],
+    "paths": {
+      "@/*": ["./*"]
+    }
   },
   "files": [
     "lib/admin/trend.test.ts",
@@ -27,6 +30,7 @@
     "lib/admin/fetchGate.test.ts",
     "lib/admin/readers.test.ts",
     "lib/admin/glance.test.ts",
-    "lib/admin/fold.test.ts"
+    "lib/admin/fold.test.ts",
+    "lib/admin/noPhone.test.ts"
   ]
 }

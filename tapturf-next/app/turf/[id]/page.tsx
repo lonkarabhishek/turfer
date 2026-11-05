@@ -44,6 +44,7 @@ import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
 import { TurfGames } from "@/components/turf/TurfGames";
 import { sportPageForLabel } from "@/lib/sports";
 import { TurfSuggestions, NoContactNotice } from "@/components/turf/TurfSuggestions";
+import { bookingFeeLine, membersNote, noContactLinks } from "@/lib/turfPage/noContact";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 
 // A day: since the 20 Oct outage the cache queue purges a turf's page
@@ -151,6 +152,10 @@ export default async function TurfDetailPage({
   // saved only "WhatsApp number for bookings").
   const hasContact = !!(phone || whatsappPhone);
   const contact = { call: !!phone, whatsapp: !!whatsappPhone };
+  // No number: what the no-number card and bar offer instead (directions,
+  // the turf's own site or Instagram, the claim). Only then, so a page
+  // with a number renders exactly as before.
+  const noContact = hasContact ? undefined : noContactLinks(turf, claimed);
   const sidebarPrice = summarisePagePrice(turf);
   // Rates players shared (From players): the Pricing section points to
   // them when the turf lists none.
@@ -364,6 +369,7 @@ export default async function TurfDetailPage({
               hasPhone={hasContact}
               turfUrl={turfUrl(turf)}
               initial={page.suggestions}
+              noContact={noContact}
             />
             {/* Google Maps — show whenever we have any locatable signal
                 (coords, an embeddable iframe, or at least an address to
@@ -495,7 +501,8 @@ export default async function TurfDetailPage({
                 <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200/70 px-3.5 py-2.5">
                   <p className="text-[13px] font-semibold text-amber-900">Members&apos; club</p>
                   <p className="text-[13px] text-amber-900/80 leading-snug mt-0.5">
-                    {accessNotes || "Booking is for members. Call to ask about guest access."}
+                    {/* "Call to ask" only when there is a number to call. */}
+                    {membersNote(accessNotes, hasContact)}
                   </p>
                 </div>
               )}
@@ -510,20 +517,22 @@ export default async function TurfDetailPage({
                   pageUrl={turfUrl(turf)}
                 />
               ) : (
-                <NoContactNotice />
+                <NoContactNotice links={noContact} />
               )}
 
               {/* Host their own game at this turf — jumps into the
                   create-game wizard with this turf pre-selected. */}
               <CreateGameHereButton turfId={turf.id} turfName={turf.name} />
 
-              {!membersOnly && (
+              {/* Only with a number to contact: a page without one has nobody to reserve with. */}
+              {bookingFeeLine(membersOnly, hasContact) && (
                 <p className="text-xs text-center text-primary-500 mt-4">
-                  No booking fee. Contact turf directly to reserve your slot.
+                  {bookingFeeLine(membersOnly, hasContact)}
                 </p>
               )}
               <p className="text-xs text-center text-primary-500 mt-2 leading-relaxed">
-                {!claimed && (
+                {/* The no-number card has its own claim link. */}
+                {!claimed && hasContact && (
                   <>
                     Own this turf?{" "}
                     <a href="#claim" className="font-semibold text-accent-800 hover:underline underline-offset-2">
@@ -559,7 +568,7 @@ export default async function TurfDetailPage({
           pageUrl={turfUrl(turf)}
         />
       ) : (
-        <NoContactNotice variant="fixed-bottom" />
+        <NoContactNotice variant="fixed-bottom" links={noContact} />
       )}
     </div>
   );

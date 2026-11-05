@@ -17,6 +17,7 @@ import {
   getAdminNotifications,
   getAdminRequests,
   getAdminReviews,
+  getAdminNoPhoneTurfs,
   getAdminTurfs,
   getAdminTypedVenues,
   getAdminUsers,
@@ -50,7 +51,7 @@ import { getAdminClaims } from "@/lib/queries/adminClaims";
 import { CLAIMED_FILTERS, CLAIMS_CAP, claimCounts, claimWhen, claimedTurfs, claimsCut, howVerified, phoneLabel, type ClaimedFilter } from "@/lib/admin/claimed";
 import { keyLabel } from "@/lib/admin/claims";
 import { SectionError } from "@/components/admin/SectionStatus";
-import type { Reason } from "@/lib/admin/section";
+import { reasonText, type Reason } from "@/lib/admin/section";
 import { getAdminTournaments } from "@/lib/queries/adminTournaments";
 import { groundTitle, sizeLine } from "@/lib/turfSize/sizes";
 
@@ -210,6 +211,68 @@ const sportName = (s: string | null) => (s ? s.replace(/-/g, " ").replace(/^\w/,
 
 /** A view whose rows couldn't be read: why, and a retry (never "Nothing here"). */
 const failedView = (reason: Reason, what: string) => ({ count: null, node: <SectionError reason={reason} what={what} /> });
+
+/**
+ * Turfs, No phone: every active turf whose page shows no Call and no
+ * WhatsApp (the page's own rule, lib/utils/contact.ts), most viewed over
+ * the last 28 days first, with the views, so the numbers worth finding
+ * first are on top. Without the views (before 20261105_admin_turf_views.sql,
+ * or a failed read) the list is by name and says so.
+ */
+async function noPhoneView(): Promise<{ count: number | null; node: React.ReactNode }> {
+  const res = await getAdminNoPhoneTurfs();
+  if (!res.ok) return failedView(res.reason, "the turfs");
+  const { turfs, views, viewsReason } = res.data;
+  const bad = turfs.filter((t) => t.why === "bad").length;
+  const viewsNote =
+    viewsReason === "not_set_up"
+      ? "Views aren't counted here until 20261105_admin_turf_views.sql is applied, so the list is by name for now."
+      : viewsReason === "not_allowed"
+        ? "Couldn't confirm it's you for the views (sign in with the owner's Google account), so the list is by name."
+        : viewsReason
+          ? `${reasonText(viewsReason)}: the views, so the list is by name for now.`
+          : null;
+  return {
+    count: turfs.length,
+    node: (
+      <>
+        <div className="mb-3 space-y-1">
+          <p className="text-sm text-primary-500">
+            These pages show no Call or WhatsApp: {turfs.length - bad} store no number, {bad} store one that fails the format check.
+            {views && ` Most viewed first: turf page views over the last ${views.days} days${views.since ? `, since ${fmtGameDate(views.since)}` : ""} (India days, today included).`}
+          </p>
+          {viewsNote && <p className="text-[13px] text-amber-800">{viewsNote}</p>}
+        </div>
+        <Table head={["Turf", "City", `Views${views ? ` (${views.days} days)` : ""}`, "Number", "Rating", "Photos", "Updated"]} empty={turfs.length === 0}>
+          {turfs.map((t) => (
+            <tr key={t.id}>
+              <td className="px-4 py-3">
+                <Link href={turfPath(t)} className="text-primary-900 hover:text-accent-600">{t.name}</Link>
+                {t.claimed && <Badge className="ml-1.5 bg-accent-50 text-accent-700">Claimed</Badge>}
+                <div className="text-[12px] text-primary-400 max-w-[280px] truncate">{t.address}</div>
+              </td>
+              <td className="px-4 py-3 text-primary-700">{t.city && isCity(t.city) ? labelFor(t.city) : "-"}</td>
+              <td className="px-4 py-3 tabular-nums font-semibold text-primary-900">{t.views == null ? "-" : t.views.toLocaleString("en-IN")}</td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                {t.why === "bad" ? (
+                  <Badge className="bg-amber-100 text-amber-800">fails the check</Badge>
+                ) : (
+                  <Badge className="bg-hot-500/10 text-hot-600">none stored</Badge>
+                )}
+              </td>
+              <td className="px-4 py-3 tabular-nums whitespace-nowrap">
+                {Number(t.rating) > 0 ? `★ ${Number(t.rating).toFixed(1)}` : "-"}
+                {t.total_reviews ? <span className="text-primary-400"> ({t.total_reviews})</span> : null}
+              </td>
+              <td className="px-4 py-3 tabular-nums">{t.photos}</td>
+              <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(t.updated_at)}</td>
+            </tr>
+          ))}
+        </Table>
+      </>
+    ),
+  };
+}
 
 /** A view's address for a filter, and for the Users list a city (null: every city). */
 function viewHref(v: View, filter: string, city: string | null): string {
@@ -643,6 +706,7 @@ async function renderView(v: View, filter: string, city: string | null = null): 
     }
 
     case "turfs": {
+      if (filter === "nophone") return noPhoneView();
       const res = await getAdminTurfs(filter as TurfFilter);
       if (!res.ok) return failedView(res.reason, "the turfs");
       const turfs = res.data;
