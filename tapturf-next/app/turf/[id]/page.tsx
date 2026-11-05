@@ -28,6 +28,7 @@ import { labelFor, isCity } from "@/lib/city";
 import { TurfImageGallery } from "@/components/turf/TurfImageGallery";
 import { TurfPricing, slotRatesHint } from "@/components/turf/TurfPricing";
 import { TurfDetails } from "@/components/turf/TurfDetails";
+import { FreeSlotsCard } from "@/components/turf/FreeSlotsCard";
 import { GroundSize } from "@/components/turf/GroundSize";
 import { getGroundPeers } from "@/lib/queries/groundSizes";
 import { TurfAmenities } from "@/components/turf/TurfAmenities";
@@ -350,6 +351,7 @@ export default async function TurfDetailPage({
 
             <TurfAmenities turf={turf} />
             <TurfDetails turf={turf} hasContact={hasContact} />
+            {claimed && hasContact && <FreeSlotsCard turfId={turf.id} turfName={turf.name} pageUrl={turfUrl(turf)} hours={{ opening_hours: turf.opening_hours, start_time: turf.start_time, end_time: turf.end_time, is_24x7: turf.is_24x7, closed_days: turf.closed_days }} phone={phone} whatsappPhone={whatsappPhone} membersOnly={membersOnly} />}
             {/* The owner's ground sizes, drawn and benchmarked (none: nothing). */}
             {turf.ground_sizes && <GroundSize turf={turf} sizes={turf.ground_sizes} peers={peers} renderedAt={page.renderedAt} hasContact={hasContact} />}
             <TurfPricing turf={turf} claimed={claimed} contact={contact} playerPrice={playerPrice} priceNote={priceNote} />

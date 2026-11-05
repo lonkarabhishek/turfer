@@ -208,7 +208,7 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
         </div>
       </Group>
 
-      <Group title="Opening hours">
+      <Group id="hours" title="Opening hours">
         <label className="inline-flex items-center gap-2 text-[15px] text-primary-800 cursor-pointer">
           <input type="checkbox" checked={f.is_24x7} onChange={(e) => set("is_24x7", e.target.checked)} className="w-5 h-5 accent-[#16A34A]" />
           Open 24 hours
@@ -405,9 +405,10 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
   );
 }
 
-function Group({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+/** id: a section other parts of the page link to (#hours, from Free slots). */
+function Group({ id, title, hint, children }: { id?: string; title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="mt-5 rounded-2xl border border-primary-200 bg-white p-4 md:p-5">
+    <div id={id} className={`mt-5 rounded-2xl border border-primary-200 bg-white p-4 md:p-5 ${id ? "scroll-mt-20" : ""}`}>
       <p className="font-semibold text-primary-900">{title}</p>
       {hint && <p className="text-[13px] text-primary-500 mt-0.5">{hint}</p>}
       <div className="mt-3">{children}</div>

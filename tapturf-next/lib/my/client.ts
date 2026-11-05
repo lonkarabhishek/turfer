@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import type { AspectId } from "@/lib/reviews/catalog";
 import type { AspectCount, ReportFields } from "@/lib/reviews/types";
+import { hoursPatch, parseOwner, type OwnerSlots, type SlotChange } from "@/lib/availability/slots";
 
 /**
  * Browser side of myTapturf. Every owner call goes to a database
@@ -182,3 +183,46 @@ export type OwnerDashboard =
       reviews: OwnerReviews;
       edits: { created_at: string; fields: string[] }[];
     };
+
+// ── Free slots (supabase/migrations/20261105_turf_availability.sql, lib/availability/slots.ts) ──
+
+/**
+ * The owner's free slots: the turf's hours, the last update and the booked
+ * hours. "missing" before the migration (the section hides); a refusal is
+ * { error } (forbidden, not_claimed: hides too), as is an answer that is
+ * not the shape slots.ts reads ({ error: "malformed" }). Throws when the
+ * call itself fails (the section offers Try again).
+ */
+export async function getOwnerSlots(turfId: string): Promise<OwnerSlots | { error: string } | "missing"> {
+  let raw: unknown;
+  try {
+    raw = await ownerRpc<unknown>("owner_slots", { p_turf_id: turfId });
+  } catch (e) {
+    if (e instanceof Error && /Could not find the function/i.test(e.message)) return "missing";
+    throw e;
+  }
+  return parseOwner(raw) ?? { error: "malformed" };
+}
+
+/** Mark hours free or booked (one batch, at most MAX_CHANGES). The answer is the owner's view after it. */
+export async function setOwnerSlots(turfId: string, changes: SlotChange[]): Promise<OwnerSlots | { error: string }> {
+  return parseOwner(await ownerRpc<unknown>("owner_set_slots", { p_turf_id: turfId, p_changes: changes })) ?? { error: "malformed" };
+}
+
+/** "All correct": nothing changes but the time players see. */
+export async function confirmOwnerSlots(turfId: string): Promise<OwnerSlots | { error: string }> {
+  return parseOwner(await ownerRpc<unknown>("owner_confirm_slots", { p_turf_id: turfId })) ?? { error: "malformed" };
+}
+
+/**
+ * The free slots' one-time hours picker, for a turf with no hours to make
+ * slots from: saved as any hours edit is (owner_update_turf, which writes the
+ * turf and refreshes its page once), so the page's Opening hours and its
+ * free slots always agree.
+ */
+export async function saveSlotHours(turfId: string, p: { open: string; close: string; allDay: boolean }): Promise<boolean> {
+  const r = await ownerRpc<{ ok?: boolean; error?: string }>("owner_update_turf", { p_turf_id: turfId, p_patch: hoursPatch(p) });
+  if (!r?.ok) return false;
+  await refreshTurfPage(turfId);
+  return true;
+}

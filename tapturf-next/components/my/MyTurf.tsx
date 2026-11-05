@@ -6,7 +6,7 @@ import { ArrowLeft, Check, Circle, ExternalLink, Loader2, Star } from "lucide-re
 import { useAuth } from "@/components/auth/AuthProvider";
 import { DailyChart } from "@/components/admin/DailyChart";
 import { labelFor, isCity } from "@/lib/city";
-import { ownerRpc, type OwnerDashboard, type OwnerTurf } from "@/lib/my/client";
+import { getOwnerSlots, ownerRpc, type OwnerDashboard, type OwnerTurf } from "@/lib/my/client";
 import { EditListing } from "./EditListing";
 import { OwnerPhotos } from "./OwnerPhotos";
 import { OwnerPhotoNudge } from "./OwnerPhotoNudge";
@@ -14,6 +14,7 @@ import { PlayerReports } from "./PlayerReports";
 import { ManagerNameNote } from "./ManagerNameNote";
 import { GroundSizes, type GroundSizeState } from "./GroundSizes";
 import { GroundSizeNudge } from "./GroundSizeNudge";
+import { FreeSlots, type InitialSlots } from "./FreeSlots";
 import { turfPath } from "@/lib/utils/turfPath";
 
 const PERIODS = [7, 30, 90] as const;
@@ -45,6 +46,22 @@ export function MyTurf({ id }: { id: string }) {
     const t = setTimeout(() => void load(), 0);
     return () => clearTimeout(t);
   }, [user, load]);
+
+  // Free slots: read at the same time as the dashboard, so the section is there when the page draws
+  // (components/my/FreeSlots.tsx adopts it once, then keeps its own). Once per sign-in.
+  const signedIn = !!user;
+  const [slots0, setSlots0] = useState<InitialSlots>(undefined);
+  useEffect(() => {
+    if (!signedIn) return;
+    let alive = true;
+    getOwnerSlots(id).then(
+      (r) => alive && setSlots0(r),
+      () => alive && setSlots0("failed"),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [signedIn, id]);
 
   if (loading) return <Shell><p className="text-primary-500">Loading…</p></Shell>;
   if (!user)
@@ -86,6 +103,8 @@ export function MyTurf({ id }: { id: string }) {
           Public page <ExternalLink className="w-3.5 h-3.5" />
         </Link>
       </div>
+      {/* Free slots: which hours are free, on the public page for 24 hours after the last tap. */}
+      <FreeSlots turfId={t.id} initial={slots0} hoursKey={`${t.start_time}|${t.end_time}|${t.is_24x7}|${t.closed_days}`} onHoursSaved={load} />
       {/* "Managed by @you" on the public page (under the name and in the Claimed turf panel): whether it shows, or how to make it show. */}
       <ManagerNameNote className="mt-3" turfName={t.name} turfId={t.id} pageHref={turfPath(t)} />
       {/* Fewer than 3 photos of their own: ask for them (only those can show on Google), down to Photos. */}

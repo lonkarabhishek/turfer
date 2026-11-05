@@ -5,7 +5,7 @@ import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
 import { CITY_LIST_AND } from "@/lib/city";
 
-const UPDATED = "2026-10-30";
+const UPDATED = "2026-11-05";
 const PAGE_URL = "https://www.tapturf.in/terms";
 
 export const metadata: Metadata = {
@@ -65,7 +65,9 @@ const SECTIONS: LegalSection[] = [
         <p>
           <strong>Listings can be out of date.</strong> Venue information comes from the venues, from public
           sources and from players. We check what we can, but prices, hours and facilities change. Confirm with
-          the venue before you travel. Where a price is marked as reported by players, it is unverified.
+          the venue before you travel. Where a price is marked as reported by players, it is unverified. Free
+          slots on a turf page are hours its owner marked free, shown with when they last updated them; the
+          venue confirms.
         </p>
       </>
     ),
