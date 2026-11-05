@@ -69,9 +69,12 @@ import { post as howToSplitCricketTeamsFairly } from "./posts/how-to-split-crick
 import { post as howToCalculateNetRunRateCricket } from "./posts/how-to-calculate-net-run-rate-cricket";
 // 2026-11-01: guide, what the DLS target on TV means.
 import { post as whatIsDlsMethodCricket } from "./posts/what-is-dls-method-cricket";
+// 2026-11-05: tool how-to, cricket tournament manager points table.
+import { post as howToMakeACricketPointsTable } from "./posts/how-to-make-a-cricket-points-table";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  howToMakeACricketPointsTable,
   whatIsDlsMethodCricket,
   howToCalculateNetRunRateCricket,
   turfsInKharadiPune,
