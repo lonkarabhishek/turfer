@@ -26,9 +26,13 @@ const BOOKING_REQUESTS: RegExp[] = [
   /\b(?:want|wanna|would like|like|need|have|planning|plan|looking)\s+to\s+(?:book|reserve|play)\b/,
   /\b(?:can|could|may)\s+(?:i|we|u|you)\s+(?:book|reserve|play|get\s+(?:a\s+)?slot)\b/,
   /\bbook(?:ing)?\s+(?:a\s+|the\s+|one\s+|this\s+|your\s+)?(?:slot|ground|turf|court|box|pitch|game|match)\b/,
-  /\bbook(?:ing)?\s+(?:for|on|at|from|tomorrow|today|tonight)\b/,
+  // "book for", "booking at 7"; not an owner's "booking on WhatsApp" or "booking at the counter"
+  /\bbook(?:ing)?\s+(?:for|from|tomorrow|today|tonight|at\s+\d)/,
   /\bbook(?:ing)?\s*(?:karna|krna|karni|krni|karo|kro|kar|chahiye|chaiye|hai)\b/,
-  /\bslots?\s+(?:for|at|on|from|chahiye|chaiye|milega|available|book)\b/,
+  // asking for a slot; not an owner's "slots available from 6 am" or "slots for weekends are 1200"
+  /\bslots?\s+(?:chahiye|chaiye|milega|book)\b/,
+  /\b(?:a|one|1|any)\s+slot\s+(?:for|at|on|from|tomorrow|today|tonight)\b/,
+  /\bslot\s+(?:tomorrow|today|tonight)\b/,
   /\breserv(?:e|ation)\b/,
   // "for 2 hours", never "open 24 hours" or "for 24 hours"
   /\bfor\s+(?:[1-9]|1[0-2]|1\.5|2\.5|one|two|three|four|five|half\s+an?|an?)\s*(?:hours?|hrs?)\b/,

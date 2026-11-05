@@ -54,6 +54,8 @@ const BOOKING = [
   "I would like to book the turf",
   "booking for 1.5 hours",
   "WE WANT TO BOOK",
+  "One slot for tomorrow 7 pm please",
+  "can we book at 7 pm",
 ];
 const NOT_BOOKING = [
   "",
@@ -76,6 +78,10 @@ const NOT_BOOKING = [
   "The turf is open from 6 am to 11 pm",
   "I want to update the prices",
   "Staff at the turf, the owner asked me to claim it",
+  "Slots available from 6 am to midnight",
+  "Slots for weekends are 1200",
+  "Booking on WhatsApp only",
+  "Booking at the counter or on call",
 ];
 
 test("booking-like notes: requests to book or play count, in English and Hinglish", () => {
