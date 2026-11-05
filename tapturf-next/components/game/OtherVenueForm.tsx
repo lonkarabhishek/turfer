@@ -234,7 +234,7 @@ export function OtherVenueForm({
       >
         Cancel
       </button>
-      <p className="mt-1 text-[12px] text-primary-500 leading-snug text-center">TapTurf doesn&apos;t take bookings: you book the venue yourself.</p>
+      <p className="mt-1 text-[12px] text-primary-500 leading-snug text-center">For bookings, contact the venue directly.</p>
     </div>
   );
 }

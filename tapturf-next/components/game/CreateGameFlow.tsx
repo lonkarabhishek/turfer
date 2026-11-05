@@ -1008,7 +1008,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                       {repeatNext.length > 4 && <li className="inline-flex items-center h-8 px-1 text-[13px] text-primary-500">and more</li>}
                     </ul>
                     <p className="text-[12px] text-primary-500 mt-2.5 leading-snug">
-                      Each goes up 4 weeks ahead as its own game. Book the {what} for each date yourself{venue ? "" : " (call or WhatsApp the turf)"}: TapTurf doesn&apos;t take bookings.
+                      Each goes up 4 weeks ahead as its own game. For bookings, contact the {what} directly for each date.
                     </p>
                   </div>
                 )}
