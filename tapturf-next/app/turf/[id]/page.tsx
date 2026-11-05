@@ -44,6 +44,7 @@ import { CreateGameHereButton } from "@/components/turf/CreateGameHereButton";
 import { TurfGames } from "@/components/turf/TurfGames";
 import { sportPageForLabel } from "@/lib/sports";
 import { TurfSuggestions, NoContactNotice } from "@/components/turf/TurfSuggestions";
+import { bookingFeeLine, membersNote, noContactLinks, turfCheck } from "@/lib/turfPage/noContact";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 
 // A day: since the 20 Oct outage the cache queue purges a turf's page
@@ -151,6 +152,10 @@ export default async function TurfDetailPage({
   // saved only "WhatsApp number for bookings").
   const hasContact = !!(phone || whatsappPhone);
   const contact = { call: !!phone, whatsapp: !!whatsappPhone };
+  // No number: what the no-number card and bar offer instead (directions,
+  // the turf's own site or Instagram, the claim). Only then, so a page
+  // with a number renders exactly as before.
+  const noContact = hasContact ? undefined : noContactLinks(turf, claimed);
   const sidebarPrice = summarisePagePrice(turf);
   // Rates players shared (From players): the Pricing section points to
   // them when the turf lists none.
@@ -188,7 +193,9 @@ export default async function TurfDetailPage({
   const cityId = isCity(turf.city) ? turf.city : null;
 
   return (
-    <div className="has-bottom-cta">
+    // data-no-contact: a page with no number. The site footer's tagline (it says to call or
+    // WhatsApp the turf) is hidden on it (app/globals.css); a page with a number keeps its markup.
+    <div className="has-bottom-cta" {...(hasContact ? {} : { "data-no-contact": "" })}>
       <TurfJsonLd turf={turf} reviewStats={page.reviewStats} reviews={page.reviews} managerIds={page.managerIds} />
       <NoteInterest city={turf.city} sports={turf.sports} turfId={turf.id} />
 
@@ -342,9 +349,9 @@ export default async function TurfDetailPage({
             )}
 
             <TurfAmenities turf={turf} />
-            <TurfDetails turf={turf} />
+            <TurfDetails turf={turf} hasContact={hasContact} />
             {/* The owner's ground sizes, drawn and benchmarked (none: nothing). */}
-            {turf.ground_sizes && <GroundSize turf={turf} sizes={turf.ground_sizes} peers={peers} renderedAt={page.renderedAt} />}
+            {turf.ground_sizes && <GroundSize turf={turf} sizes={turf.ground_sizes} peers={peers} renderedAt={page.renderedAt} hasContact={hasContact} />}
             <TurfPricing turf={turf} claimed={claimed} contact={contact} playerPrice={playerPrice} priceNote={priceNote} />
 
             {/* Upcoming games here, with "Host a game here" right below. */}
@@ -364,6 +371,7 @@ export default async function TurfDetailPage({
               hasPhone={hasContact}
               turfUrl={turfUrl(turf)}
               initial={page.suggestions}
+              noContact={noContact}
             />
             {/* Google Maps — show whenever we have any locatable signal
                 (coords, an embeddable iframe, or at least an address to
@@ -414,7 +422,7 @@ export default async function TurfDetailPage({
                 name jumps here; last, as the owner asked on 29 Oct), then one
                 line for the owner of another turf, and no "request access"
                 link (its owner adds people). */}
-            {!claimed && <ClaimInvite turfId={turf.id} turfName={meta.name} />}
+            {!claimed && <ClaimInvite turfId={turf.id} turfName={meta.name} hasNumber={hasContact} />}
             {claimed && (
               <>
                 <OwnerPanel managers={managers} priceNote={priceNote} className="mt-10" />
@@ -458,7 +466,7 @@ export default async function TurfDetailPage({
                       Reported prices
                     </span>
                     <p className="text-[13px] text-primary-500 mt-1">
-                      See Pricing below. Unverified, confirm with the turf.
+                      {`See Pricing below. Unverified, ${turfCheck(hasContact)}.`}
                     </p>
                   </div>
                 ) : (
@@ -495,7 +503,8 @@ export default async function TurfDetailPage({
                 <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200/70 px-3.5 py-2.5">
                   <p className="text-[13px] font-semibold text-amber-900">Members&apos; club</p>
                   <p className="text-[13px] text-amber-900/80 leading-snug mt-0.5">
-                    {accessNotes || "Booking is for members. Call to ask about guest access."}
+                    {/* "Call to ask" only when there is a number to call. */}
+                    {membersNote(accessNotes, hasContact)}
                   </p>
                 </div>
               )}
@@ -510,20 +519,22 @@ export default async function TurfDetailPage({
                   pageUrl={turfUrl(turf)}
                 />
               ) : (
-                <NoContactNotice />
+                <NoContactNotice links={noContact} />
               )}
 
               {/* Host their own game at this turf — jumps into the
                   create-game wizard with this turf pre-selected. */}
               <CreateGameHereButton turfId={turf.id} turfName={turf.name} />
 
-              {!membersOnly && (
+              {/* Only with a number to contact: a page without one has nobody to reserve with. */}
+              {bookingFeeLine(membersOnly, hasContact) && (
                 <p className="text-xs text-center text-primary-500 mt-4">
-                  No booking fee. Contact turf directly to reserve your slot.
+                  {bookingFeeLine(membersOnly, hasContact)}
                 </p>
               )}
               <p className="text-xs text-center text-primary-500 mt-2 leading-relaxed">
-                {!claimed && (
+                {/* The no-number card has its own claim link. */}
+                {!claimed && hasContact && (
                   <>
                     Own this turf?{" "}
                     <a href="#claim" className="font-semibold text-accent-800 hover:underline underline-offset-2">
@@ -559,7 +570,7 @@ export default async function TurfDetailPage({
           pageUrl={turfUrl(turf)}
         />
       ) : (
-        <NoContactNotice variant="fixed-bottom" />
+        <NoContactNotice variant="fixed-bottom" links={noContact} />
       )}
     </div>
   );

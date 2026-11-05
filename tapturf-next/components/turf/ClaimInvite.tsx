@@ -28,9 +28,12 @@ export function ClaimHint() {
  * frame marked Preview, and said to screen readers as a preview: this
  * turf is not claimed), and the free claim on myTapturf. A neutral
  * border on purpose: the green rim is what the page gets once claimed.
- * No numbers, no deadlines; TapTurf takes no bookings.
+ * No numbers, no deadlines; TapTurf takes no bookings. A page with no
+ * usable number (hasNumber false) says neither "call" nor "a code to the
+ * number on this page": players can't call it, and its claim is checked by
+ * hand (as myTapturf says for a listing with no mobile).
  */
-export function ClaimInvite({ turfId, turfName }: { turfId: string; turfName: string }) {
+export function ClaimInvite({ turfId, turfName, hasNumber = true }: { turfId: string; turfName: string; hasNumber?: boolean }) {
   return (
     <section
       id="claim"
@@ -55,7 +58,7 @@ export function ClaimInvite({ turfId, turfName }: { turfId: string; turfName: st
       <div className="md:col-start-1 md:row-start-2">
         <ul className="mt-5 space-y-3.5">
           <Benefit icon={<ChartColumn className="w-4.5 h-4.5 text-accent-700" aria-hidden />} title="See who finds you">
-            How many players view your page, call and WhatsApp you.
+            {hasNumber ? "How many players view your page, call and WhatsApp you." : "How many players view your page, and how they find it."}
           </Benefit>
           <Benefit icon={<PencilLine className="w-4.5 h-4.5 text-accent-700" aria-hidden />} title="Keep your page right">
             Set your own prices, hours and numbers.
@@ -73,7 +76,9 @@ export function ClaimInvite({ turfId, turfName }: { turfId: string; turfName: st
           <ArrowRight className="w-4 h-4" aria-hidden />
         </Link>
         <p className="mt-3 text-[13px] text-primary-500 leading-snug">
-          Have the phone with the number on this page? A code to it gets you in at once. If not, our team checks by hand.
+          {hasNumber
+            ? "Have the phone with the number on this page? A code to it gets you in at once. If not, our team checks by hand."
+            : "This page has no number yet, so our team checks your claim by hand, usually within a day. Add your numbers once you're in."}
         </p>
       </div>
     </section>

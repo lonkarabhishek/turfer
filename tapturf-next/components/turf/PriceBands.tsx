@@ -20,7 +20,7 @@ const BAND_LABEL: Record<BandRow["band"], { name: string; time: string }> = {
  * without their source notes (bandRows) and the month they were checked
  * (bandsCheckedOn), so nothing about where they came from reaches the page.
  */
-export function PriceBands({ bands, checked }: { bands: BandRow[]; checked: string | null }) {
+export function PriceBands({ bands, checked, noNumber = false }: { bands: BandRow[]; checked: string | null; noNumber?: boolean }) {
   const formats = [...new Set(bands.map((b) => b.format ?? ""))];
   const [active, setActive] = useState(formats[0]);
   const rows = bands.filter((b) => (b.format ?? "") === active);
@@ -84,8 +84,10 @@ export function PriceBands({ bands, checked }: { bands: BandRow[]; checked: stri
           </tbody>
         </table>
       </div>
+      {/* No number (noNumber): check the rate at the turf, as lib/turfPage/noContact.ts turfCheck words it (not imported: this runs in the browser). */}
       <p className="mt-2 text-[12px] text-primary-400">
-        {checked ? `Rates as of ${checked}. ` : ""}Times are approximate; confirm the rate with the turf.
+        {checked ? `Rates as of ${checked}. ` : ""}
+        {noNumber ? "Times are approximate; check the rate at the turf." : "Times are approximate; confirm the rate with the turf."}
       </p>
     </div>
   );

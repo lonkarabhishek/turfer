@@ -41,7 +41,8 @@ export async function Footer() {
             <h3 className="font-bold text-2xl text-white tracking-tight font-serif">
               Tap<span className="text-accent-400">Turf</span>
             </h3>
-            <p className="mt-3 text-sm text-primary-200 leading-relaxed">
+            {/* footer-tagline: hidden on a turf page with no number (app/globals.css), which has nobody to call. */}
+            <p className="footer-tagline mt-3 text-sm text-primary-200 leading-relaxed">
               Find and compare sports turfs and courts across India. Call or WhatsApp the turf, no booking fee.
             </p>
             {top.length > 0 && (
