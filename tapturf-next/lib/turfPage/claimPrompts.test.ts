@@ -1,6 +1,29 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BOOKINGS_LINE, CLAIM_COPY, claimCopyProblem, claimPrompts, phoneClaimPromptCount } from "./claimPrompts";
+import { BOOKINGS_LINE, CLAIM_COPY, claimCopyProblem, claimPrompts, invitePlayersLine, phoneClaimPromptCount } from "./claimPrompts";
+import { BOOKING_LINE, bookingLine } from "./noContact";
+
+test("the invite's players line: the booking line only where the phone bar has it (a number, not a members' club)", () => {
+  assert.equal(BOOKINGS_LINE, BOOKING_LINE, "one source for the site owner's line");
+  for (const hasNumber of [true, false]) for (const membersOnly of [true, false]) {
+    const p = invitePlayersLine({ hasNumber, membersOnly });
+    const bar = bookingLine(membersOnly, hasNumber);
+    if (bar) assert.deepEqual(p, { lead: "Here to play?", line: BOOKING_LINE });
+    else assert.ok(!p || !p.line.includes(BOOKING_LINE), `no booking line: number ${hasNumber}, members ${membersOnly}`);
+  }
+  // No number (a members' club or not): where to tell us one, and no call, book or reserve.
+  for (const membersOnly of [true, false]) {
+    const p = invitePlayersLine({ hasNumber: false, membersOnly });
+    assert.ok(p);
+    assert.equal(p.line, "If you know the turf's number, tap I know the number.");
+    assert.doesNotMatch(`${p.lead} ${p.line}`, /\b(call|book|booking|bookings|reserve)\b/i);
+    assert.equal(claimCopyProblem(`${p.lead} ${p.line}`), null);
+  }
+  // A members' club with a number: no players line (its page says how to ask about guest access).
+  assert.equal(invitePlayersLine({ hasNumber: true, membersOnly: true }), null);
+  // The invite's other no-number words for players: no call, book or reserve.
+  assert.doesNotMatch("How many players view your page, and how they find it.", /\b(call|book|booking|reserve)\b/i);
+});
 
 const KINDS = [
   { kind: "number + prices", hasNumber: true, noPrices: false, want: { hint: true, pricingLine: false, invite: true, sidebar: true }, phone: 2 },

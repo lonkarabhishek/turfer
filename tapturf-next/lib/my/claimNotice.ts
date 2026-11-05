@@ -1,4 +1,4 @@
-import { BOOKINGS_LINE } from "../turfPage/claimPrompts";
+import { bookingLine } from "../turfPage/noContact";
 
 // Relative imports only, so node --test runs this (lib/my/claimNotice.test.ts, npm run test:my).
 
@@ -39,9 +39,17 @@ function nameOf(turfName: string | null | undefined): string {
 /**
  * The notification for a decision: approved (active), or rejected with the
  * admin's optional kind line. Null for any other status (revoking or
- * restoring tells nobody anything).
+ * restoring tells nobody anything). A rejection ends with "Want to play
+ * there?" and the site owner's line only where the turf's page shows it
+ * (a number to contact, not a members' club: bookingLine); `page` unknown
+ * keeps it.
  */
-export function claimDecisionNotice(status: string, turfName: string | null | undefined, extra?: unknown): { type: string; title: string; message: string } | null {
+export function claimDecisionNotice(
+  status: string,
+  turfName: string | null | undefined,
+  extra?: unknown,
+  page: { hasNumber: boolean; membersOnly: boolean } = { hasNumber: true, membersOnly: false },
+): { type: string; title: string; message: string } | null {
   const name = nameOf(turfName);
   if (status === "active") {
     return {
@@ -52,7 +60,8 @@ export function claimDecisionNotice(status: string, turfName: string | null | un
   }
   if (status === "rejected") {
     const line = kindLine(extra);
-    const message = [`TapTurf could not confirm that you run ${name}.`, line, `Want to play there? ${BOOKINGS_LINE}`].filter(Boolean).join(" ");
+    const play = bookingLine(page.membersOnly, page.hasNumber);
+    const message = [`TapTurf could not confirm that you run ${name}.`, line, play && `Want to play there? ${play}`].filter(Boolean).join(" ");
     return { type: CLAIM_REJECTED, title: "We couldn't confirm your claim".slice(0, TITLE_MAX), message: message.slice(0, MESSAGE_MAX) };
   }
   return null;

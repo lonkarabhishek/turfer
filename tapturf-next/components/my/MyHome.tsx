@@ -239,8 +239,8 @@ function TurfCard({ turf, label }: { turf: PublicTurf; label?: string }) {
 /**
  * Before the sign-in and before the form: "Do you own or manage <turf>?". Yes is one tap (to the
  * sign-in, or to the form when signed in; owner=1 keeps the answer). No: the site owner's line for
- * players and the way back to the turf's page, where they call, WhatsApp or get directions (or, on
- * a page with no number, tell us the number).
+ * players and the way back to the turf's page, where they call, WhatsApp or get directions (on a
+ * page with no number, no booking line: directions, or tell us the number).
  */
 function ClaimQuestion({ claimId, signedIn }: { claimId: string; signedIn: boolean }) {
   const turf = usePublicTurf(claimId);
@@ -288,7 +288,7 @@ function ClaimQuestion({ claimId, signedIn }: { claimId: string; signedIn: boole
         </>
       ) : (
         <section aria-live="polite" className="mt-6 rounded-3xl border border-primary-200 bg-primary-50/60 p-5">
-          <p className="font-serif text-[22px] font-bold leading-tight text-primary-900">{COPY.playTitle}</p>
+          <p className="font-serif text-[22px] font-bold leading-tight text-primary-900">{COPY.playTitle(hasNumber)}</p>
           <p className="mt-2 text-[15px] text-primary-600 leading-snug">{COPY.playBody(name, hasNumber)}</p>
           {turfHref && (
             <Link href={turfHref} className="press-tight mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-accent-500 hover:bg-accent-600 px-5 text-[15px] font-semibold text-white transition-colors">

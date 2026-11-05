@@ -23,6 +23,18 @@ test("rejected: could not confirm, the site owner's line for players, and the ad
   for (const x of [n, k]) assert.equal(claimCopyProblem(`${x.title} ${x.message}`), null);
 });
 
+test("rejected on a turf with no number, or a members' club: no booking line (its page shows none)", () => {
+  const none = claimDecisionNotice("rejected", "Green Box Arena", null, { hasNumber: false, membersOnly: false });
+  assert.ok(none);
+  assert.equal(none.message, "TapTurf could not confirm that you run Green Box Arena.");
+  assert.doesNotMatch(`${none.title} ${none.message}`, /\b(call|book|booking|bookings|reserve)\b/i);
+  const club = claimDecisionNotice("rejected", "Green Box Arena", null, { hasNumber: true, membersOnly: true });
+  assert.equal(club?.message, "TapTurf could not confirm that you run Green Box Arena.");
+  const listed = claimDecisionNotice("rejected", "Green Box Arena", null, { hasNumber: true, membersOnly: false });
+  assert.equal(listed?.message, `TapTurf could not confirm that you run Green Box Arena. Want to play there? ${BOOKINGS_LINE}`);
+  assert.equal(claimDecisionNotice("active", "Green Box Arena", null, { hasNumber: false, membersOnly: false })?.message, claimDecisionNotice("active", "Green Box Arena")?.message, "approval reads the same");
+});
+
 test("no message for a revoke or a restore; and nothing but plain words fits", () => {
   assert.equal(claimDecisionNotice("revoked", "X"), null);
   assert.equal(claimDecisionNotice("pending", "X"), null);

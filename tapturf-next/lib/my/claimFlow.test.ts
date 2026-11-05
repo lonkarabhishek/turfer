@@ -45,19 +45,29 @@ test("no default role: three to pick from", () => {
   assert.deepEqual(Object.values(ROLE_LABELS), ["Owner", "Manager", "Staff"]);
 });
 
+test("No, I want to play here on a turf with no number: no booking line, no call, book or reserve", () => {
+  const c = CLAIM_FLOW_COPY;
+  assert.equal(c.playTitle(false), "We don't have its number yet");
+  for (const s of [c.playTitle(false), c.playBody("Green Box", false), c.noSub(false), c.playButton(false)]) {
+    assert.ok(!s.includes(BOOKINGS_LINE), s);
+    assert.doesNotMatch(s, /\b(call|book|booking|bookings|reserve)\b/i, s);
+  }
+  assert.match(c.playBody("Green Box", false), /I know the number/);
+});
+
 test("the flow's words: the site owner's line for players, nothing that reads like a booking reply", () => {
-  assert.equal(CLAIM_FLOW_COPY.playTitle, BOOKINGS_LINE);
+  assert.equal(CLAIM_FLOW_COPY.playTitle(true), BOOKINGS_LINE);
   assert.equal(CLAIM_FLOW_COPY.question("Green Box"), "Do you own or manage Green Box?");
   assert.equal(CLAIM_FLOW_COPY.loginTitle("Green Box"), "Sign in to manage Green Box");
   assert.equal(CLAIM_FLOW_COPY.loginTitle(null), "Sign in to manage your turf");
   const c = CLAIM_FLOW_COPY;
   const words: string[] = [
-    c.label, c.question("Green Box"), c.lead, c.yes, c.yesSub, c.noSub(true), c.noSub(false), c.no, c.playTitle,
+    c.label, c.question("Green Box"), c.lead, c.yes, c.yesSub, c.noSub(true), c.noSub(false), c.no, c.playTitle(true), c.playTitle(false),
     c.playBody("Green Box", true), c.playBody("Green Box", false), c.playButton(true), c.playButton(false), c.playUndo,
     c.loginTitle("Green Box"), c.loginLead, c.loginDefault, c.rolePick("Green Box"), c.roleNeeded, c.byHandWhy,
     c.phoneLabel, c.phoneHint, c.phoneNeeded, c.byHandWhyListed, c.phoneLabelListed, c.phoneHintListed, c.phoneNeededListed, c.noteLabel, c.notePlaceholder, c.sendForCheck, c.thanks("Green Box"), c.thanksMore, c.waiting,
   ];
-  assert.equal(words.length, Object.keys(c).length + 3, "every entry read (the three that take a yes or no read twice)");
+  assert.equal(words.length, Object.keys(c).length + 4, "every entry read (the four that take a yes or no read twice)");
   for (const s of words) assert.equal(claimCopyProblem(s), null, s);
   const thanks = CLAIM_FLOW_COPY.thanks("Green Box");
   assert.doesNotMatch(thanks, /call|whatsapp/i, "the thanks screen reads like no booking reply");

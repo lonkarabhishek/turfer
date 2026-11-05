@@ -49,8 +49,11 @@ export async function POST(req: Request) {
   const { supabase, token } = await ownerClient();
   const decide = { p_firebase_token: token, p_turf_id: body.turfId, p_user_key: body.userKey, p_status: body.status };
   // What the claimant is told: approved, or not confirmed with the admin's own kind line (nothing for a revoke).
-  const { data: turf } = await supabase.from("turfs").select("name").eq("id", body.turfId).maybeSingle();
-  const notice = claimDecisionNotice(body.status ?? "", cleanVenueName(typeof turf?.name === "string" ? turf.name : ""), body.status === "rejected" ? body.message : null);
+  // A rejection's "Want to play there?" line only where the turf's page shows the booking line (a number, not a members' club).
+  const { data: turf } = await supabase.from("turfs").select("name, owner_phone, contact_info, landline_phone, whatsapp_phone, membership_required").eq("id", body.turfId).maybeSingle();
+  const row = (turf ?? null) as Record<string, unknown> | null;
+  const page = row ? { hasNumber: hasUsableContact(contactFieldsOf(row)), membersOnly: row.membership_required === true } : undefined;
+  const notice = claimDecisionNotice(body.status ?? "", cleanVenueName(typeof row?.name === "string" ? row.name : ""), body.status === "rejected" ? body.message : null, page);
   let res = await supabase.rpc("admin_answer_owner_claim", { ...decide, p_title: notice?.title ?? null, p_message: notice?.message ?? null });
   // Before the migration: decided as before, nobody told.
   if (res.error && missingFn(res.error.code)) res = await supabase.rpc("admin_decide_owner_claim", decide);

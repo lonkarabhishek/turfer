@@ -1,3 +1,5 @@
+import { BOOKING_LINE, bookingLine } from "./noContact";
+
 // Relative imports only, so node --test runs this (lib/turfPage/claimPrompts.test.ts, npm run test:turf).
 
 /**
@@ -34,8 +36,8 @@ export function phoneClaimPromptCount(p: ClaimPrompts): number {
   return [p.hint, p.pricingLine, p.invite].filter(Boolean).length;
 }
 
-/** The site owner's line for players (5 Nov 2026), word for word. */
-export const BOOKINGS_LINE = "For bookings, contact the turf directly.";
+/** The site owner's line for players (5 Nov 2026), word for word: one source, the turf page's (lib/turfPage/noContact.ts). */
+export const BOOKINGS_LINE = BOOKING_LINE;
 
 /** The words of each prompt, kept here so the tests read them. Never a bare "Claim it free": it reads like a free offer. */
 export const CLAIM_COPY = {
@@ -52,8 +54,23 @@ export const CLAIM_COPY = {
     // The page's only number is a landline: no code can go to it.
     landline: "This page's number is a landline, so our team checks your claim by hand: you give us a mobile at the turf and we call it, usually within a day.",
     players: "Here to play?",
+    // A page with no number: no call, book or reserve (there is none to contact); its bar and sidebar card have the button.
+    playersNoNumber: "If you know the turf's number, tap I know the number.",
   },
 } as const;
+
+/**
+ * The invite's last line, for a player who came to book: the site owner's
+ * line only where the page has a number to contact and isn't a members'
+ * club (bookingLine, the phone bar's own rule); with no number, how to tell
+ * us one; a members' club with a number, none (the page says how to ask
+ * about guest access).
+ */
+export function invitePlayersLine({ hasNumber, membersOnly }: { hasNumber: boolean; membersOnly: boolean }): { lead: string; line: string } | null {
+  const booking = bookingLine(membersOnly, hasNumber);
+  if (booking) return { lead: CLAIM_COPY.invite.players, line: booking };
+  return hasNumber ? null : { lead: CLAIM_COPY.invite.players, line: CLAIM_COPY.invite.playersNoNumber };
+}
 
 /**
  * Copy a person sees about claims must not read like a booking or a
