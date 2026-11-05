@@ -12,6 +12,8 @@ import { GoogleButton } from "@/components/auth/GoogleButton";
 import { loginErrorText } from "@/lib/auth/callback";
 import { chromeIntent, inAppBrowser, type InApp } from "@/lib/auth/inApp";
 import { safeNext } from "@/lib/auth/next";
+import { CLAIM_FLOW_COPY, claimFromNext } from "@/lib/my/claimFlow";
+import { cleanVenueName } from "@/lib/utils/bookingApps";
 
 // The in-app browser this page is open in (read once, on the client only).
 const noSubscribe = () => () => {};
@@ -50,6 +52,25 @@ function LoginInner() {
   const again = via === "live" && params?.get("again") === "1";
   // ...for a link that closed after 2 hours without an update: back on the page a new link starts, nothing catches up.
   const againClosed = again && params?.get("closed") === "1";
+  // Signing in to claim a turf (next is /my?claim=<id>): the page says so, with the turf's name once read.
+  const claimTurf = claimFromNext(safeNext(nextParam));
+  const [claimName, setClaimName] = useState<{ id: string; name: string } | null>(null);
+  useEffect(() => {
+    if (!claimTurf) return;
+    let live = true;
+    createClient()
+      .from("turfs")
+      .select("name")
+      .eq("id", claimTurf)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (live && data?.name) setClaimName({ id: claimTurf, name: cleanVenueName(data.name) });
+      });
+    return () => {
+      live = false;
+    };
+  }, [claimTurf]);
+  const claimingName = claimTurf && claimName?.id === claimTurf ? claimName.name : null;
 
   const [googleBusy, setGoogleBusy] = useState(false);
   // One Google start at a time: a second tap would write a new verifier over the first.
@@ -204,8 +225,9 @@ function LoginInner() {
         </Link>
 
         {/* Title */}
-        <h1 className="font-display tracking-tight text-primary-900 text-4xl md:text-5xl leading-[0.95] mb-2">
-          {via === "follow" ? "Log in to follow the live score" : againClosed ? "Log in again to start a new live link" : again ? "Log in again to keep your live link going" : live ? "Log in to share a live link" : "Sign in"}
+        {claimTurf && !live && <p className="mb-2 text-[13px] font-semibold text-accent-700">{CLAIM_FLOW_COPY.label}</p>}
+        <h1 className={`font-display tracking-tight text-primary-900 mb-2 ${claimTurf && !live ? "text-[32px] md:text-[44px] leading-[1.05] [overflow-wrap:anywhere]" : "text-4xl md:text-5xl leading-[0.95]"}`}>
+          {via === "follow" ? "Log in to follow the live score" : againClosed ? "Log in again to start a new live link" : again ? "Log in again to keep your live link going" : live ? "Log in to share a live link" : claimTurf ? CLAIM_FLOW_COPY.loginTitle(claimingName) : "Sign in"}
         </h1>
         <p className="text-primary-600 text-[15px] mb-8">
           {via === "follow"
@@ -216,7 +238,9 @@ function LoginInner() {
               ? "Your match is saved on this phone. Log in and you come straight back to it, and the link catches up."
               : live
               ? "Your match stays saved on this phone. You log in once; friends log in on their own phones to follow."
-              : "Book turfs. Host games. Find a squad."}
+              : claimTurf
+              ? CLAIM_FLOW_COPY.loginLead
+              : CLAIM_FLOW_COPY.loginDefault}
         </p>
 
         {/* Error banner — always visible above the CTAs so it's noticed. */}
