@@ -680,7 +680,8 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
           {!done && !pending && (
             <div>
               <p className="text-[14px] font-semibold text-primary-900" id={`${captchaId}-role`}>{COPY.rolePick(turf.name)}</p>
-              <div className="mt-1.5 flex flex-wrap gap-2" role="radiogroup" aria-labelledby={`${captchaId}-role`}>
+              {/* One row down to 320px: each chip as wide as its word, the rest of the row shared out. */}
+              <div className="mt-1.5 flex gap-1.5 max-w-sm" role="radiogroup" aria-labelledby={`${captchaId}-role`}>
                 {CLAIM_ROLES.map((r) => (
                   <button
                     key={r}
@@ -691,7 +692,7 @@ function ClaimRow({ turf, me, onDone, instant = false, pending = false, startOpe
                       setRole(r);
                       setMsg("");
                     }}
-                    className={`h-11 min-w-[84px] px-4 rounded-full border-2 text-[15px] font-semibold cursor-pointer transition-colors ${role === r ? "border-primary-900 bg-primary-900 text-white" : "border-primary-200 bg-white text-primary-800 hover:border-primary-400"}`}
+                    className={`flex-auto h-11 px-2.5 rounded-full border-2 text-[14px] min-[360px]:text-[15px] font-semibold whitespace-nowrap cursor-pointer transition-colors ${role === r ? "border-primary-900 bg-primary-900 text-white" : "border-primary-200 bg-white text-primary-800 hover:border-primary-400"}`}
                   >
                     {ROLE_LABELS[r]}
                   </button>
