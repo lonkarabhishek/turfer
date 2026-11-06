@@ -178,14 +178,15 @@ export function tournamentStatus(r: TournamentError | "ok"): number {
 /**
  * A new tournament: a code minted here, the setup, teams and fixtures in
  * one call. A code already in use (about never) gets one more go with
- * another. Never throws.
+ * another. With a code given (a game's own, gameTournamentCode), that code
+ * only: one go, and taken when it is in use. Never throws.
  */
-export async function createTournament(input: CreateInput, ipHash: string): Promise<{ code: string } | { error: TournamentError }> {
+export async function createTournament(input: CreateInput, ipHash: string, fixed?: string): Promise<{ code: string } | { error: TournamentError }> {
   const key = tournamentKey();
   if (!key) return { error: "unavailable" };
   const data = { name: input.name, settings: input.settings, teams: input.teams, fixtures: input.fixtures };
-  for (let i = 0; i < 2; i++) {
-    const code = mintTournamentCode(key);
+  for (let i = 0; i < (fixed ? 1 : 2); i++) {
+    const code = fixed ?? mintTournamentCode(key);
     try {
       const { data: out, error } = await liveWriteClient().rpc("tournament_create", { p_key: key, p_code: code, p_secret: input.secret, p_data: data, p_ip_hash: ipHash });
       if (error) {
@@ -194,6 +195,7 @@ export async function createTournament(input: CreateInput, ipHash: string): Prom
       }
       const r = (out as { r?: unknown } | null)?.r;
       if (r === "ok") return { code };
+      if (r === "taken" && fixed) return { error: "taken" };
       if (r === "taken") continue;
       if (r === "busy") console.warn("tournament: site-wide create cap reached");
       if (r !== "limit" && r !== "busy" && r !== "bad") console.warn("tournament: unexpected create answer", out);

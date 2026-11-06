@@ -61,12 +61,13 @@ import { GameAside } from "./detail/GameAside";
 import type { CtaModel } from "./detail/GameCta";
 import { GameSkeleton } from "./detail/GameSkeleton";
 import { GameRepeat } from "./detail/GameRepeat";
+import { GameScore } from "./detail/GameScore";
 import { SeriesStopSheet } from "./SeriesStopSheet";
 
 const field = "w-full min-h-12 border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-accent-600 focus:border-accent-600 bg-primary-50";
 const label = "block text-[14px] font-medium text-primary-700 mb-1";
 
-export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string; liveLinks?: boolean }) {
+export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null }: { gameId: string; liveLinks?: boolean; /** The game's own turf session code (lib/tournament/codes.ts gameTournamentCode), for a cricket match game. */ sessionCode?: string | null }) {
   const { user, login, getToken, signedInWith } = useAuth();
   // Reads on load never sign anyone out; the actions use getToken.
   const readToken = quietToken(signedInWith);
@@ -528,8 +529,21 @@ export function GameDetailClient({ gameId, liveLinks = false }: { gameId: string
               />
             ) : null}
 
-            {/* Cricket or any sport the Live Scoreboard knows; renders nothing for the rest. */}
-            {status !== "expired" && <LiveScorerPromo sport={game.sport} variant="game" venue={where?.name} live={status === "live"} liveLinks={liveLinks} />}
+            {/* Cricket or any sport the Live Scoreboard knows; renders nothing for the rest. A cricket match game
+                gets its turf session card (Score this game, or its running result), the promo when that has nothing to show. */}
+            {family === "cricket" ? (
+              <GameScore
+                game={game}
+                participants={participants}
+                isHost={isHost}
+                isParticipant={isParticipant}
+                where={where}
+                sessionCode={sessionCode}
+                fallback={status !== "expired" ? <LiveScorerPromo sport={game.sport} variant="game" venue={where?.name} live={status === "live"} liveLinks={liveLinks} /> : null}
+              />
+            ) : (
+              status !== "expired" && <LiveScorerPromo sport={game.sport} variant="game" venue={where?.name} live={status === "live"} liveLinks={liveLinks} />
+            )}
 
             {/* Last and quiet, as on live score links: a game that is spam,
                 fake or unsafe comes to us by email. Not for its own host. */}

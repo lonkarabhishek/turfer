@@ -583,7 +583,15 @@ function SeriesCard({ res, teams }: { res: Resolution; teams: Team[] }) {
         </span>
       </div>
       <p className="mt-2 text-[13px] text-primary-500">
-        {s.leader ? `${s.leader} lead${s.leader.endsWith("s") ? "" : "s"}` : res.played ? "All square" : "No matches yet"}
+        {res.leagueDone
+          ? s.leader
+            ? `${s.leader} won the series`
+            : "Series drawn"
+          : s.leader
+            ? `${s.leader} lead${s.leader.endsWith("s") ? "" : "s"}`
+            : res.played
+              ? "All square"
+              : "No matches yet"}
         {s.tied || s.nr ? ` · ${[s.tied ? `${s.tied} tied` : "", s.nr ? `${s.nr} no result` : ""].filter(Boolean).join(", ")}` : ""}
       </p>
       {res.table.length === 2 && <p className="mt-1 text-[12px] text-primary-400">NRR: {res.table.map((x) => `${x.team} ${formatNrr(x.nrr)}`).join(" · ")}</p>}

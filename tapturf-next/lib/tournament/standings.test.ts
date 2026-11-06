@@ -203,6 +203,19 @@ test("renamed teams carry their results; fixtures in the organiser's order", () 
   assert.equal(r.fixtures[0].fixture.id, t.fixtures[2].id);
 });
 
+test("a hand result with its own words shows them; without, the page's own as before", () => {
+  const t = tour(settings({ format: "bilateral", matches: 2, playoffs: "none" }), 2);
+  // A turf session lists side a first in every match.
+  for (const f of t.fixtures) [f.home, f.away] = [1, 2];
+  // 6 a side: the chase won with 2 down, so 3 wickets in hand, not 8.
+  t.fixtures[0].result = { a: inn(50, 36, 4), b: inn(51, 30, 2), result: "auto", battedFirst: "a", text: "Strikers won by 3 wickets" };
+  t.fixtures[1].result = { a: inn(50, 36, 4), b: inn(51, 30, 2), result: "auto", battedFirst: "a" };
+  const r = resolve(t);
+  assert.equal(r.fixtures[0].text, "Strikers won by 3 wickets");
+  assert.equal(r.fixtures[1].text, "Strikers won by 8 wickets", "describeResult, unchanged");
+  assert.equal(r.series?.line, "Titans 0 - 2 Strikers");
+});
+
 test("format labels", () => {
   assert.equal(formatLabel(settings()), "League + semi-finals");
   assert.equal(formatLabel(settings({ playoffs: "final", legs: 2 })), "Double round robin + final");

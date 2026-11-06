@@ -9,7 +9,7 @@ const OVERS = [5, 6, 8, 10, 20];
 const PLAYERS = [6, 8, 11];
 
 /** Chips with a "Custom" box: one tap for the usual numbers, typing only for odd ones. */
-function NumberChips({ label, value, onChange, presets, max, id, unit, cols }: { label: string; value: number; onChange: (n: number) => void; presets: number[]; max: number; id: string; unit: string; cols: string }) {
+export function NumberChips({ label, value, onChange, presets, max, id, unit, cols }: { label: string; value: number; onChange: (n: number) => void; presets: number[]; max: number; id: string; unit: string; cols: string }) {
   const [custom, setCustom] = useState(!presets.includes(value));
   const [text, setText] = useState(presets.includes(value) ? "" : String(value));
   return (
@@ -75,7 +75,7 @@ const names = (s: string) =>
 export type SetupLive = { on: boolean; keep: boolean };
 
 /** On/off switch drawn as a track and knob; the row around it is the tap target. */
-function SwitchKnob({ on }: { on: boolean }) {
+export function SwitchKnob({ on }: { on: boolean }) {
   return (
     <span className={`relative w-[51px] h-[31px] rounded-full shrink-0 transition-colors ${on ? "bg-accent-500" : "bg-primary-300"}`} aria-hidden>
       <span className={`absolute top-[2px] left-[2px] w-[27px] h-[27px] bg-white rounded-full shadow-sm motion-safe:transition-transform motion-safe:duration-200 ${on ? "translate-x-[20px]" : ""}`} />

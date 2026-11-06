@@ -84,6 +84,20 @@ test("results: whole numbers within a match", () => {
   assert.equal(readResult({ ...ok, a: { runs: 10, wickets: 31, balls: 6 } }), null);
 });
 
+test("a result's own words for the margin are kept, cleaned and cut; blank is none", () => {
+  const ok = { a: { runs: 50, wickets: 4, balls: 36 }, b: { runs: 51, wickets: 2, balls: 30 }, result: "auto", battedFirst: "a" };
+  assert.equal(readResult({ ...ok, text: "Strikers won  by 3\nwickets" })?.text, "Strikers won by 3 wickets");
+  assert.equal(readResult({ ...ok, text: "x".repeat(200) })?.text?.length, 120);
+  assert.equal("text" in readResult({ ...ok, text: "   " })!, false);
+  assert.equal("text" in readResult({ ...ok, text: 42 })!, false);
+  assert.equal("text" in readResult(ok)!, false, "a hand result from the Manage tab has none");
+  const op = readOp({ secret: SECRET, op: "result", id: 2, result: { ...ok, text: "Strikers won by 3 wickets" } }, 2);
+  assert.ok("ok" in op && op.ok.op.op === "result" && op.ok.op.result?.text === "Strikers won by 3 wickets");
+  // The database's 1000-byte check holds: the longest text with the largest numbers.
+  const big = readResult({ a: { runs: 999, wickets: 30, balls: 600, allOut: true }, b: { runs: 999, wickets: 30, balls: 600, allOut: true }, result: "auto", battedFirst: "b", text: "x".repeat(500) })!;
+  assert.ok(Buffer.byteLength(JSON.stringify(big)) < 1000);
+});
+
 test("changes: each op read from its whitelist", () => {
   const op = (x: Record<string, unknown>) => readOp({ secret: SECRET, ...x }, 5);
   assert.deepEqual(op({ op: "team", id: 2, name: " New  Name ", short: "nn" }), { ok: { secret: SECRET, op: { op: "team", id: 2, name: "New Name", short: "NN" } } });

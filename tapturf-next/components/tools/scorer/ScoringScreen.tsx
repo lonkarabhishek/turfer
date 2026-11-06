@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Redo2, Undo2, X } from "lucide-react";
 import { apply, check, derive, shareText, type Extra, type Match, type MatchEvent, type MatchView, type Side } from "@/lib/cricket/scoring";
 import { trackTool, type ToolEvent } from "@/lib/analytics/tools";
-import { buildBall, chipText, keyHint, plainRuns, runAllowed, smartUndo, stamp, tapClock, vibrate, wallClock, type NbSource } from "./logic";
+import { autoPicks, buildBall, chipText, keyHint, plainRuns, runAllowed, smartUndo, stamp, tapClock, vibrate, wallClock, type NbSource } from "./logic";
 import { BallChip } from "./ui";
 import { BatterSheet, BowlerSheet, ConfirmSheet, MoreSheet, OpenersSheet, PlayerSheet, SettingsSheet, ShareSheet, WicketSheet, type MoreAction, type ShareLive } from "./Sheets";
 import { LiveLoginNote } from "./ShareSheet";
@@ -27,7 +27,8 @@ type SheetState =
   | { k: "player"; side: Side; id: string }
   | { k: "settings" }
   | { k: "share" }
-  | { k: "confirm"; what: "end" | "abandon" };
+  | { k: "confirm"; what: "end" | "abandon" }
+  | { k: "undoDone" };
 
 type Toast = { text: string; tone: "info" | "warn" | "error"; redo?: boolean };
 
@@ -89,6 +90,10 @@ export function ScoringScreen({
   onResultCard,
   live,
   watchers = null,
+  next,
+  autoPick = false,
+  startTab = "live",
+  confirmUndoWhenDone = false,
 }: {
   match: Match;
   onChange: (m: Match) => void;
@@ -99,12 +104,20 @@ export function ScoringScreen({
   live?: ShareLive;
   /** How many followers have the live link open (useWatchers), shown by the LIVE pill. */
   watchers?: Watchers | null;
+  /** Once the match is over, the pad's big key does this instead of "Make the result card" (the Turf Session Scorer's "Next match"). */
+  next?: { label: string; onClick: () => void };
+  /** Quick mode: openers, bowlers and new batters go in with the tap that needs them (logic.ts autoPicks), with no sheets. */
+  autoPick?: boolean;
+  /** The tab it opens on (the Turf Session Scorer opens an earlier, finished match on its scorecard). */
+  startTab?: MatchTab;
+  /** Once the match is over, Undo asks first (the Turf Session Scorer, for a match that is not the last one). */
+  confirmUndoWhenDone?: boolean;
 }) {
   const view = useMemo(() => derive(match), [match]);
-  const [tab, setTab] = useState<MatchTab>("live");
+  const [tab, setTab] = useState<MatchTab>(startTab);
   const [armed, setArmed] = useState<Extra | null>(null);
   const [nb, setNb] = useState<NbSource>("bat");
-  const [sheet, setSheet] = useState<SheetState>(() => sheetFor(view));
+  const [sheet, setSheet] = useState<SheetState>(() => (autoPick ? null : sheetFor(view)));
   const [toast, setToast] = useState<Toast | null>(null);
   const [redo, setRedo] = useState<Match[]>([]);
   const [said, setSaid] = useState("");
@@ -204,11 +217,15 @@ export function ScoringScreen({
     if (v.status === "done") fire("end", "tool_result_generated", { action: "match_end", result: v.result?.kind ?? "none", overs: v.setup.overs, players: v.setup.playersPerSide, ...code });
   };
 
-  /** Apply one tap's events together (same timestamp, so undo takes them back together). */
-  const commit = (events: MatchEvent[]): boolean => {
+  /**
+   * Apply one tap's events together (same timestamp, so undo can take them back together).
+   * In quick mode the batters and bowler the tap leaves the match needing go in with it (chase: the "Start the chase" tap).
+   */
+  const commit = (events: MatchEvent[], opts: { chase?: boolean } = {}): boolean => {
     let m = match;
     const warns: string[] = [];
-    for (const e of stamp(events, wallClock())) {
+    const at = wallClock();
+    for (const e of stamp(events, at)) {
       const c = check(m, e);
       if (c.error) {
         showToast(c.error, "error");
@@ -217,6 +234,8 @@ export function ScoringScreen({
       if (e.type !== "setBowler" && e.type !== "changeSetup") warns.push(...c.warnings);
       m = apply(m, e);
     }
+    if (autoPick) for (const e of stamp(autoPicks(m, opts), at)) m = apply(m, e);
+    if (m === match) return false;
     lastTap.current = tapClock();
     const v2 = derive(m);
     setRedo([]);
@@ -232,16 +251,20 @@ export function ScoringScreen({
     if (v2.innings.length !== view.innings.length || v2.status !== view.status) setTab("live");
     setSaid(`${v2.lastAction ?? ""}. ${scoreLine(v2)}`);
     track(v2);
-    setSheet(sheetFor(v2));
+    setSheet(autoPick ? null : sheetFor(v2));
     return true;
   };
 
-  const undo = () => {
+  const undo = (asked = false) => {
     if (armed) {
       setArmed(null);
       return;
     }
     if (!match.events.length || !guard()) return;
+    if (confirmUndoWhenDone && !asked && view.status === "done") {
+      openSheet({ k: "undoDone" });
+      return;
+    }
     const { match: m, removedBall } = smartUndo(match);
     if (m === match) return;
     vibrate(10);
@@ -336,8 +359,14 @@ export function ScoringScreen({
 
   const onPlayer = (side: Side, id: string) => openSheet({ k: "player", side, id });
 
+  /** Quick mode: whatever the match waits for is picked with this tap; else the sheet that asks. */
+  const pickNow = () => {
+    if (!guard()) return;
+    commit([], { chase: view.inningsBreak });
+  };
+
   const actions: PanelActions = {
-    onStartChase: () => openSheet({ k: "openers" }),
+    onStartChase: () => (autoPick ? pickNow() : openSheet({ k: "openers" })),
     onResultCard: () => onResultCard(view),
     onShare: () => openSheet({ k: "share" }),
     onNewMatch,
@@ -424,11 +453,12 @@ export function ScoringScreen({
             onRuns={tapRuns}
             onExtra={tapExtra}
             onWicket={tapWicket}
-            onUndo={undo}
+            onUndo={() => undo()}
             onDisarm={() => setArmed(null)}
             onMore={() => openSheet({ k: "more" })}
-            onNeed={() => openSheet(view.inningsBreak ? { k: "openers" } : sheetFor(view))}
+            onNeed={() => (autoPick ? pickNow() : openSheet(view.inningsBreak ? { k: "openers" } : sheetFor(view)))}
             actions={actions}
+            next={next}
           />
         </footer>
       </div>
@@ -440,7 +470,7 @@ export function ScoringScreen({
       {sheet?.k === "openers" && <OpenersSheet key={`op-${view.eventCount}`} match={match} view={view} onCommit={commit} onClose={closeSheet} />}
       {sheet?.k === "batter" && <BatterSheet match={match} view={view} onCommit={commit} onClose={closeSheet} />}
       {sheet?.k === "bowler" && <BowlerSheet match={match} view={view} mode={sheet.mode} onCommit={commit} onClose={closeSheet} />}
-      {sheet?.k === "wicket" && <WicketSheet match={match} view={view} extra={sheet.extra} nb={sheet.nb} preset={sheet.preset} onCommit={commit} onClose={closeSheet} />}
+      {sheet?.k === "wicket" && <WicketSheet match={match} view={view} extra={sheet.extra} nb={sheet.nb} preset={sheet.preset} autoBatter={autoPick} onCommit={(evs) => commit(evs)} onClose={closeSheet} />}
       {sheet?.k === "more" && <MoreSheet view={view} onAction={onMore} onClose={closeSheet} />}
       {sheet?.k === "player" && <PlayerSheet view={view} side={sheet.side} id={sheet.id} onCommit={commit} onAction={onMore} onClose={closeSheet} />}
       {sheet?.k === "settings" && <SettingsSheet match={match} view={view} onCommit={commit} onClose={closeSheet} />}
@@ -460,6 +490,18 @@ export function ScoringScreen({
           confirm={sheet.what === "end" ? "End innings" : "Abandon"}
           danger={sheet.what === "abandon"}
           onConfirm={() => commit([{ type: "endInnings", ...(sheet.what === "abandon" ? { reason: "abandoned" as const } : {}) }])}
+          onClose={closeSheet}
+        />
+      )}
+      {sheet?.k === "undoDone" && (
+        <ConfirmSheet
+          title="This match is over. Take back its last ball?"
+          body={`${view.result?.text ?? "Its result"} comes off until the match is finished again.`}
+          confirm="Take it back"
+          onConfirm={() => {
+            lastTap.current = 0;
+            undo(true);
+          }}
           onClose={closeSheet}
         />
       )}
@@ -487,6 +529,7 @@ function Pad({
   onMore,
   onNeed,
   actions,
+  next,
 }: {
   view: MatchView;
   armed: Extra | null;
@@ -501,6 +544,7 @@ function Pad({
   onMore: () => void;
   onNeed: () => void;
   actions: PanelActions;
+  next?: { label: string; onClick: () => void };
 }) {
   const inn = view.current;
   const over = inn.thisOver;
@@ -536,8 +580,8 @@ function Pad({
       <div className="py-1">
         {view.status === "done" ? (
           <div className="grid grid-cols-[1fr_5rem] gap-2 items-center">
-            <button type="button" onClick={actions.onResultCard} className={`${KEY} h-16 bg-accent-500 text-white text-[17px] hover:bg-accent-600`}>
-              Make the result card
+            <button type="button" onClick={next ? next.onClick : actions.onResultCard} className={`${KEY} h-16 bg-accent-500 text-white text-[17px] hover:bg-accent-600`}>
+              {next ? next.label : "Make the result card"}
             </button>
             {undoKey}
           </div>

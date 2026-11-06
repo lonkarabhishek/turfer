@@ -7,6 +7,9 @@ import { gameVenue, isGameExpired } from "@/lib/utils/game";
 import { gameCityLabel, gameEventJsonLd } from "@/lib/seo/gameJsonLd";
 import { OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
+import { tournamentKey } from "@/lib/tournament/server";
+import { gameTournamentCode } from "@/lib/tournament/codes";
+import { formatFor } from "@/lib/turfSession/plan";
 
 export const revalidate = 60;
 
@@ -76,6 +79,9 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
   // The host's public profile for the organizer url, when they have one shown (else the game page).
   const hosts = game ? await hostUsernames([{ id: game.creator_id, name: game.host_name }]) : null;
   const jsonLd = game ? gameEventJsonLd(game, { id, hostUsername: hosts?.get(game.creator_id) ?? null }) : null;
+  // A cricket match game's turf session live link: its own tournament code, worked out here (the key is server only).
+  const key = tournamentKey();
+  const sessionCode = game && key && formatFor(game.sport) ? gameTournamentCode(game.id, key) : null;
 
   return (
     <>
@@ -86,7 +92,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
         />
       )}
       {/* The live link copy only when live links are set up (LIVE_WRITE_KEY is server-only). */}
-      <GameDetailClient gameId={id} liveLinks={Boolean(process.env.LIVE_WRITE_KEY)} />
+      <GameDetailClient gameId={id} liveLinks={Boolean(process.env.LIVE_WRITE_KEY)} sessionCode={sessionCode} />
     </>
   );
 }

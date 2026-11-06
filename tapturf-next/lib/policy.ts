@@ -5,8 +5,6 @@
  * id, named for that change's date, or nobody who dismissed the last one
  * is told. A later change that needs no notice moves only this date.
  */
-// Booking requests (held for the site owner's OK): PRIVACY_UPDATED and the notice's id move to the day it
-// goes live, which also moves /privacy's lastmod in the sitemap.
 export const PRIVACY_UPDATED = "2026-11-06";
 
 /** The latest change that needs a notice on the site, as the policy promises. */

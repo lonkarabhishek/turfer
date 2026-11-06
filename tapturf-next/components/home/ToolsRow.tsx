@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, ArrowUpRight, Calculator, Coins, ImageIcon, ListOrdered, Tally5, Users, type LucideIcon } from "lucide-react";
+import { Activity, ArrowUpRight, Calculator, Coins, ImageIcon, ListOrdered, Repeat, Tally5, Users, type LucideIcon } from "lucide-react";
 import { TOOLS, toolPath, type ToolSlug } from "@/lib/tools/registry";
 
 /** At-the-pitch order: toss first, teams, then the scoring tools. A tool left out here never shows on home. */
@@ -9,6 +9,8 @@ const ICONS: Record<ToolSlug, LucideIcon> = {
   "cricket-toss": Coins,
   "cricket-team-generator": Users,
   "cricket-live-scorer": Activity,
+  // Not in ORDER: the home page shows nothing new.
+  "turf-session": Repeat,
   "live-scoreboard": Tally5,
   "cricket-scorecard-maker": ImageIcon,
   "cricket-nrr-calculator": Calculator,
