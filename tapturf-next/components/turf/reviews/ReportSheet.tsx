@@ -583,7 +583,7 @@ export function ReportSheet({
               <div role="alert" className="mb-3 rounded-xl bg-hot-500/10 px-4 py-3 text-[14px] text-hot-600">
                 {shownError.problem === "daily" ? dailyMessage(shownError) : MESSAGES[shownError.problem]}
                 {shownError.problem === "own_turf" && (
-                  <Link href="/my" className="ml-1 font-semibold underline">
+                  <Link href="/my?tab=page#player-reports" className="ml-1 font-semibold underline">
                     Open myTapturf
                   </Link>
                 )}

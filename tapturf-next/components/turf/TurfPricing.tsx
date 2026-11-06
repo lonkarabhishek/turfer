@@ -271,7 +271,7 @@ function NoPrices({
             </div>
             <p className="mt-3 text-[13px] text-primary-500">
               Manage this turf?{" "}
-              <Link href="/my" prefetch={false} className="font-semibold text-accent-700 hover:text-accent-800">
+              <Link href="/my?tab=page#edit" prefetch={false} className="font-semibold text-accent-700 hover:text-accent-800">
                 Add prices on myTapturf
               </Link>
             </p>

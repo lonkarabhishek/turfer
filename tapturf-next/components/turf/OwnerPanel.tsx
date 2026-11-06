@@ -91,7 +91,7 @@ export function OwnerInvite() {
     <div data-nosnippet className="mt-4 text-[14px] text-primary-500">
       Run a turf too?{" "}
       <Link
-        href="/my"
+        href="/my?list=1"
         prefetch={false}
         className="inline-flex min-h-11 items-center gap-1 align-middle font-semibold text-accent-800 hover:underline underline-offset-2"
       >

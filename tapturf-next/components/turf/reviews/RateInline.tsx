@@ -69,7 +69,7 @@ export function RateInline({
     return (
       <div className="rounded-2xl border border-primary-200 bg-primary-50 p-4">
         <p className="text-[15px] text-primary-800">You manage this turf, so you can&apos;t rate it.</p>
-        <Link href="/my" className="mt-1 inline-block text-[14px] font-semibold text-accent-700 hover:text-accent-800">
+        <Link href="/my?tab=page#player-reports" className="mt-1 inline-block text-[14px] font-semibold text-accent-700 hover:text-accent-800">
           See what players say on myTapturf
         </Link>
       </div>
