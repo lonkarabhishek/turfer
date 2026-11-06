@@ -88,6 +88,17 @@ export function planMatches(slot: number, format: Format, overs: number): number
   return clamp(Math.floor((slot + f.changeMin) / (2 * o * f.minPerOver + f.changeMin)), 1, MAX_PLAN);
 }
 
+/**
+ * Setup's "Matches planned": the organiser's pick once a chip is tapped
+ * (undefined until then); before that, from a game, the guess for its slot
+ * at the overs and format now chosen (so 10 overs instead of 6 guesses
+ * fewer matches); with no game, not sure.
+ */
+export function setupPlan(slot: number | null, format: Format, overs: number, picked: number | null | undefined): number | null {
+  if (picked !== undefined) return picked;
+  return slot ? planMatches(slot, format, overs) : null;
+}
+
 /** The format's overs, fewer only when one match of them does not fit in the slot; never below 2. */
 export function oversThatFit(slot: number, format: Format): number {
   const f = FORMATS[format];

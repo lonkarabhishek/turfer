@@ -33,6 +33,7 @@ export function SessionHub({
   onRemove,
   onEnd,
   scoreKept,
+  unfinishedEarlier = [],
 }: {
   session: Session;
   /** The match in progress as the scorer has it: "Strikers 23/1 (2.3 ov)", or null before a ball. */
@@ -52,6 +53,8 @@ export function SessionHub({
   onEnd: () => void;
   /** Whether a scored match's ball-by-ball scorecard is still on this phone. */
   scoreKept: (m: SessionMatch) => boolean;
+  /** Earlier matches with balls in them and no result now (Undo took it back): named, so the end doesn't drop them unseen. */
+  unfinishedEarlier?: number[];
 }) {
   const [row, setRow] = useState<SessionMatch | null>(null);
   const [removing, setRemoving] = useState<SessionMatch | null>(null);
@@ -120,6 +123,11 @@ export function SessionHub({
         <h2 id="hub-matches" className="text-[16px] font-bold text-primary-900 mb-2">
           Matches
         </h2>
+        {unfinishedEarlier.length > 0 && (
+          <p role="status" className="mb-2 rounded-2xl bg-amber-100 border border-amber-300 px-4 py-3 text-[14px] font-semibold text-amber-950">
+            {unfinishedEarlier.length === 1 ? `Match ${unfinishedEarlier[0]} has` : `Matches ${unfinishedEarlier.join(" and ")} have`} no result now: its last ball was taken back. Open it to finish it, or correct its score.
+          </p>
+        )}
         {session.matches.length ? (
           <ul className="divide-y divide-primary-100 rounded-2xl border border-primary-200 overflow-hidden">
             {session.matches.map((m) => (
@@ -156,20 +164,34 @@ export function SessionHub({
         <Sheet title={`Match ${row.n}`} subtitle={row.result ? row.result.text : "Not finished"} onClose={() => setRow(null)}>
           <div className="space-y-2">
             {row.kind === "balls" ? (
-              scoreKept(row) ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRow(null);
-                    onOpenMatch(row);
-                  }}
-                  className="press-tight w-full h-14 rounded-full bg-primary-900 text-white text-[16px] font-bold"
-                >
-                  Open scorecard
-                </button>
-              ) : (
-                <p className="rounded-2xl bg-primary-50 px-4 py-3 text-[14px] text-primary-700">Its ball-by-ball scorecard is no longer on this phone; the score is kept.</p>
-              )
+              <>
+                {scoreKept(row) ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRow(null);
+                      onOpenMatch(row);
+                    }}
+                    className="press-tight w-full h-14 rounded-full bg-primary-900 text-white text-[16px] font-bold"
+                  >
+                    Open scorecard
+                  </button>
+                ) : (
+                  <p className="rounded-2xl bg-primary-50 px-4 py-3 text-[14px] text-primary-700">Its ball-by-ball scorecard is no longer on this phone; the score is kept.</p>
+                )}
+                {(row.result || row.balls > 0) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRow(null);
+                      onEditFinal(row);
+                    }}
+                    className="press-tight w-full h-12 rounded-full border-2 border-primary-200 bg-white text-[15px] font-bold text-primary-800"
+                  >
+                    {row.result ? "Correct the score" : "Type its final score instead"}
+                  </button>
+                )}
+              </>
             ) : (
               <button
                 type="button"
@@ -222,7 +244,8 @@ function LiveBlock({ session, live }: { session: Session; live: HubLive }) {
   const [copied, setCopied] = useState(false);
   const box = "rounded-2xl border-2 border-primary-200 p-4";
   const err = session.live.error;
-  const fromGame = !!session.game;
+  // A "Score on this phone instead" session's link is an ordinary one: never on the game page.
+  const fromGame = !!session.game && !session.game.local;
   const heading = (
     <h2 className="flex items-center gap-2 text-[16px] font-bold text-primary-900">
       <Radio className="w-4 h-4 text-accent-700" aria-hidden /> Live link

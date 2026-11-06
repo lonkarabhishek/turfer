@@ -41,7 +41,7 @@ export type SessionMatch = {
   result: MatchResult | null;
   bat: BatLine[];
   bowl: BowlLine[];
-  /** Legal balls bowled so far, both innings: 0 is a match not started. */
+  /** Balls bowled so far, both innings (wides and no-balls count: a first-ball wide has started it); 0 is a match not started. A typed match: its legal balls. */
   balls: number;
   at: number;
 };
@@ -88,7 +88,11 @@ export type Session = {
   plan: number | null;
   matches: SessionMatch[];
   ended: number | null;
-  /** The game it was started from; its live link is the game's (lib/tournament/codes.ts gameTournamentCode). */
-  game: { id: string; start: string; end: string } | null;
+  /**
+   * The game it was started from; its live link is the game's (lib/tournament/codes.ts gameTournamentCode).
+   * local: "Score on this phone instead" (another phone has the game's link): found from the game page on this
+   * phone, but its live link, if any, is an ordinary one, never the game's.
+   */
+  game: { id: string; start: string; end: string; local?: true } | null;
   live: LiveState;
 };

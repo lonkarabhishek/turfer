@@ -27,7 +27,8 @@ type SheetState =
   | { k: "player"; side: Side; id: string }
   | { k: "settings" }
   | { k: "share" }
-  | { k: "confirm"; what: "end" | "abandon" };
+  | { k: "confirm"; what: "end" | "abandon" }
+  | { k: "undoDone" };
 
 type Toast = { text: string; tone: "info" | "warn" | "error"; redo?: boolean };
 
@@ -91,6 +92,8 @@ export function ScoringScreen({
   watchers = null,
   next,
   autoPick = false,
+  startTab = "live",
+  confirmUndoWhenDone = false,
 }: {
   match: Match;
   onChange: (m: Match) => void;
@@ -105,9 +108,13 @@ export function ScoringScreen({
   next?: { label: string; onClick: () => void };
   /** Quick mode: openers, bowlers and new batters go in with the tap that needs them (logic.ts autoPicks), with no sheets. */
   autoPick?: boolean;
+  /** The tab it opens on (the Turf Session Scorer opens an earlier, finished match on its scorecard). */
+  startTab?: MatchTab;
+  /** Once the match is over, Undo asks first (the Turf Session Scorer, for a match that is not the last one). */
+  confirmUndoWhenDone?: boolean;
 }) {
   const view = useMemo(() => derive(match), [match]);
-  const [tab, setTab] = useState<MatchTab>("live");
+  const [tab, setTab] = useState<MatchTab>(startTab);
   const [armed, setArmed] = useState<Extra | null>(null);
   const [nb, setNb] = useState<NbSource>("bat");
   const [sheet, setSheet] = useState<SheetState>(() => (autoPick ? null : sheetFor(view)));
@@ -248,12 +255,16 @@ export function ScoringScreen({
     return true;
   };
 
-  const undo = () => {
+  const undo = (asked = false) => {
     if (armed) {
       setArmed(null);
       return;
     }
     if (!match.events.length || !guard()) return;
+    if (confirmUndoWhenDone && !asked && view.status === "done") {
+      openSheet({ k: "undoDone" });
+      return;
+    }
     const { match: m, removedBall } = smartUndo(match);
     if (m === match) return;
     vibrate(10);
@@ -442,7 +453,7 @@ export function ScoringScreen({
             onRuns={tapRuns}
             onExtra={tapExtra}
             onWicket={tapWicket}
-            onUndo={undo}
+            onUndo={() => undo()}
             onDisarm={() => setArmed(null)}
             onMore={() => openSheet({ k: "more" })}
             onNeed={() => (autoPick ? pickNow() : openSheet(view.inningsBreak ? { k: "openers" } : sheetFor(view)))}
@@ -479,6 +490,18 @@ export function ScoringScreen({
           confirm={sheet.what === "end" ? "End innings" : "Abandon"}
           danger={sheet.what === "abandon"}
           onConfirm={() => commit([{ type: "endInnings", ...(sheet.what === "abandon" ? { reason: "abandoned" as const } : {}) }])}
+          onClose={closeSheet}
+        />
+      )}
+      {sheet?.k === "undoDone" && (
+        <ConfirmSheet
+          title="This match is over. Take back its last ball?"
+          body={`${view.result?.text ?? "Its result"} comes off until the match is finished again.`}
+          confirm="Take it back"
+          onConfirm={() => {
+            lastTap.current = 0;
+            undo(true);
+          }}
           onClose={closeSheet}
         />
       )}

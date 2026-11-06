@@ -1,7 +1,7 @@
 // Run with: npm run test:session
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dayLabel, FORMATS, formatFor, indiaDay, oversThatFit, planChips, planMatches, playersFromSpots, scoreWindow, serverWindowOk, slotMinutes } from "./plan";
+import { dayLabel, FORMATS, formatFor, indiaDay, oversThatFit, planChips, planMatches, playersFromSpots, scoreWindow, serverWindowOk, setupPlan, slotMinutes } from "./plan";
 
 const at = (iso: string) => Date.parse(iso);
 
@@ -91,4 +91,17 @@ test("India days and their labels", () => {
   assert.equal(dayLabel("2026-11-08"), "Sun 8 Nov");
   assert.equal(dayLabel("2026-11-07"), "Sat 7 Nov");
   assert.equal(dayLabel("garbage"), "garbage");
+});
+
+test("setup's matches planned: the slot's guess follows the overs and format until a chip is tapped", () => {
+  // A 2-hour Box Cricket game: 6 at 6 overs; tap 10 overs and the guess is 3; switch to Cricket at 10 overs: 2.
+  assert.equal(setupPlan(120, "box", 6, undefined), 6);
+  assert.equal(setupPlan(120, "box", 10, undefined), 3);
+  assert.equal(setupPlan(120, "cricket", 10, undefined), 2);
+  // Once the organiser picks, it stays theirs, Not sure included.
+  assert.equal(setupPlan(120, "box", 10, 5), 5);
+  assert.equal(setupPlan(120, "box", 10, null), null);
+  // No game: not sure until picked.
+  assert.equal(setupPlan(null, "box", 6, undefined), null);
+  assert.equal(setupPlan(null, "box", 6, 4), 4);
 });

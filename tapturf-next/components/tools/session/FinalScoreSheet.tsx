@@ -47,10 +47,12 @@ export function FinalScoreSheet({ session, n, edit, battedFirst, onSave, onClose
   const read = readScoreDraft(draft(), names);
   const preview = "ok" in read ? typedText({ a: read.ok.a, b: read.ok.b, outcome: outcomeOf(read.ok.a, read.ok.b, noResult) }, first, names, limit) : noResult ? "No result" : null;
 
+  /** A match scored ball by ball, corrected (or given up on) with a typed score where it is. */
+  const scored = edit?.kind === "balls";
   const save = () => {
     const x = readScoreDraft(draft(), names);
     if ("error" in x) return setErr(x.error);
-    onSave({ n: edit ? n : null, battedFirst: first, a: x.ok.a, b: x.ok.b, noResult });
+    onSave({ n: edit ? n : null, battedFirst: first, a: x.ok.a, b: x.ok.b, noResult, ...(scored ? { replaceScored: true } : {}) });
   };
 
   const row = (k: SideKey) => (
@@ -101,9 +103,15 @@ export function FinalScoreSheet({ session, n, edit, battedFirst, onSave, onClose
   );
 
   return (
-    <Sheet title={edit ? `Match ${n}: edit score` : `Match ${n}: final score`} onClose={onClose}>
+    <Sheet title={scored ? `Match ${n}: correct the score` : edit ? `Match ${n}: edit score` : `Match ${n}: final score`} onClose={onClose}>
+      {scored && (
+        <p className="mb-3 rounded-2xl bg-amber-100 border border-amber-300 px-4 py-3 text-[14px] font-semibold leading-snug text-amber-950">
+          Saving makes this a typed score, kept as match {n}. Its batting and bowling lines come off the top scorers; the ball-by-ball copy stays in the Live Cricket Scorer&apos;s saved matches.
+        </p>
+      )}
       <p className="text-[13px] font-semibold text-primary-800 mb-1.5">Batted first</p>
       <Segmented
+        tall
         value={first}
         onChange={(v) => setFirst(v)}
         ariaLabel="Batted first"

@@ -162,7 +162,7 @@ export function readSession(x: unknown): Session | null {
   const firstBat = side(o.firstBat);
   if (createdAt === null || updatedAt === null || !format || !day || overs === null || pps === null || !a || !b || !firstBat) return null;
   const g = obj(o.game);
-  const game = g && typeof g.id === "string" && UUID.test(g.id) ? { id: g.id.toLowerCase(), start: typeof g.start === "string" && TIME.test(g.start) ? g.start : "", end: typeof g.end === "string" && TIME.test(g.end) ? g.end : "" } : null;
+  const game = g && typeof g.id === "string" && UUID.test(g.id) ? { id: g.id.toLowerCase(), start: typeof g.start === "string" && TIME.test(g.start) ? g.start : "", end: typeof g.end === "string" && TIME.test(g.end) ? g.end : "", ...(g.local === true ? { local: true as const } : {}) } : null;
   const matches = Array.isArray(o.matches)
     ? o.matches
         .slice(0, MAX_MATCHES)
@@ -297,7 +297,7 @@ export function canStore(): boolean {
   }
 }
 
-/** The session kept for a game on this phone, if any. */
+/** The session kept for a game on this phone, if any (the newest; a "Score on this phone instead" one too). */
 export function sessionForGame(store: SessionStore, gameId: string): Session | null {
   const id = gameId.toLowerCase();
   return store.list.find((s) => s.game?.id === id) ?? null;

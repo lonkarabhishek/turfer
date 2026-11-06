@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { apply, derive, newMatch, toScorecard, type Match, type MatchView } from "@/lib/cricket/scoring";
@@ -10,7 +11,7 @@ import { getGameById, getGameParticipants } from "@/lib/queries/games";
 import { formatGameDay, formatTimeRange, gameVenue } from "@/lib/utils/game";
 import { sportLabel } from "@/lib/utils/sport";
 import { prefillFromGame, type GameAsk, type Prefill } from "@/lib/turfSession/names";
-import { addScored, applyChanges, battingFirstFor, current, endSession, nextSetup, recordFinal, recordScored, removeMatch, reopen, replaceCurrent, newSession, type Changes, type FinalInput, type NewSession } from "@/lib/turfSession/session";
+import { addScored, applyChanges, battingFirstFor, current, endSession, nextSetup, recordFinal, recordScored, removeMatch, reopen, replaceCurrent, newSession, unfinished, type Changes, type FinalInput, type NewSession } from "@/lib/turfSession/session";
 import { tally } from "@/lib/turfSession/tally";
 import { dayLabel } from "@/lib/turfSession/plan";
 import { canStore, clearAsk, forget, keep, loadAsk, loadSessions, saveSessions, sessionForGame, STORE_KEY, type SessionStore } from "@/lib/turfSession/store";
@@ -41,7 +42,7 @@ type SheetState =
   | null
   | { k: "final"; n: number; edit: SessionMatch | null; battedFirst: SideKey }
   | { k: "teams" }
-  | { k: "end"; n: number; line: string }
+  | { k: "end"; list: { n: number; line: string; current: boolean }[] }
   | { k: "replace"; line: string }
   | { k: "delete"; s: Session };
 
@@ -197,7 +198,10 @@ export function TurfSession({ cta, liveLinks = false }: { cta: { label: string; 
       };
       if (fromGame) {
         const id = gameId!.toLowerCase();
-        const mine = local ? null : sessionForGame(st, id);
+        // This phone's session for the game (a "Score on this phone instead" one too). Asked for a new local one
+        // after the last one ended, it starts afresh.
+        const kept = sessionForGame(st, id);
+        const mine = kept && !(local && kept.ended) ? kept : null;
         if (mine) {
           const next = keep(st, mine, true);
           storeRef.current = next;
@@ -210,7 +214,7 @@ export function TurfSession({ cta, liveLinks = false }: { cta: { label: string; 
         const fill = (ask: GameAsk) => {
           if (!alive) return;
           const p = prefillFromGame(ask, Date.now());
-          setPrefill(local ? { ...p, game: null } : p);
+          setPrefill(local && p.game ? { ...p, game: { ...p.game, local: true } } : p);
           setStrip({ state: "ok", line: stripLine(ask) });
           setSetupKey((k) => k + 1);
         };
@@ -407,14 +411,19 @@ export function TurfSession({ cta, liveLinks = false }: { cta: { label: string; 
     trackTool("tool_action", SESSION_TOOL, { action: "session_ended", matches: r.session.matches.length });
   };
 
+  /** Every match with balls in it and no result (the one being played, or an earlier one Undo took back) is named before the end drops it. */
   const askEnd = () => {
     const s = latest();
     if (!s) return;
     const c = current(s);
-    const m = c?.matchId ? (match?.id === c.matchId ? match : loadMatch(c.matchId)) : null;
-    if (c && c.balls > 0 && m) {
-      const inn = derive(m).current;
-      setSheet({ k: "end", n: c.n, line: `${inn.battingName} ${inn.score} after ${inn.overs} overs.` });
+    const list = unfinished(s).map((u) => {
+      const m = u.matchId ? (match?.id === u.matchId ? match : loadMatch(u.matchId)) : null;
+      const inn = m ? derive(m).current : null;
+      const where = inn ? `${inn.battingName} ${inn.score} after ${inn.overs} overs` : "No result yet";
+      return { n: u.n, line: u === c ? `${where}.` : `${where}: its result was taken back.`, current: u === c };
+    });
+    if (list.length) {
+      setSheet({ k: "end", list });
       return;
     }
     finish();
@@ -512,6 +521,7 @@ export function TurfSession({ cta, liveLinks = false }: { cta: { label: string; 
           onTeams={() => setSheet({ k: "teams" })}
           onOpenMatch={openMatch}
           onEditFinal={(m) => setSheet({ k: "final", n: m.n, edit: m, battedFirst: m.battedFirst })}
+          unfinishedEarlier={unfinished(session).filter((m) => m !== cur).map((m) => m.n)}
           onRemove={remove}
           onEnd={askEnd}
           scoreKept={scoreKept}
@@ -561,22 +571,32 @@ export function TurfSession({ cta, liveLinks = false }: { cta: { label: string; 
 
       {sheet?.k === "final" && session && <FinalScoreSheet session={session} n={sheet.n} edit={sheet.edit} battedFirst={sheet.battedFirst} onSave={saveFinal} onClose={() => setSheet(null)} />}
       {sheet?.k === "teams" && session && <TeamsSheet session={session} emptyNow={!!cur && cur.balls === 0} n={cur?.n ?? session.matches.length + 1} onSave={saveTeams} onClose={() => setSheet(null)} />}
-      {sheet?.k === "end" && (
-        <Sheet title={`Match ${sheet.n} isn't finished`} onClose={() => setSheet(null)}>
-          <p className="text-[15px] text-primary-800 leading-relaxed">{sheet.line}</p>
+      {sheet?.k === "end" && session && (
+        <Sheet title={sheet.list.length === 1 ? `Match ${sheet.list[0].n} isn't finished` : `${sheet.list.length} matches aren't finished`} onClose={() => setSheet(null)}>
+          <ul className="space-y-1.5">
+            {sheet.list.map((u) => (
+              <li key={u.n} className="text-[15px] text-primary-800 leading-relaxed">
+                {sheet.list.length > 1 && <span className="font-bold text-primary-900">Match {u.n}: </span>}
+                {u.line}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[14px] text-primary-600">Ending now leaves {sheet.list.length === 1 ? "it" : "them"} out of the result.</p>
           <div className="mt-5 grid gap-2">
             <button
               type="button"
               onClick={() => {
+                const first = sheet.list[0];
                 setSheet(null);
-                if (cur?.matchId) openMatch(cur);
+                const sm = session.matches.find((x) => x.n === first.n);
+                if (sm?.matchId) openMatch(sm);
               }}
               className="press-tight h-14 rounded-full bg-accent-500 text-white text-[16px] font-bold hover:bg-accent-600"
             >
-              Keep playing
+              {sheet.list[0].current ? "Keep playing" : `Open match ${sheet.list[0].n}`}
             </button>
             <button type="button" onClick={finish} className="press-tight h-12 rounded-full border-2 border-primary-200 text-[15px] font-bold text-primary-800">
-              End without match {sheet.n}
+              {sheet.list.length === 1 ? `End without match ${sheet.list[0].n}` : `End without matches ${sheet.list.map((u) => u.n).join(" and ")}`}
             </button>
           </div>
         </Sheet>
@@ -604,7 +624,7 @@ export function TurfSession({ cta, liveLinks = false }: { cta: { label: string; 
           }}
         />
       )}
-      {sheet?.k === "delete" && (
+      {sheet?.k === "delete" && !sheet.s.live.code && (
         <ConfirmSheet
           title={`Delete this session and its ${sheet.s.matches.length} match${sheet.s.matches.length === 1 ? "" : "es"}?`}
           body="This can't be undone."
@@ -617,6 +637,31 @@ export function TurfSession({ cta, liveLinks = false }: { cta: { label: string; 
           onClose={() => setSheet(null)}
         />
       )}
+      {sheet?.k === "delete" && sheet.s.live.code && (
+        <Sheet title={`Delete this session and its ${sheet.s.matches.length} match${sheet.s.matches.length === 1 ? "" : "es"}?`} onClose={() => setSheet(null)}>
+          <p className="text-[15px] text-primary-700 leading-relaxed">
+            This can&apos;t be undone on this phone. Its live page{sheet.s.game && !sheet.s.game.local ? " and the game page keep" : " keeps"} the team names and results: to take them down, stop the link on the live page first.
+          </p>
+          <Link href={`/tournament/${sheet.s.live.code}`} className="mt-3 inline-flex min-h-11 items-center text-[15px] font-bold text-accent-700 underline underline-offset-2">
+            Open the live page
+          </Link>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setSheet(null)} className="press-tight h-14 rounded-full border-2 border-primary-200 text-[16px] font-bold text-primary-800">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                commitStore(forget(storeRef.current, sheet.s.id));
+                setSheet(null);
+              }}
+              className="press-tight h-14 rounded-full bg-red-600 text-white text-[16px] font-bold hover:bg-red-700"
+            >
+              Delete
+            </button>
+          </div>
+        </Sheet>
+      )}
 
       {open && match && (
         <ScoringScreen
@@ -628,6 +673,9 @@ export function TurfSession({ cta, liveLinks = false }: { cta: { label: string; 
           onResultCard={resultCard}
           next={nextAction}
           autoPick={!session?.pick}
+          // An earlier match that is over opens on its scorecard, and Undo there asks first: one stray tap must not take its result away.
+          startTab={scoringSm?.result && !isLast ? "card" : "live"}
+          confirmUndoWhenDone={!isLast}
         />
       )}
     </div>

@@ -10,7 +10,7 @@ import type { Side, SideKey } from "@/lib/turfSession/types";
  * The two sides' players as chips in two columns: a tap moves a player to
  * the other side. With onAdd, a box under each column adds one; with
  * remove, each chip has its own small X. Names only; the sides' own names
- * are typed elsewhere.
+ * are typed elsewhere. One column under 360 px.
  */
 export function SidesEditor({ sides, onChange, add = false, remove = false }: { sides: { a: Side; b: Side }; onChange: (s: { a: Side; b: Side }) => void; add?: boolean; remove?: boolean }) {
   const [typed, setTyped] = useState<Record<SideKey, string>>({ a: "", b: "" });
@@ -31,7 +31,8 @@ export function SidesEditor({ sides, onChange, add = false, remove = false }: { 
   };
 
   return (
-    <div className="grid grid-cols-2 gap-2">
+    // Under 360 px the sides stack, so a name is never cut to its first letter (Amit or Arjun?).
+    <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2">
       {(["a", "b"] as const).map((k) => (
         <div key={k} className="min-w-0 rounded-2xl bg-primary-50 border border-primary-200 p-2">
           <p className="px-1 text-[13px] font-bold text-primary-900 truncate">

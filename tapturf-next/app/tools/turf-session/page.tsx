@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 const FAQ = [
   {
     q: "Do we have to name the players?",
-    a: "No. Just tap the runs: batters and bowlers go in as Batter 1 and Bowler 1. Add names in setup, or tap a name on the scorecard later, to see the top run scorers and wicket takers.",
+    a: "No. Just tap the runs: batters and bowlers go in as Batter 1 and Bowler 1. To see the top run scorers and wicket takers, add names in setup and pick who bats and bowls as you go, or tap a Batter 1 on the scorecard to name them.",
   },
   {
     q: "What if we forgot to score a match?",
@@ -32,7 +32,7 @@ const FAQ = [
   },
   {
     q: "Is it saved if my phone locks?",
-    a: "Every ball is saved on your phone as you score, and the screen stays on while the scorer is open where your phone allows it. Open the page again and the match carries on.",
+    a: "Every ball is saved on your phone as you score, and the screen stays on while the scorer is open where your phone allows it. Open the page again and the match carries on. If the phone closed the tab while you had no signal, opening the page again needs a connection; the balls stay saved on the phone till then.",
   },
   {
     q: "Can friends follow the session?",

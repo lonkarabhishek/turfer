@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { changeTournament, createTournament, readTournament, tournamentsReady } from "@/components/tournament/api";
-import { newSecret, saveEntry } from "@/lib/tournament/store";
+import { newSecret, saveEntry, secretFor } from "@/lib/tournament/store";
 import type { Tournament } from "@/lib/tournament/types";
 import { markPushed, nextOp, toCreateBody, waiting } from "@/lib/turfSession/sync";
 import type { LiveError, Session } from "@/lib/turfSession/types";
@@ -14,7 +14,8 @@ import type { LiveError, Session } from "@/lib/turfSession/types";
  * tournament as the last reply showed it. A failure waits 2, 4, 8, 16, then
  * 30 s, and tries again when the phone is back online or the page is shown.
  * A session from a game asks for its link once match 1 is over (or "Share
- * a live link now"); one from the tools page only when asked.
+ * a live link now"); one from the tools page, or scored "on this phone
+ * instead" (game.local), only when asked, and never as the game's.
  */
 
 export type LivePhase = "unready" | "off" | "creating" | "on" | "waiting" | "error";
@@ -94,7 +95,7 @@ export function useSessionSync(session: Session | null, mutate: Mutate, account:
         const secret = live.secret ?? newSecret();
         if (!live.secret) mutate(s.id, (x) => ({ ...x, live: { ...x.live, secret } }));
         const made = toCreateBody({ ...s, live: { ...live, secret } }, secret);
-        const r = await createTournament({ ...made.body, ...(s.game ? { game: s.game.id } : {}) });
+        const r = await createTournament({ ...made.body, ...(s.game && !s.game.local ? { game: s.game.id } : {}) });
         const body = r.body as { code?: string; error?: string; field?: string; kept?: boolean };
         if (r.status === 200 && typeof body.code === "string") {
           // Kept with the account by the create, saved as the Live Tournament's own create saves it: no second claim.
@@ -106,23 +107,29 @@ export function useSessionSync(session: Session | null, mutate: Mutate, account:
           return;
         }
         if (r.status === 409 && typeof body.code === "string") {
-          // The game has its link already. This phone's own, its reply lost? A change with this secret says.
+          // The game has its link already. This phone's own? Its reply lost (this session's secret), or made by
+          // a session deleted here since (the secret this phone kept for that code). A change with each says.
           const code = body.code;
-          const mine = await changeTournament(code, secret, { op: "team", id: 1, name: s.sides.a.name, short: null });
-          const mb = mine.body as { ok?: boolean; view?: { tournament: Tournament } | null; error?: string };
-          if (mine.status === 200 && mb.ok) {
-            saveEntry(code, { secret, name: made.body.name, at: Date.now() });
-            view.current = mb.view ? { code, t: mb.view.tournament, fresh: true } : null;
-            fails.current = 0;
-            mutate(s.id, (x) => ({ ...x, live: { ...x.live, secret, code, pushed: {}, teamsPushed: null, error: null } }));
+          const kept = secretFor(code);
+          const tries = kept && kept !== secret ? [secret, kept] : [secret];
+          for (const key of tries) {
+            const mine = await changeTournament(code, key, { op: "team", id: 1, name: s.sides.a.name, short: null });
+            const mb = mine.body as { ok?: boolean; view?: { tournament: Tournament } | null; error?: string };
+            if (mine.status === 200 && mb.ok) {
+              saveEntry(code, { secret: key, name: made.body.name, at: Date.now() });
+              view.current = mb.view ? { code, t: mb.view.tournament, fresh: true } : null;
+              fails.current = 0;
+              mutate(s.id, (x) => ({ ...x, live: { ...x.live, secret: key, code, pushed: {}, teamsPushed: null, error: null } }));
+              return;
+            }
+            if (mine.status === 410) return setError(s.id, "stopped");
+            if (mine.status === 403) continue;
+            fails.current++;
+            later();
             return;
           }
-          if (mine.status === 403 || mine.status === 410) {
-            setError(s.id, "taken", { follow: mine.status === 403 ? code : null });
-            return;
-          }
-          fails.current++;
-          later();
+          // Refused for every secret this phone has: another phone's link.
+          setError(s.id, "taken", { follow: code });
           return;
         }
         if (r.status === 401) return setError(s.id, "login");
@@ -198,7 +205,7 @@ export function useSessionSync(session: Session | null, mutate: Mutate, account:
   }, [ready, mutate, setError, later]);
 
   // A session from a game asks for its link once a match is over.
-  const wantNow = !!session && !!session.game && !session.live.want && !session.live.code && session.matches.some((m) => !!m.result);
+  const wantNow = !!session && !!session.game && !session.game.local && !session.live.want && !session.live.code && session.matches.some((m) => !!m.result);
   useEffect(() => {
     if (wantNow && ready && session) mutate(session.id, (s) => ({ ...s, live: { ...s.live, want: true } }));
   }, [wantNow, ready, session, mutate]);

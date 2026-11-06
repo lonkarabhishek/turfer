@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { apply, derive, newMatch } from "../cricket/scoring";
-import { addScored, applyChanges, battingFirstFor, current, endSession, matchTitle, nextSetup, recordFinal, recordScored, removeMatch, reopen, replaceCurrent } from "./session";
+import { addScored, applyChanges, battingFirstFor, current, deliveries, endSession, matchTitle, nextSetup, oversText, recordFinal, recordScored, removeMatch, reopen, replaceCurrent, unfinished } from "./session";
 import { tally } from "./tally";
 import { aSession, T0, withFinal, withScored } from "./testkit";
 
@@ -150,4 +150,67 @@ test("changes apply from the next match; an empty match being played can be made
   assert.equal(r.session.matches[0].overs, 8);
   assert.equal(nextSetup(r.session, { n: 1, battingFirst: "b" }).title, "Match 1 of 6");
   assert.equal(nextSetup(r.session, { n: 1, battingFirst: "b" }).teamA, "Lions");
+});
+
+test("a first-ball wide has started the match: it is not made again or dropped as empty", () => {
+  const s0 = aSession();
+  const m0 = newMatch(nextSetup(s0), { id: "m1", now: T0 });
+  let s = addScored(s0, "m1", "a", T0);
+  let m = apply(m0, { type: "setBatter", player: "a1", end: "striker" });
+  m = apply(m, { type: "setBatter", player: "a2", end: "nonStriker" });
+  m = apply(m, { type: "setBowler", player: "b1" });
+  m = apply(m, { type: "ball", runs: 0, extra: "wide", extraRuns: 4 });
+  m = apply(m, { type: "ball", runs: 0, extra: "noBall" });
+  const v = derive(m);
+  assert.equal(v.current.legalBalls, 0);
+  assert.equal(v.current.runs, 6);
+  assert.equal(deliveries(v), 2);
+  s = recordScored(s, 1, v, T0);
+  assert.equal(s.matches[0].balls, 2, "two balls bowled, neither legal");
+  const r = replaceCurrent(s, "m1b", "b", T0);
+  assert.equal(r.session, s, "Swap who bats first does not throw the extras away");
+  assert.equal(r.dropped, null);
+  assert.deepEqual(unfinished(s).map((x) => x.n), [1], "End session asks first");
+  assert.equal(recordFinal(s, { n: null, battedFirst: "a", a: { runs: 1, wickets: 0, balls: 6 }, b: { runs: 0, wickets: 0, balls: 6 }, noResult: false }, T0).session.matches.length, 2, "a typed score comes after it");
+});
+
+test("unfinished: the match being played and an earlier one whose result Undo took back; not an empty one", () => {
+  const one = withScored(aSession(), [1, 1, 1, 1, 1, 1], [4, 4]);
+  let s = withFinal(one.session, 30, 20);
+  assert.deepEqual(unfinished(s), []);
+  // Match 1's last ball taken back from the hub: it has balls and no result.
+  const undone = { ...one.match, events: one.match.events.slice(0, -1) };
+  s = recordScored(s, 1, derive(undone), T0 + 5);
+  assert.deepEqual(unfinished(s).map((x) => x.n), [1]);
+  assert.equal(current(s), null, "it is not the match being played");
+  s = addScored(s, "m3", "a", T0);
+  assert.deepEqual(unfinished(s).map((x) => x.n), [1], "an empty match 3 is not counted");
+  s = { ...s, matches: s.matches.map((x) => (x.n === 3 ? { ...x, balls: 4 } : x)) };
+  assert.deepEqual(unfinished(s).map((x) => x.n), [1, 3]);
+});
+
+test("correct the score: a scored match becomes a typed one where it is, same number, its lines dropped", () => {
+  const one = withScored(aSession(), [1, 1, 1, 1, 1, 1], [4, 4]);
+  let s = withFinal(withFinal(one.session, 30, 20, { battedFirst: "b" }), 40, 20);
+  assert.equal(s.matches[0].result?.outcome, "b");
+  const r = recordFinal(s, { n: 1, battedFirst: "a", a: { runs: 12, wickets: 1, balls: 6 }, b: { runs: 8, wickets: 2, balls: 6 }, noResult: false, replaceScored: true }, T0 + 9);
+  s = r.session;
+  assert.equal(r.n, 1);
+  assert.equal(r.dropped, null, "the scorer copy stays in the Live Cricket Scorer's saved matches");
+  assert.equal(s.matches.length, 3);
+  const m = s.matches[0];
+  assert.deepEqual([m.n, m.kind, m.matchId, m.battedFirst, m.result?.text], [1, "final", null, "a", "Titans won by 4 runs"]);
+  assert.deepEqual([m.bat, m.bowl], [[], []]);
+  assert.equal(m.at, one.session.matches[0].at, "it keeps its place in time");
+  assert.equal(tally(s).line, "Titans 3 - 0 Strikers");
+  // Without replaceScored it is still refused.
+  const again = withScored(aSession(), [1, 1, 1, 1, 1, 1], [4, 4]).session;
+  assert.equal(recordFinal(again, { n: 1, battedFirst: "a", a: { runs: 1, wickets: 0, balls: 6 }, b: { runs: 0, wickets: 0, balls: 6 }, noResult: false }, T0).session, again);
+});
+
+test("the overs line: one number when every match had it, a range when they changed", () => {
+  assert.equal(oversText([]), "");
+  assert.equal(oversText([{ overs: 6 }, { overs: 6 }]), "6 overs a match");
+  assert.equal(oversText([{ overs: 1 }]), "1 over a match");
+  assert.equal(oversText([{ overs: 6 }, { overs: 4 }, { overs: 6 }]), "4 to 6 overs a match");
 });

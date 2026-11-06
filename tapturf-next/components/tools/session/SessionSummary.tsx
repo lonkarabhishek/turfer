@@ -8,6 +8,7 @@ import { dayLabel } from "@/lib/turfSession/plan";
 import { cardLines, summaryText } from "@/lib/turfSession/share";
 import { batText, bowlText, hasNames, topBatters, topBowlers } from "@/lib/turfSession/stats";
 import { extrasText, matchLine, tally, verdict } from "@/lib/turfSession/tally";
+import { oversText } from "@/lib/turfSession/session";
 import type { Session, SessionMatch } from "@/lib/turfSession/types";
 import { ShareSheet } from "../scorer/ShareSheet";
 import { ToolCta } from "../ToolCta";
@@ -92,7 +93,7 @@ export function SessionSummary({
         </div>
         {extrasText(t) && <p className="mt-1 text-[14px] text-white/80">{extrasText(t)}</p>}
         <p className="mt-2 text-[14px] text-white/80">
-          {done.length} match{done.length === 1 ? "" : "es"} · {session.overs} overs a match
+          {[`${done.length} match${done.length === 1 ? "" : "es"}`, oversText(done)].filter(Boolean).join(" · ")}
         </p>
       </section>
 
@@ -174,7 +175,11 @@ export function SessionSummary({
           <p className="sm:col-span-2 text-[12px] text-primary-600">From the matches scored ball by ball.</p>
         </section>
       ) : (
-        <p className="text-[14px] text-primary-600">Name players next time to see the top scorers.</p>
+        <p className="text-[14px] text-primary-600">
+          {session.sides.a.players.length || session.sides.b.players.length
+            ? "Top scorers show for players picked as they batted and bowled: turn on Ask who bats and bowls, or tap a Batter 1 in the scorer to name them."
+            : "Name players next time to see the top scorers."}
+        </p>
       )}
 
       <div className="grid gap-2">

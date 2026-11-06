@@ -142,10 +142,13 @@ export function replaceCurrent(s: Session, matchId: string, battedFirst: SideKey
 
 const strip = (x: Innings): Innings => ({ runs: x.runs, wickets: x.wickets, balls: x.balls, allOut: !!x.allOut });
 
+/** Every ball bowled in the scorer's view, wides and no-balls too: a first-ball wide has started the match. */
+export const deliveries = (view: MatchView): number => view.innings.reduce((sum, i) => sum + i.commentary.filter((l) => l.kind === "ball").length, 0);
+
 /**
  * What the scorer's view of match n says, copied in: its result (as a
  * live tournament keeps one, lib/tournament/live.ts liveResultOf), its
- * batting and bowling lines, the balls bowled and its overs. For the
+ * batting and bowling lines, the balls bowled (deliveries) and its overs. For the
  * match being played, team names renamed in its Match settings and new
  * names typed for its players carry over to the session. The same session
  * object back when nothing changed.
@@ -170,7 +173,7 @@ export function recordScored(s: Session, n: number, view: MatchView, now: number
     result,
     bat,
     bowl,
-    balls: view.innings.reduce((sum, i) => sum + i.legalBalls, 0),
+    balls: deliveries(view),
   };
   let sides = s.sides;
   if (n === s.matches.length) {
@@ -199,19 +202,26 @@ export type FinalInput = {
   a: Innings;
   b: Innings;
   noResult: boolean;
+  /**
+   * Match n was scored ball by ball and this typed score replaces it where it is ("Correct the score"):
+   * same number, its batting and bowling lines dropped, its scorer copy kept in the Live Cricket Scorer.
+   */
+  replaceScored?: boolean;
 };
 
 /**
  * A match's final score, typed in: it counts like any other. It edits a
  * typed match, replaces the empty match being played (dropped: its scorer
- * match id, to delete), or comes next. All out is a side whose wickets
- * reach the limit.
+ * match id, to delete), corrects a match scored ball by ball when asked
+ * (replaceScored), or comes next. All out is a side whose wickets reach
+ * the limit.
  */
 export function recordFinal(s: Session, x: FinalInput, now: number): { session: Session; dropped: string | null; n: number } {
   const target = x.n === null ? null : s.matches.find((m) => m.n === x.n) ?? null;
   const cur = current(s);
   const replace = target ?? (cur && cur.balls === 0 ? cur : null);
-  if (target && target.kind === "balls" && target.balls > 0) return { session: s, dropped: null, n: target.n };
+  const scored = !!target && target.kind === "balls" && target.balls > 0;
+  if (scored && !x.replaceScored) return { session: s, dropped: null, n: target!.n };
   if (!replace && s.matches.length >= MAX_MATCHES) return { session: s, dropped: null, n: s.matches.length };
   const playersPerSide = replace?.playersPerSide ?? s.playersPerSide;
   const lastManStands = replace?.lastManStands ?? s.rules.lastManStands;
@@ -240,7 +250,22 @@ export function recordFinal(s: Session, x: FinalInput, now: number): { session: 
     at: replace?.at ?? now,
   };
   const matches = replace ? s.matches.map((y) => (y === replace ? m : y)) : [...s.matches, m];
-  return { session: touched(s, now, { matches }), dropped: replace?.kind === "balls" ? replace.matchId : null, n };
+  // A match with balls in it keeps its scorer copy (the Live Cricket Scorer's saved matches); an empty one goes.
+  return { session: touched(s, now, { matches }), dropped: replace?.kind === "balls" && !scored ? replace.matchId : null, n };
+}
+
+/** Matches scored ball by ball that have started (a ball, wides too) but have no result: the one being played, or an earlier one whose result Undo took back. */
+export function unfinished(s: Pick<Session, "matches">): SessionMatch[] {
+  return s.matches.filter((m) => m.kind === "balls" && !m.result && m.balls > 0);
+}
+
+/** "6 overs a match", or "4 to 6 overs a match" when the overs changed between matches; "" for none. */
+export function oversText(matches: Pick<SessionMatch, "overs">[]): string {
+  if (!matches.length) return "";
+  const lo = Math.min(...matches.map((m) => m.overs));
+  const hi = Math.max(...matches.map((m) => m.overs));
+  const word = (n: number) => `${n} over${n === 1 ? "" : "s"}`;
+  return lo === hi ? `${word(lo)} a match` : `${lo} to ${word(hi)} a match`;
 }
 
 /** Match n out of the session; the ones after it move up a number. */

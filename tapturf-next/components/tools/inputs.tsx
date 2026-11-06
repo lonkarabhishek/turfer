@@ -74,7 +74,8 @@ export function TextInput({ id, value, onChange, placeholder, maxLength = 40, ar
   );
 }
 
-export function Segmented<T extends string>({ value, onChange, options, ariaLabel }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[]; ariaLabel: string }) {
+/** tall: 44 px options (the Turf Session Scorer, used standing on a turf); the rest stay 40. */
+export function Segmented<T extends string>({ value, onChange, options, ariaLabel, tall = false }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[]; ariaLabel: string; tall?: boolean }) {
   return (
     <div role="radiogroup" aria-label={ariaLabel} className="inline-flex w-full rounded-xl bg-primary-100 p-1 gap-1">
       {options.map((o) => (
@@ -84,7 +85,7 @@ export function Segmented<T extends string>({ value, onChange, options, ariaLabe
           role="radio"
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
-          className={`flex-1 h-10 rounded-lg text-[14px] font-semibold transition-colors ${value === o.value ? "bg-white text-primary-900 shadow-soft" : "text-primary-600 hover:text-primary-900"}`}
+          className={`flex-1 ${tall ? "min-h-11 px-1 leading-tight" : "h-10"} rounded-lg text-[14px] font-semibold transition-colors ${value === o.value ? "bg-white text-primary-900 shadow-soft" : "text-primary-600 hover:text-primary-900"}`}
         >
           {o.label}
         </button>

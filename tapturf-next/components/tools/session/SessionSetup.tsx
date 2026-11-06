@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ChevronDown, Coins, Play, Shuffle } from "lucide-react";
 import { DEFAULT_RULES, type Rules } from "@/lib/cricket/scoring";
 import { splitTeams } from "@/lib/tools/teams";
-import { FORMATS, indiaDay, planChips } from "@/lib/turfSession/plan";
+import { FORMATS, indiaDay, planChips, setupPlan } from "@/lib/turfSession/plan";
 import { readNames, sameNames, sideName, type Prefill } from "@/lib/turfSession/names";
 import type { NewSession } from "@/lib/turfSession/session";
 import type { Format, Side, SideKey } from "@/lib/turfSession/types";
@@ -14,6 +14,15 @@ import { HouseRules, ruleSummary } from "./HouseRules";
 import { SidesEditor } from "./SidesEditor";
 
 export type GameStrip = { state: "loading" | "failed" | "ok"; line: string } | null;
+
+/** "Ask who bats and bowls", in setup and in Change teams or overs. */
+export const PICK_HINT = "Picks the next batter after each wicket and the bowler each over, so the top scorers are real. Off: no questions; they go in as Batter 1 and Bowler 1, and a tap on one in the scorer names them.";
+
+/** Players a side chips: four and Custom on one row from 360 px; under that they wrap, so each is 44 px wide at least. */
+export const PLAYER_COLS = (chips: number) => (chips > 3 ? "grid-cols-3 min-[360px]:grid-cols-[1fr_1fr_1fr_1fr_auto]" : "grid-cols-[1fr_1fr_1fr_auto]");
+
+/** India's date now, read when Start is tapped. */
+const todayInIndia = () => indiaDay(Date.now());
 
 /** "2-hour", "90-minute", "1-hour": the slot as the hint says it. */
 function slotWords(min: number): string {
@@ -58,7 +67,9 @@ export function SessionSetup({ prefill, strip, sameTeams, onBlank, onStart }: { 
   const [pickChoice, setPickChoice] = useState<boolean | null>(null);
   const [rules, setRules] = useState<Rules>(DEFAULT_RULES);
   const [venue, setVenue] = useState(prefill?.venue ?? "");
-  const [plan, setPlan] = useState<number | null>(prefill?.plan ?? null);
+  // Undefined until a chip is tapped: till then, from a game, the guess follows the overs and format chosen.
+  const [pickedPlan, setPlan] = useState<number | null | undefined>(undefined);
+  const plan = setupPlan(prefill?.slot ?? null, format, overs, pickedPlan);
   const [showPlayers, setShowPlayers] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -110,7 +121,7 @@ export function SessionSetup({ prefill, strip, sameTeams, onBlank, onStart }: { 
         format,
         venue: v,
         turf: prefill?.turf && v === prefill.venue ? prefill.turf : null,
-        day: prefill?.day ?? indiaDay(Date.now()),
+        day: prefill?.day ?? todayInIndia(),
         overs,
         playersPerSide: players,
         rules,
@@ -157,6 +168,7 @@ export function SessionSetup({ prefill, strip, sameTeams, onBlank, onStart }: { 
       <div>
         <p className="text-[13px] font-semibold text-primary-800 mb-1.5">Format</p>
         <Segmented
+          tall
           value={format}
           onChange={pickFormat}
           ariaLabel="Format"
@@ -202,7 +214,7 @@ export function SessionSetup({ prefill, strip, sameTeams, onBlank, onStart }: { 
         max={30}
         id="ts-players"
         unit="players"
-        cols={f.playersChips.length > 3 ? "grid-cols-[1fr_1fr_1fr_1fr_auto]" : "grid-cols-[1fr_1fr_1fr_auto]"}
+        cols={PLAYER_COLS(f.playersChips.length)}
       />
 
       <div>
@@ -210,6 +222,7 @@ export function SessionSetup({ prefill, strip, sameTeams, onBlank, onStart }: { 
         <div className="flex gap-2">
           <div className="min-w-0 flex-1">
             <Segmented
+              tall
               value={first}
               onChange={(v) => {
                 setFirst(v);
@@ -235,7 +248,7 @@ export function SessionSetup({ prefill, strip, sameTeams, onBlank, onStart }: { 
         <button type="button" onClick={() => setShowPlayers((v) => !v)} aria-expanded={showPlayers} className="w-full min-h-14 px-4 py-2 flex items-center justify-between gap-3 text-left">
           <span className="min-w-0">
             <span className="block text-[15px] font-semibold text-primary-900">Players (optional)</span>
-            <span className="block text-[12px] text-primary-600">{prefill && allNames.length ? `${allNames.length} player${allNames.length === 1 ? "" : "s"} from the game are in. Add the rest, or skip.` : count ? `${count} named` : "Add names to see the top run scorers and wicket takers. Skip it to just tap the runs."}</span>
+            <span className="block text-[12px] text-primary-600">{prefill && allNames.length ? `${allNames.length === 1 ? "1 player from the game is in" : `${allNames.length} players from the game are in`}. Add the rest, or skip.` : count ? `${count} named` : "Add names to see the top run scorers and wicket takers. Skip it to just tap the runs."}</span>
           </span>
           <ChevronDown className={`w-5 h-5 shrink-0 text-primary-500 motion-safe:transition-transform ${showPlayers ? "rotate-180" : ""}`} aria-hidden />
         </button>
@@ -252,7 +265,7 @@ export function SessionSetup({ prefill, strip, sameTeams, onBlank, onStart }: { 
             <button type="button" role="switch" aria-checked={pick} onClick={() => setPickChoice(!pick)} className="w-full min-h-14 py-2 flex items-center justify-between gap-3 text-left">
               <span className="min-w-0">
                 <span className="block text-[15px] font-semibold text-primary-900">Ask who bats and bowls</span>
-                <span className="block text-[12px] text-primary-600">Picks the next batter after each wicket and the bowler each over. Off: batters come in the order listed and bowlers take turns.</span>
+                <span className="block text-[12px] text-primary-600">{PICK_HINT}</span>
               </span>
               <SwitchKnob on={pick} />
             </button>
@@ -287,7 +300,7 @@ export function SessionSetup({ prefill, strip, sameTeams, onBlank, onStart }: { 
                   </button>
                 ))}
               </div>
-              {prefill && <p className="mt-1.5 text-[12px] text-primary-600">A guess from your {slotWords(prefill.slot)} slot. Play as many as you like.</p>}
+              {prefill && pickedPlan === undefined && <p className="mt-1.5 text-[12px] text-primary-600">A guess from your {slotWords(prefill.slot)} slot at {overs} overs a match. Play as many as you like.</p>}
             </div>
           </div>
         )}

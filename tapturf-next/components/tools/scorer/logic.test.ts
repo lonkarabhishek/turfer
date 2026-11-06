@@ -330,35 +330,27 @@ function quick(m: Match, events: MatchEvent[], opts: { chase?: boolean } = {}): 
 const dot = (): MatchEvent => ({ type: "ball", runs: 0, extra: "none" });
 const named = () => newMatch({ teamA: "Titans", teamB: "Strikers", overs: 2, playersPerSide: 6, players: { a: ["Rohan", "Amit", "Sahil"], b: ["Vikas", "Sameer"] } }, { id: "q", now: 0 });
 
-test("quick mode: a new match gets its openers and bowler, the names in the order typed", () => {
-  const picks = autoPicks(named());
-  assert.deepEqual(picks, [
-    { type: "setBatter", player: "a1" },
-    { type: "setBatter", player: "a2" },
-    { type: "setBowler", player: "b1" },
-  ]);
+test("quick mode: a new match gets placeholder openers and bowler, never the names typed", () => {
   const v = derive(quick(named(), []));
   assert.equal(v.ready, true);
-  assert.equal(v.current.striker?.name, "Rohan");
-  assert.equal(v.current.nonStriker?.name, "Amit");
-  assert.equal(v.current.bowler?.name, "Vikas");
-  // No names: placeholders, as the sheets would offer.
+  assert.deepEqual([v.current.striker?.name, v.current.nonStriker?.name, v.current.bowler?.name], ["Batter 1", "Batter 2", "Bowler 1"]);
+  // No names: the same placeholders, as the sheets would offer.
   const blank = derive(quick(newMatch({ overs: 2, playersPerSide: 6 }, { id: "b", now: 0 }), []));
   assert.deepEqual([blank.current.striker?.name, blank.current.nonStriker?.name, blank.current.bowler?.name], ["Batter 1", "Batter 2", "Bowler 1"]);
 });
 
-test("quick mode: only the bowler after six legal balls, the one with the fewest balls who may bowl", () => {
+test("quick mode: only the bowler after six legal balls, a placeholder with the fewest balls who may bowl", () => {
   let m = quick(named(), []);
   for (let i = 0; i < 5; i++) m = quick(m, [dot()]);
   assert.deepEqual(autoPicks(m), [], "mid-over: nothing needed");
   m = quick(m, [dot()]);
   const v = derive(m);
   assert.equal(v.ready, true);
-  assert.equal(v.current.bowler?.name, "Sameer", "Vikas bowled the last over");
+  assert.equal(v.current.bowler?.name, "Bowler 2", "Bowler 1 bowled the last over; Vikas and Sameer are never picked for them");
   // A wide is not a legal ball: no new bowler.
   const w = quick(m, [{ type: "ball", runs: 0, extra: "wide" }]);
-  assert.equal(derive(w).current.bowler?.name, "Sameer");
-  // With no names, two placeholders take turns.
+  assert.equal(derive(w).current.bowler?.name, "Bowler 2");
+  // Two placeholders take turns.
   let b = quick(newMatch({ overs: 3, playersPerSide: 6 }, { id: "b", now: 0 }), []);
   const bowlers: string[] = [];
   for (let i = 0; i < 18; i++) {
@@ -368,18 +360,38 @@ test("quick mode: only the bowler after six legal balls, the one with the fewest
   assert.deepEqual(bowlers, ["Bowler 1", "Bowler 2", "Bowler 1"]);
 });
 
-test("quick mode: after a wicket the next batter comes in at the right end, from the names in order", () => {
+test("quick mode: a placeholder renamed by the scorer is a real pick, so it is not brought back by itself", () => {
+  let m = quick(named(), []);
+  const bowler = derive(m).current.bowler!;
+  m = quick(m, [{ type: "renamePlayer", team: "b", player: bowler.id, name: "Vikas" }]);
+  for (let i = 0; i < 12; i++) m = quick(m, [dot()]);
+  const first = derive(m).innings[0];
+  assert.deepEqual(
+    first.bowlers.map((x) => x.name),
+    ["Vikas", "Bowler 2"],
+    "over 2 went to a placeholder, not to Vikas or Sameer",
+  );
+  assert.ok(first.batters.every((x) => /^Batter \d+$/.test(x.name)), "nobody named batted in innings 1");
+  // The chase: side a's own placeholder bowls (not Rohan), and side b's chasers are placeholders too.
+  m = quick(m, [], { chase: true });
+  const chase = derive(m).current;
+  assert.equal(chase.bowler?.name, "Bowler 1");
+  assert.deepEqual([chase.striker?.name, chase.nonStriker?.name], ["Batter 1", "Batter 2"]);
+});
+
+test("quick mode: after a wicket a new placeholder comes in at the right end", () => {
   let m = quick(named(), []);
   m = quick(m, [{ type: "ball", runs: 0, extra: "none", wicket: { kind: "bowled" } }]);
   let v = derive(m);
-  assert.equal(v.current.striker?.name, "Sahil", "Rohan out on strike: Sahil in on strike");
-  assert.equal(v.current.nonStriker?.name, "Amit");
+  assert.equal(v.current.striker?.name, "Batter 3", "Batter 1 out on strike: a new batter in on strike");
+  assert.equal(v.current.nonStriker?.name, "Batter 2");
   // The non-striker run out: the new batter goes to that end.
   m = quick(m, [{ type: "ball", runs: 0, extra: "none", wicket: { kind: "runOut", out: "nonStriker" } }]);
   v = derive(m);
-  assert.equal(v.current.striker?.name, "Sahil");
-  assert.equal(v.current.nonStriker?.name, "Batter 4", "the names ran out: a new player");
+  assert.equal(v.current.striker?.name, "Batter 3");
+  assert.equal(v.current.nonStriker?.name, "Batter 4");
   assert.equal(v.ready, true);
+  assert.ok(!v.current.batters.some((x) => ["Rohan", "Amit", "Sahil"].includes(x.name)), "the names typed never bat unless picked");
 });
 
 test("quick mode: nothing at the innings break unless it is the chase's tap; nothing once the match is over", () => {

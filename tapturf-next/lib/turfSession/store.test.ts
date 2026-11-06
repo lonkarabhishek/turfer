@@ -54,3 +54,12 @@ test("the game page's hand-off: same game, within 30 minutes", () => {
   const s = aSession({ game: { id: ask.game.id, start: "19:00", end: "21:00" } });
   assert.equal(sessionForGame(keep(readSessions(null), s), ask.game.id.toUpperCase())?.id, s.id);
 });
+
+test("a 'Score on this phone instead' session keeps its game, marked local, and the game page finds it", () => {
+  const id = "11111111-2222-3333-4444-555555555555";
+  const s = aSession({ game: { id, start: "19:00", end: "21:00", local: true } });
+  const back = readSession(JSON.parse(JSON.stringify(s)))!;
+  assert.deepEqual(back.game, { id, start: "19:00", end: "21:00", local: true });
+  assert.deepEqual(readSession({ ...s, game: { id, start: "19:00", end: "21:00", local: "yes" } })!.game, { id, start: "19:00", end: "21:00" }, "only true is local");
+  assert.equal(sessionForGame(keep(readSessions(null), back), id)?.id, s.id);
+});

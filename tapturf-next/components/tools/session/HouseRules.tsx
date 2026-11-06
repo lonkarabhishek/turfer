@@ -26,6 +26,7 @@ export function HouseRules({ rules, onChange }: { rules: Rules; onChange: (r: Ru
         <div>
           <p className="text-[13px] font-semibold text-primary-800 mb-1.5">A wide gives</p>
           <Segmented
+            tall
             value={String(rules.wideRuns) as "0" | "1" | "2"}
             onChange={(v) => set("wideRuns", Number(v))}
             ariaLabel="Runs for a wide"
@@ -39,6 +40,7 @@ export function HouseRules({ rules, onChange }: { rules: Rules; onChange: (r: Ru
         <div>
           <p className="text-[13px] font-semibold text-primary-800 mb-1.5">A no-ball gives</p>
           <Segmented
+            tall
             value={String(rules.noBallRuns) as "0" | "1" | "2"}
             onChange={(v) => set("noBallRuns", Number(v))}
             ariaLabel="Runs for a no-ball"
@@ -52,6 +54,7 @@ export function HouseRules({ rules, onChange }: { rules: Rules; onChange: (r: Ru
         <div>
           <p className="text-[13px] font-semibold text-primary-800 mb-1.5">Free hit after a no-ball</p>
           <Segmented
+            tall
             value={rules.freeHit ? "on" : "off"}
             onChange={(v) => set("freeHit", v === "on")}
             ariaLabel="Free hit after a no-ball"
@@ -64,6 +67,7 @@ export function HouseRules({ rules, onChange }: { rules: Rules; onChange: (r: Ru
         <div>
           <p className="text-[13px] font-semibold text-primary-800 mb-1.5">Last man stands</p>
           <Segmented
+            tall
             value={rules.lastManStands ? "on" : "off"}
             onChange={(v) => set("lastManStands", v === "on")}
             ariaLabel="Last man stands"
@@ -76,6 +80,7 @@ export function HouseRules({ rules, onChange }: { rules: Rules; onChange: (r: Ru
         <div>
           <p className="text-[13px] font-semibold text-primary-800 mb-1.5">Max overs a bowler</p>
           <Segmented
+            tall
             value={rules.maxOversPerBowler ? String(rules.maxOversPerBowler) : "none"}
             onChange={(v) => set("maxOversPerBowler", v === "none" ? null : Number(v))}
             ariaLabel="Max overs a bowler"
@@ -91,6 +96,7 @@ export function HouseRules({ rules, onChange }: { rules: Rules; onChange: (r: Ru
         <div>
           <p className="text-[13px] font-semibold text-primary-800 mb-1.5">Batter retires at</p>
           <Segmented
+            tall
             value={rules.retireAt ? String(rules.retireAt) : "none"}
             onChange={(v) => set("retireAt", v === "none" ? null : Number(v))}
             ariaLabel="Batter retires at"

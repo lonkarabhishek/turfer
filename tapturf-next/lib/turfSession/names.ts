@@ -77,8 +77,8 @@ export type Prefill = {
   venue: string;
   turf: Venue | null;
   day: string;
-  /** Null for "Score on this phone instead": filled in from the game, never linked to it. */
-  game: { id: string; start: string; end: string } | null;
+  /** The game; local for "Score on this phone instead" (found from the game page here, its live link never the game's). */
+  game: { id: string; start: string; end: string; local?: true } | null;
   sides: { a: Side; b: Side };
 };
 

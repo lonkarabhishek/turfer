@@ -23,7 +23,10 @@ const POLL_MS = 30_000;
  * Session Scorer filled in from the game (its sport's format, overs that
  * fit its slot, half its spots a side, its venue, day and players). Once
  * the game's session has a live link (the game's own tournament code,
- * sessionCode), everyone who can see the game sees its running result.
+ * sessionCode), everyone who can see the game sees its running result,
+ * and a phone with its own session for the game (the link's, or one
+ * scored "on this phone instead") gets back to it: Continue scoring, or
+ * See the summary once it has ended.
  * Nets and practice, or nothing to show: the fallback (the Live Scorer
  * promo, while the game is not over).
  */
@@ -126,9 +129,10 @@ export function GameScore({
         <Link href={`/tournament/${tour.code}`} className="press-tight mt-4 inline-flex w-full sm:w-auto items-center justify-center gap-2 min-h-12 px-6 rounded-full bg-white text-primary-900 text-[15px] font-bold hover:bg-accent-50">
           <Trophy className="w-4 h-4" aria-hidden /> See every match
         </Link>
-        {mine && !mine.ended ? (
+        {mine ? (
+          // This phone's own session for the game (the live link's, or a "Score on this phone instead" one): back to it.
           <Link href={scoreHref} className="press-tight mt-2 inline-flex w-full sm:w-auto items-center justify-center gap-2 min-h-12 px-6 rounded-full bg-accent-500 text-white text-[15px] font-bold hover:bg-accent-600 sm:ml-2">
-            <Play className="w-4 h-4" aria-hidden /> Continue scoring
+            <Play className="w-4 h-4" aria-hidden /> {mine.ended ? "See the summary" : "Continue scoring"}
           </Link>
         ) : (
           canScore && (

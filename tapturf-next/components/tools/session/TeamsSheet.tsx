@@ -11,6 +11,7 @@ import type { Session, Side } from "@/lib/turfSession/types";
 import { Sheet } from "../scorer/ui";
 import { NumberChips, SwitchKnob } from "../scorer/Setup";
 import { HouseRules, ruleSummary } from "./HouseRules";
+import { PICK_HINT, PLAYER_COLS } from "./SessionSetup";
 import { SidesEditor } from "./SidesEditor";
 
 /**
@@ -63,12 +64,12 @@ export function TeamsSheet({ session, emptyNow, n, onSave, onClose }: { session:
       </div>
       <div className="mt-4 space-y-4">
         <NumberChips label="Overs a match" value={overs} onChange={setOvers} presets={f.oversChips} max={50} id="ts-overs" unit="overs" cols="grid-cols-3 sm:grid-cols-6" />
-        <NumberChips label="Players a side" value={players} onChange={(v) => setPlayers(Math.max(2, v))} presets={f.playersChips} max={30} id="ts-players" unit="players" cols={f.playersChips.length > 3 ? "grid-cols-[1fr_1fr_1fr_1fr_auto]" : "grid-cols-[1fr_1fr_1fr_auto]"} />
+        <NumberChips label="Players a side" value={players} onChange={(v) => setPlayers(Math.max(2, v))} presets={f.playersChips} max={30} id="ts-players" unit="players" cols={PLAYER_COLS(f.playersChips.length)} />
       </div>
       <button type="button" role="switch" aria-checked={pick} onClick={() => setPick(!pick)} className="mt-4 w-full min-h-14 py-2 flex items-center justify-between gap-3 text-left">
         <span className="min-w-0">
           <span className="block text-[15px] font-semibold text-primary-900">Ask who bats and bowls</span>
-          <span className="block text-[12px] text-primary-600">Picks the next batter after each wicket and the bowler each over. Off: batters come in the order listed and bowlers take turns.</span>
+          <span className="block text-[12px] text-primary-600">{PICK_HINT}</span>
         </span>
         <SwitchKnob on={pick} />
       </button>
