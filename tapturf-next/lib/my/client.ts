@@ -3,6 +3,7 @@ import { getFirebaseAuth } from "@/lib/firebase/client";
 import type { AspectId } from "@/lib/reviews/catalog";
 import type { AspectCount, ReportFields } from "@/lib/reviews/types";
 import { hoursPatch, parseOwner, type OwnerSlots, type SlotChange } from "@/lib/availability/slots";
+import { parseAdminSlots, type AdminSlots } from "@/lib/my/adminSlots";
 
 /**
  * Browser side of myTapturf. Every owner call goes to a database
@@ -202,6 +203,26 @@ export async function getOwnerSlots(turfId: string): Promise<OwnerSlots | { erro
     throw e;
   }
   return parseOwner(raw) ?? { error: "malformed" };
+}
+
+/**
+ * The site owner's read-only look at a turf's Slots tab (admin_turf_slots,
+ * supabase/migrations/20261106_admin_slots_view.sql): the owner's view of the
+ * slots and the booking requests by time alone. Read only: nothing here
+ * marks, confirms, switches or answers. "missing" before the migration; a
+ * refusal is { error } (forbidden for anyone but the site owner,
+ * not_claimed), as is an answer that is not the shape adminSlots.ts reads
+ * ({ error: "malformed" }). Throws when the call itself fails.
+ */
+export async function getAdminSlots(turfId: string): Promise<AdminSlots | { error: string } | "missing"> {
+  let raw: unknown;
+  try {
+    raw = await ownerRpc<unknown>("admin_turf_slots", { p_turf_id: turfId });
+  } catch (e) {
+    if (e instanceof Error && /Could not find the function/i.test(e.message)) return "missing";
+    throw e;
+  }
+  return parseAdminSlots(raw) ?? { error: "malformed" };
 }
 
 /** Mark hours free or booked (one batch, at most MAX_CHANGES). The answer is the owner's view after it. */

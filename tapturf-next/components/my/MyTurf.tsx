@@ -15,6 +15,7 @@ import { ManagerNameNote } from "./ManagerNameNote";
 import { GroundSizes, type GroundSizeState } from "./GroundSizes";
 import { GroundSizeNudge } from "./GroundSizeNudge";
 import { FreeSlots, type InitialSlots } from "./FreeSlots";
+import { AdminSlots } from "./AdminSlots";
 import { pageHasNumber } from "@/lib/my/numbers";
 import { turfPath } from "@/lib/utils/turfPath";
 
@@ -225,7 +226,21 @@ export function MyTurf({ id }: { id: string }) {
           hoursKey={`${t.start_time}|${t.end_time}|${t.is_24x7}|${t.closed_days}`}
           onHoursSaved={load}
           hasNumber={pageHasNumber(t) ?? true}
-          whenOff={(why) => <SlotsOff why={why} pageHref={turfTabHref(t.id, "page")} />}
+          whenOff={(why) =>
+            // Free slots refuses only the site owner on a turf that opened here (owner_dashboard lets in a claim or the
+            // site owner; owner_slots, a claim alone), so "forbidden" here is the site owner: their read-only view, which
+            // admin_turf_slots checks again itself (anyone else gets this note, as before).
+            why === "forbidden" ? (
+              <AdminSlots
+                turfId={t.id}
+                turfName={t.name}
+                hasNumber={pageHasNumber(t) ?? true}
+                fallback={(w) => <SlotsOff why={w} pageHref={turfTabHref(t.id, "page")} />}
+              />
+            ) : (
+              <SlotsOff why={why} pageHref={turfTabHref(t.id, "page")} />
+            )
+          }
         />
       </div>
 

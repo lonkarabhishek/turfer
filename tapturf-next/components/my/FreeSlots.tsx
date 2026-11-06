@@ -842,3 +842,6 @@ function HoursPicker({ turfId, onSaved }: { turfId: string; onSaved: () => void 
     </div>
   );
 }
+
+// The section's frame, card and loading state, for the site owner's read-only Slots tab (components/my/AdminSlots.tsx).
+export { Frame as SlotsFrame, Skeleton as SlotsSkeleton, CARD as SLOTS_CARD };
