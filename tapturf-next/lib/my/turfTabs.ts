@@ -24,8 +24,10 @@ export const TURF_TABS: readonly { id: TurfTab; label: string }[] = [
 
 /** Every section a link scrolls to on /my/turf/<id>, and the tab it is on. */
 export const ANCHOR_TABS: Readonly<Record<string, TurfTab>> = {
-  // components/my/FreeSlots.tsx
+  // components/my/FreeSlots.tsx, and the booking requests list at its top (components/my/BookingRequests.tsx,
+  // where the owner's booking notifications link: lib/my/claimNotice.ts)
   slots: "slots",
+  requests: "slots",
   // components/my/EditListing.tsx: the editor, and its Opening hours and Your numbers groups
   edit: "page",
   hours: "page",
