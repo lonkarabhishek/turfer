@@ -5,7 +5,7 @@ import Link from "next/link";
 import { CalendarCheck, CalendarClock, CalendarX, ChevronRight, Loader2, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { cancelBookingCall } from "@/lib/booking/client";
-import { ME_COPY, meLine, sortMine } from "@/lib/booking/requests";
+import { ME_COPY, cancelOutcome, meLine, sortMine } from "@/lib/booking/requests";
 import type { BookingStatus, MyBookingRequest } from "@/lib/booking/types";
 
 const PILL: Record<BookingStatus, { cls: string; icon: typeof X }> = {
@@ -24,9 +24,13 @@ const sentOn = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { day:
  * (waiting, confirmed, declined, cancelled, expired) and, while it hasn't
  * started, a way to cancel it. Waiting and confirmed ones still to come
  * first. Nothing when there are none. The list comes from the Me tab
- * (useMeData), which counts the waiting ones.
+ * (useMeData), which counts the waiting ones and reads it again whenever the
+ * Requests tab is shown. Every row is the database's state as of that read
+ * (its status, can_cancel), never worked out again with the phone's clock,
+ * so the pill, the line and the button agree. A cancel names the state the
+ * row showed, so one the turf answered meanwhile is not cancelled.
  */
-export function MyBookingRequests({ bookings, nowMs, reload }: { bookings: MyBookingRequest[]; nowMs: number; reload: () => Promise<void> }) {
+export function MyBookingRequests({ bookings, reload }: { bookings: MyBookingRequest[]; reload: () => Promise<void> }) {
   if (!bookings.length) return null;
   return (
     <section aria-labelledby="turf-requests">
@@ -34,37 +38,38 @@ export function MyBookingRequests({ bookings, nowMs, reload }: { bookings: MyBoo
         {ME_COPY.heading}
       </h2>
       <ul className="space-y-2.5">
-        {sortMine(bookings, nowMs).map((r) => (
-          <Row key={r.id} r={r} nowMs={nowMs} reload={reload} />
+        {sortMine(bookings).map((r) => (
+          <Row key={r.id} r={r} reload={reload} />
         ))}
       </ul>
     </section>
   );
 }
 
-function Row({ r, nowMs, reload }: { r: MyBookingRequest; nowMs: number; reload: () => Promise<void> }) {
+function Row({ r, reload }: { r: MyBookingRequest; reload: () => Promise<void> }) {
   const { getToken } = useAuth();
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const pill = PILL[r.status] ?? PILL.expired;
   const Icon = pill.icon;
   const open = r.status === "waiting" || r.status === "confirmed";
 
   const cancel = async () => {
+    if (r.status !== "waiting" && r.status !== "confirmed") return;
     setBusy(true);
     setError(null);
-    const a = await cancelBookingCall(getToken, r.id);
-    const body = a.body as { r?: string; reason?: string };
-    if (a.status === 200 && body.r === "ok") {
-      await reload();
-      setBusy(false);
-      setAsking(false);
-      return;
-    }
+    setNote(null);
+    const a = await cancelBookingCall(getToken, r.id, r.status);
+    const out = cancelOutcome(a.status, a.body);
+    if (out.done || out.reload) await reload();
     setBusy(false);
-    setError(body.reason === "started" ? ME_COPY.started : ME_COPY.cancelFailed);
-    if (body.reason === "answered" || body.reason === "gone") void reload();
+    setAsking(false);
+    if (!out.done) {
+      setError(out.error);
+      setNote(out.note);
+    }
   };
 
   return (
@@ -84,7 +89,7 @@ function Row({ r, nowMs, reload }: { r: MyBookingRequest; nowMs: number; reload:
       </div>
 
       {r.note && <p className="mt-2 text-[13px] text-primary-600 italic break-words">&ldquo;{r.note}&rdquo;</p>}
-      <p className="mt-2 text-[13px] text-primary-800">{meLine(r, nowMs)}</p>
+      <p className="mt-2 text-[13px] text-primary-800">{meLine(r)}</p>
       {r.reason && (r.status === "declined" || r.status === "cancelled") && r.changed_by === "owner" && (
         <p className="mt-0.5 text-[13px] text-primary-600 break-words">{ME_COPY.said(r.reason)}</p>
       )}
@@ -92,6 +97,11 @@ function Row({ r, nowMs, reload }: { r: MyBookingRequest; nowMs: number; reload:
       {error && (
         <p role="alert" className="mt-2 text-[13px] text-hot-600">
           {error}
+        </p>
+      )}
+      {note && (
+        <p role="status" className="mt-2 rounded-xl bg-accent-50 px-3 py-2 text-[13px] font-semibold text-accent-800">
+          {note}
         </p>
       )}
 
@@ -125,6 +135,7 @@ function Row({ r, nowMs, reload }: { r: MyBookingRequest; nowMs: number; reload:
               type="button"
               onClick={() => {
                 setError(null);
+                setNote(null);
                 if (r.status === "waiting") void cancel();
                 else setAsking(true);
               }}

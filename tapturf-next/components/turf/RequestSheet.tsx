@@ -8,7 +8,7 @@ import { logContactClick } from "@/lib/analytics/contactClicks";
 import { tickStepHref } from "@/lib/account/verified";
 import { buildWhatsAppLink } from "@/lib/utils/whatsapp";
 import { contactLinks, slotMessage, type Slot, type SlotDay, type SlotKey } from "@/lib/availability/slots";
-import { NOTE_MAX, SHEET_COPY, hourChoices, requestWhatsAppText, sendOutcome, whenDay, whenText, type SheetOutcome } from "@/lib/booking/requests";
+import { NOTE_MAX, SHEET_COPY, hourChoices, limitText, requestWhatsAppText, sendOutcome, whenText, type SheetOutcome } from "@/lib/booking/requests";
 import { sendBookingCall } from "@/lib/booking/client";
 import { cleanNote } from "@/lib/booking/payload";
 import { Sheet } from "@/components/account/Sheet";
@@ -286,9 +286,9 @@ export function RequestSheet({
         </>
       )}
 
-      {(phase === "limit_waiting" || phase === "limit_day" || phase === "limit_sends") && (
+      {(phase === "limit_waiting" || phase === "limit_day" || phase === "limit_overlap" || phase === "limit_sends") && (
         <>
-          {notice(phase === "limit_waiting" ? SHEET_COPY.limitWaiting : phase === "limit_day" ? SHEET_COPY.limitDay(whenDay(slot.key)) : SHEET_COPY.limitSends, "amber")}
+          {notice(limitText(phase, slot.key), "amber")}
           <p className="mt-2">{seeRequests}</p>
           {closeButton(SHEET_COPY.done)}
         </>

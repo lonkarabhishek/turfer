@@ -61,7 +61,7 @@ function refusal(d: Record<string, unknown>): NextResponse {
     case "answered":
       return accountReply({ reason: "answered", status: typeof d.status === "string" && STATUSES.has(d.status) ? d.status : null }, "conflict");
     case "limit":
-      return accountReply({ reason: d.kind === "day" || d.kind === "waiting" || d.kind === "sends" ? d.kind : "waiting" }, "limit");
+      return accountReply({ reason: d.kind === "day" || d.kind === "overlap" || d.kind === "waiting" || d.kind === "sends" ? d.kind : "waiting" }, "limit");
     default:
       return accountError("unavailable");
   }
@@ -126,12 +126,21 @@ export async function getBookingRequests(req: Request): Promise<NextResponse> {
   return accountReply({ ready: true, requests: list });
 }
 
-/** DELETE /api/booking-requests/[id]: the caller cancels their own request (waiting or confirmed, before it starts). */
+/**
+ * DELETE /api/booking-requests/[id]?expect=waiting|confirmed: the caller
+ * cancels their own request (waiting or confirmed, before it starts).
+ * expect is the state their screen showed: when the request is in another
+ * one now (the turf confirmed it meanwhile), the database changes nothing
+ * and answers answered, so a one-tap cancel of a waiting request never
+ * cancels a booking. Without it, either state is cancelled.
+ */
 export async function deleteBookingRequest(req: Request, requestId: string): Promise<NextResponse> {
   const w = await who(req, allowWrite);
   if ("reply" in w) return w.reply;
   if (!isUuid(requestId)) return accountError("bad");
-  return run("booking_request_cancel", { p_user_id: w.userId, p_request_id: requestId.toLowerCase() }, (d) => ({
+  const asked = new URL(req.url).searchParams.get("expect");
+  if (asked !== null && asked !== "waiting" && asked !== "confirmed") return accountReply({ field: "expect" }, "bad");
+  return run("booking_request_cancel", { p_user_id: w.userId, p_request_id: requestId.toLowerCase(), p_expect: asked }, (d) => ({
     r: "ok",
     status: "cancelled",
     request: mineView(d.request),

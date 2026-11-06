@@ -34,10 +34,8 @@ export type MeData = {
   upcoming: number;
   /** Requests that wait on someone: theirs to answer (incoming), theirs sent, and their turf requests waiting for the turf. */
   pending: number;
-  /** Their booking requests to turfs (lib/booking), newest first; empty until read, or before the database has them. */
+  /** Their booking requests to turfs (lib/booking), newest first, each in its state as of the read; empty until read, or before the database has them. */
   bookings: MyBookingRequest[];
-  /** When they were read (the states are as of then). */
-  bookingsAt: number;
   /** The turf requests are not read yet. */
   bookingsLoading: boolean;
   reloadBookings: () => Promise<void>;
@@ -65,23 +63,22 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
   const [unreadFor, setUnreadFor] = useState<{ for: string; n: number } | null>(null);
   const [turfsFor, setTurfsFor] = useState<{ for: string; n: number | null } | null>(null);
   const [gamesRead, setGamesRead] = useState(0);
-  const [bookingsFor, setBookingsFor] = useState<{ for: string; list: MyBookingRequest[]; at: number } | null>(null);
+  const [bookingsFor, setBookingsFor] = useState<{ for: string; list: MyBookingRequest[] } | null>(null);
 
-  /** The turf requests (GET /api/booking-requests), read with the quiet token; none on a failed read. */
-  const readBookings = useCallback(async (): Promise<{ list: MyBookingRequest[]; at: number }> => {
+  /** The turf requests (GET /api/booking-requests), read with the quiet token; null when the read failed. */
+  const readBookings = useCallback(async (): Promise<MyBookingRequest[] | null> => {
     try {
       const a = await myBookingsCall(readToken);
-      const mine = a.status === 200 ? parseMine(a.body) : null;
-      return { list: mine?.requests ?? [], at: Date.now() };
+      return (a.status === 200 ? parseMine(a.body) : null)?.requests ?? null;
     } catch {
-      return { list: [], at: Date.now() };
+      return null;
     }
   }, [readToken]);
 
-  // In parallel with the game requests below.
+  // In parallel with the game requests below. A failed first read lists none.
   useEffect(() => {
     let alive = true;
-    void readBookings().then((b) => alive && setBookingsFor({ for: userId, ...b }));
+    void readBookings().then((list) => alive && setBookingsFor({ for: userId, list: list ?? [] }));
     return () => {
       alive = false;
     };
@@ -150,9 +147,10 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
   }, [userId, readToken]);
   const setUnread = useCallback((n: number) => setUnreadFor({ for: userId, n }), [userId]);
   const reloadGames = useCallback(() => setGamesRead((n) => n + 1), []);
+  // A read again (the Requests tab shown, a cancel): a failed one keeps what is shown.
   const reloadBookings = useCallback(async () => {
-    const b = await readBookings();
-    setBookingsFor({ for: userId, ...b });
+    const list = await readBookings();
+    if (list) setBookingsFor({ for: userId, list });
   }, [userId, readBookings]);
   const booked = bookingsFor && bookingsFor.for === userId ? bookingsFor : null;
   const bookings = useMemo(() => booked?.list ?? [], [booked]);
@@ -172,7 +170,6 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
     upcoming,
     pending: incoming.length + requests.filter((r) => r.status === "pending").length + bookingsWaiting,
     bookings,
-    bookingsAt: booked?.at ?? 0,
     bookingsLoading: !booked,
     reloadBookings,
     setRequests,

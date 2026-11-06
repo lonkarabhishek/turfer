@@ -23,7 +23,7 @@ import {
 } from "@/lib/availability/slots";
 import { fail, queueOf, settle, shown, takeBatch, tap, tapMany, unsaved, type Queue } from "@/lib/availability/queue";
 import { confirmOwnerSlots, getOwnerSlots, saveSlotHours, setOwnerSlots } from "@/lib/my/client";
-import { OWNER_COPY } from "@/lib/booking/requests";
+import { OWNER_COPY, toggleNotes, type SlotsStatus } from "@/lib/booking/requests";
 import { BookingRequests, useOwnerBookings, type OwnerBookingsHook } from "./BookingRequests";
 
 /** The first read, made with the dashboard's (components/my/MyTurf.tsx): not back yet, the answer, the database has no free slots yet, or the call failed. */
@@ -415,7 +415,7 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId
   return (
     <Frame grounds={view.grounds} hasNumber={hasNumber}>
       <BookingRequests turfId={turfId} hook={bookings} grounds={view.grounds} />
-      {hasNumber && bookings.state && <RequestsToggle hook={bookings} fresh={status.kind === "live" || status.kind === "ending"} />}
+      {hasNumber && bookings.state && <RequestsToggle hook={bookings} status={status} />}
       <div className={CARD}>
         {!firstUse && statusRow}
 
@@ -543,10 +543,11 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId
  * "Take booking requests on TapTurf" (off until the owner turns it on): with
  * it on, players can ask for a free hour on the turf's page and the owner
  * confirms or declines above. Shown only where the page has a number. While
- * the free slots are hidden from players (not fresh), it says requests are
- * too.
+ * the free hours don't show to players (never shown, or a day old), it says
+ * requests can't come either, naming the button below that shows them
+ * (lib/booking/requests.ts toggleNotes).
  */
-function RequestsToggle({ hook, fresh }: { hook: OwnerBookingsHook; fresh: boolean }) {
+function RequestsToggle({ hook, status }: { hook: OwnerBookingsHook; status: SlotsStatus }) {
   const on = hook.state?.on === true;
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -560,6 +561,7 @@ function RequestsToggle({ hook, fresh }: { hook: OwnerBookingsHook; fresh: boole
     if (!saved) return setFailed(true);
     setJustOn(!on);
   };
+  const lines = toggleNotes({ on, justOn, status });
   return (
     <div className={CARD}>
       <button
@@ -581,8 +583,8 @@ function RequestsToggle({ hook, fresh }: { hook: OwnerBookingsHook; fresh: boole
         </span>
       </button>
       <p className="mt-1 text-[13px] text-primary-500 leading-snug">{OWNER_COPY.toggleHelp}</p>
-      {on && justOn && <p className="mt-2 text-[13px] font-semibold text-accent-800">{OWNER_COPY.toggleOn}</p>}
-      {on && !fresh && <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-[13px] font-semibold text-amber-800 leading-snug">{OWNER_COPY.toggleHidden}</p>}
+      {lines.on && <p className="mt-2 text-[13px] font-semibold text-accent-800">{lines.on}</p>}
+      {lines.hidden && <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-[13px] font-semibold text-amber-800 leading-snug">{lines.hidden}</p>}
       {failed && (
         <p role="alert" className="mt-2 text-[13px] text-red-600">
           {OWNER_COPY.toggleFailed}

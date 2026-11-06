@@ -32,14 +32,18 @@ set local lock_timeout = '5s';
 --   a user id. A player needs a verified number (private.phone_proven,
 --   20261027_verified_tick.sql).
 --   Owners, as Free slots identifies them: the browser calls the owner
---   functions itself with p_token, and each runs private.slots_guard: an
---   active claim of the caller's own on an active claimed turf. The site
---   owner's admin shortcut does not count.
---   The turf's people (private.booking_owners): every active claim on it,
---   owners and managers, by account (turf_owners.user_id, else the account
---   its sign-in opens), the rule turf_managers and admin_answer_owner_claim
---   use. Only they see a request's name and number: while it waits, and
---   once confirmed until its hours end.
+--   functions itself with p_token, and each runs private.booking_guard,
+--   which is private.slots_guard's rule (an active claim of the caller's
+--   own on an active claimed turf; the site owner's admin shortcut does not
+--   count) with staff claims left out.
+--   The turf's people (private.booking_owners): every active claim on it as
+--   owner or manager (a claim with no role counts as an owner's), by
+--   account (turf_owners.user_id, else the account its sign-in opens), the
+--   rule turf_managers and admin_answer_owner_claim use. Staff claims are
+--   not among them: they mark Free slots, but never see a request. Only the
+--   turf's people see a request's name and number: while it waits, and
+--   once confirmed until its hours end. Their notifications name nobody.
+--   Nobody with an active claim on the turf (staff too) may send it one.
 --
 -- Constants (immutable; each names its twin in lib/booking/requests.ts):
 --   private.booking_max_hours()        3   MAX_HOURS
@@ -55,16 +59,17 @@ set local lock_timeout = '5s';
 --   booking_clock(at), booking_when(starts, hours): "Sun 8 Nov, 7 PM to 9 PM"
 --     in India time (= whenText in lib/booking/requests.ts, both checked
 --     against lib/booking/when.cases.json).
---   booking_owners(turf), booking_open(turf, now), booking_state(status,
---     starts, now), booking_taken(turf, starts, ends, except),
---   booking_free(turf, starts, ends), booking_expire(turf, user, now),
+--   booking_owners(turf), booking_guard(token, turf), booking_open(turf,
+--     now), booking_state(status, starts, now), booking_taken(turf, starts,
+--     ends) (the owner's Booked marks alone), booking_free(turf, starts,
+--     ends), booking_expire(turf, user, now),
 --   booking_notify(user, type, title, message, metadata),
 --   booking_mine_json(row, now), booking_owner_json(row),
 --   booking_owner_state(turf, now).
 -- Public functions:
 --   booking_request_send(p_key, p_user_id, p_turf_id, p_at, p_hours, p_note)
 --   booking_requests_mine(p_key, p_user_id)
---   booking_request_cancel(p_key, p_user_id, p_request_id)
+--   booking_request_cancel(p_key, p_user_id, p_request_id, p_expect)
 --   owner_booking_requests(p_token, p_turf_id)
 --   owner_set_booking_requests(p_token, p_turf_id, p_on)
 --   owner_answer_booking_request(p_token, p_request_id, p_action, p_reason)
@@ -72,9 +77,12 @@ set local lock_timeout = '5s';
 -- A waiting request expires at its start: every read works the state out
 -- (booking_state), and the write functions store it (booking_expire).
 --
--- Replaced: none. Every function this file calls, as production runs it
--- (md5(prosrc), read 6 Nov 2026), equals its latest body in the repo:
+-- Replaced: none. Every function this file calls, and private.slots_guard
+-- (whose body booking_guard copies), as production runs it (md5(prosrc),
+-- read 6 Nov 2026), equals its latest body in the repo:
 --   private.slots_guard              4ecdf11ccc22bfbed25b7cc4b93e5486
+--   public._caller_key               2ab91047132da79f8f3052f95c6f52de
+--   public._can_manage               daec6751657cce4d6a97d090b20a0035
 --   private.turf_slots_apply         a87c760baa6e95101ae1ce0b0124189e
 --   private.turf_booked              67a8af535e56722c351d83d6c9306ce1
 --   private.slot_at                  fb271509244b8986ed81c48aa5c58531
@@ -87,7 +95,17 @@ set local lock_timeout = '5s';
 --   public.account_phone_checked     e962f47c36c9c2ffc0ad6a70c9aa63da
 --   private.push_url                 7194c64e4d38986c2f21fe7b60f911f8
 --   private.push_on_notification     1272b4bded03cbebd6289b1f25fa385c
+--   (_caller_key and _can_manage read again 6 Nov 2026, for booking_guard.)
 -- public.bookings (the old app's table) is not touched.
+--
+-- Erasing an account: user_id has no foreign key (like private.tool_use_log
+-- and the other private per-user tables, so nothing here cascades from
+-- public.users), and the privacy page promises a request goes with the
+-- account. On an erasure request, clear private.booking_requests' rows for
+-- the account's id by hand along with its other rows (booking_requests_
+-- user_idx finds them). Until then a removed account's request breaks
+-- nothing: booking_notify tells only accounts that still exist, so the turf
+-- can still answer it and every request it overlaps.
 --
 -- Needs 20261105_turf_availability.sql and 20261027_verified_tick.sql.
 -- Additive: two tables, two indexes, new functions. Written without the
@@ -179,15 +197,49 @@ returns text language sql stable set search_path = '' as $$
          || private.booking_clock(p_starts + make_interval(hours => p_hours))
 $$;
 
--- The turf's people: the account of every active claim on it (owners and managers), once each.
+-- The turf's people: the account of every active owner or manager claim on it, once each (never staff).
 create or replace function private.booking_owners(p_turf_id uuid)
 returns setof uuid language sql stable security definer set search_path = '' as $$
   select distinct x.id
     from (select coalesce(o.user_id, private.account_for_key(o.user_key)) as id
             from public.turf_owners o
            where o.turf_id = p_turf_id
-             and o.status = 'active') x
+             and o.status = 'active'
+             and coalesce(o.role, 'owner') <> 'staff') x
    where x.id is not null
+$$;
+
+-- Who may use the owner functions: private.slots_guard's body (20261105_turf_availability.sql),
+-- with one line more, so a staff claim is refused (the check compares the two bodies).
+create or replace function private.booking_guard(p_token text, p_turf_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  k text := public._caller_key(p_token);
+  v_live boolean;
+begin
+  if k is null or not coalesce(public._can_manage(k, p_turf_id), false) or not exists (
+    select 1 from public.turf_owners o
+     where o.turf_id = p_turf_id
+       and o.status = 'active'
+       and coalesce(o.role, 'owner') <> 'staff'
+       and ((o.user_key = k and o.user_id is null)
+            or (o.user_id is not null and o.user_id = private.account_for_key(k)))
+  ) then
+    return 'forbidden';
+  end if;
+  select (t.claimed and coalesce(t.is_active, false)) into v_live from public.turfs t where t.id = p_turf_id;
+  if not found then
+    return 'forbidden';
+  end if;
+  if not coalesce(v_live, false) then
+    return 'not_claimed';
+  end if;
+  return null;
+end;
 $$;
 
 -- Players may send requests now: the owner turned them on, the turf is claimed and active, its free slots are fresh.
@@ -206,20 +258,16 @@ returns text language sql stable set search_path = '' as $$
   select case when p_status = 'waiting' and p_starts <= p_now then 'expired' else p_status end
 $$;
 
--- Some of [p_starts, p_ends) is marked booked, or confirmed for another request (not p_except).
-create or replace function private.booking_taken(p_turf_id uuid, p_starts timestamptz, p_ends timestamptz, p_except uuid)
+-- Some of [p_starts, p_ends) is marked Booked. The owner's marks are the one truth, as the card shows
+-- them: a confirm writes its hours' marks, and an hour the owner taps Free again (another ground is
+-- free then) can be asked for and confirmed again.
+create or replace function private.booking_taken(p_turf_id uuid, p_starts timestamptz, p_ends timestamptz)
 returns boolean language sql stable security definer set search_path = '' as $$
   select exists (select 1 from private.turf_slots s
                   where s.turf_id = p_turf_id
                     and s.status = 'booked'
                     and s.starts_at >= p_starts
                     and s.starts_at < p_ends)
-      or exists (select 1 from private.booking_requests b
-                  where b.turf_id = p_turf_id
-                    and b.status = 'confirmed'
-                    and b.starts_at < p_ends
-                    and b.ends_at > p_starts
-                    and b.id is distinct from p_except)
 $$;
 
 -- A cancelled booking's hours go back to Free. private.turf_availability is not touched:
@@ -264,7 +312,9 @@ begin
 end;
 $$;
 
--- One notification, made only by the functions below: private.game_notify's body (20261030_games_lockdown.sql).
+-- One notification, made only by the functions below: private.game_notify's body (20261030_games_lockdown.sql),
+-- for an account that still exists (public.notifications.user_id references public.users; a request
+-- outlives a removed account, and its answer must not fail on it).
 create or replace function private.booking_notify(p_user_id uuid, p_type text, p_title text, p_message text, p_metadata jsonb)
 returns integer
 language sql
@@ -275,6 +325,7 @@ as $$
     insert into public.notifications (user_id, type, title, message, metadata, is_read)
     select p_user_id, p_type, left(p_title, 120), left(p_message, 400), coalesce(p_metadata, '{}'::jsonb), false
      where p_user_id is not null
+       and exists (select 1 from public.users u where u.id = p_user_id)
     returning 1
   )
   select count(*)::integer from made;
@@ -347,9 +398,10 @@ revoke all on function private.booking_list_max() from public, anon, authenticat
 revoke all on function private.booking_clock(timestamptz) from public, anon, authenticated;
 revoke all on function private.booking_when(timestamptz, int) from public, anon, authenticated;
 revoke all on function private.booking_owners(uuid) from public, anon, authenticated;
+revoke all on function private.booking_guard(text, uuid) from public, anon, authenticated;
 revoke all on function private.booking_open(uuid, timestamptz) from public, anon, authenticated;
 revoke all on function private.booking_state(text, timestamptz, timestamptz) from public, anon, authenticated;
-revoke all on function private.booking_taken(uuid, timestamptz, timestamptz, uuid) from public, anon, authenticated;
+revoke all on function private.booking_taken(uuid, timestamptz, timestamptz) from public, anon, authenticated;
 revoke all on function private.booking_free(uuid, timestamptz, timestamptz) from public, anon, authenticated;
 revoke all on function private.booking_expire(uuid, uuid, timestamptz) from public, anon, authenticated;
 revoke all on function private.booking_notify(uuid, text, text, text, jsonb) from public, anon, authenticated;
@@ -360,7 +412,9 @@ revoke all on function private.booking_owner_state(uuid, timestamptz) from publi
 -- ── 4. Players (server key; called only by lib/booking/server.ts) ──
 
 -- Send a request. Answers {r: ok, request} or r: unavailable, bad (field), off, own, no_phone,
--- past, taken (with booked: the turf's booked slot keys), limit (kind: day, waiting, sends).
+-- past, taken (with booked: the turf's booked slot keys), limit (kind: day, overlap, waiting, sends).
+-- overlap: a waiting request of theirs at this turf already covers some of these hours (the card
+-- puts hours after midnight under the day before, so two such requests have different dates).
 create or replace function public.booking_request_send(p_key text, p_user_id uuid, p_turf_id uuid, p_at text, p_hours integer, p_note text)
 returns jsonb
 language plpgsql
@@ -405,7 +459,10 @@ begin
   if not private.booking_open(p_turf_id, now()) then
     return jsonb_build_object('r', 'off');
   end if;
-  if p_user_id in (select private.booking_owners(p_turf_id)) then
+  if exists (select 1 from public.turf_owners o
+              where o.turf_id = p_turf_id
+                and o.status = 'active'
+                and coalesce(o.user_id, private.account_for_key(o.user_key)) = p_user_id) then
     return jsonb_build_object('r', 'own');
   end if;
   if not private.phone_proven(p_user_id) then
@@ -415,7 +472,7 @@ begin
   if v_start <= now() or v_start >= now() + private.slots_ahead() then
     return jsonb_build_object('r', 'past');
   end if;
-  if private.booking_taken(p_turf_id, v_start, v_end, null) then
+  if private.booking_taken(p_turf_id, v_start, v_end) then
     return jsonb_build_object('r', 'taken', 'booked', private.turf_booked(p_turf_id, now()));
   end if;
 
@@ -425,6 +482,12 @@ begin
          and (b.starts_at at time zone 'Asia/Kolkata')::date = (v_start at time zone 'Asia/Kolkata')::date)
      >= private.booking_max_per_turf_day() then
     return jsonb_build_object('r', 'limit', 'kind', 'day');
+  end if;
+  if exists (select 1 from private.booking_requests b
+              where b.user_id = p_user_id and b.turf_id = p_turf_id
+                and b.status = 'waiting' and b.starts_at > now()
+                and b.starts_at < v_end and b.ends_at > v_start) then
+    return jsonb_build_object('r', 'limit', 'kind', 'overlap');
   end if;
   if (select count(*) from private.booking_requests b
        where b.user_id = p_user_id and b.status = 'waiting' and b.starts_at > now())
@@ -444,8 +507,9 @@ begin
 
   select left(coalesce(nullif(btrim(t.name), ''), 'the turf'), 60) into v_turf from public.turfs t where t.id = p_turf_id;
   for v_owner in select private.booking_owners(p_turf_id) loop
+    -- Never the player's name: the list on myTapturf shows it while the request is open.
     perform private.booking_notify(v_owner, 'booking_request', 'New booking request',
-      v_req.player_name || ' asked for ' || private.booking_when(v_req.starts_at, v_req.hours) || ' at ' || coalesce(v_turf, 'the turf')
+      'A player asked for ' || private.booking_when(v_req.starts_at, v_req.hours) || ' at ' || coalesce(v_turf, 'the turf')
         || '. Confirm or decline it on myTapturf.',
       jsonb_build_object('turfId', p_turf_id, 'requestId', v_req.id));
   end loop;
@@ -479,9 +543,12 @@ $$;
 
 -- The player cancels their own waiting or confirmed request before it starts. Cancelling a
 -- confirmed one frees its hours and tells the turf's people; a waiting one tells nobody.
+-- p_expect (waiting or confirmed, or null): the state the player's screen showed. When the
+-- request is in another one now (the turf confirmed it meanwhile), nothing changes and the
+-- answer is answered (status), so a one-tap cancel of a waiting request never cancels a booking.
 -- Answers {r: ok, status: cancelled, request} (again for one already cancelled), or r:
 -- unavailable, bad, gone (none, or not theirs), answered (status), started.
-create or replace function public.booking_request_cancel(p_key text, p_user_id uuid, p_request_id uuid)
+create or replace function public.booking_request_cancel(p_key text, p_user_id uuid, p_request_id uuid, p_expect text default null)
 returns jsonb
 language plpgsql
 security definer
@@ -496,7 +563,7 @@ begin
   if not private.account_key_ok(p_key) then
     return jsonb_build_object('r', 'unavailable');
   end if;
-  if p_user_id is null or p_request_id is null then
+  if p_user_id is null or p_request_id is null or (p_expect is not null and p_expect not in ('waiting', 'confirmed')) then
     return jsonb_build_object('r', 'bad');
   end if;
   select * into v_req from private.booking_requests b where b.id = p_request_id;
@@ -509,7 +576,7 @@ begin
     return jsonb_build_object('r', 'ok', 'status', 'cancelled', 'request', private.booking_mine_json(v_req, now()));
   end if;
   v_state := private.booking_state(v_req.status, v_req.starts_at, now());
-  if v_state not in ('waiting', 'confirmed') then
+  if v_state not in ('waiting', 'confirmed') or v_state <> coalesce(p_expect, v_state) then
     return jsonb_build_object('r', 'answered', 'status', v_state);
   end if;
   if v_req.starts_at <= now() then
@@ -524,7 +591,7 @@ begin
     select left(coalesce(nullif(btrim(t.name), ''), 'the turf'), 60) into v_turf from public.turfs t where t.id = v_req.turf_id;
     for v_owner in select private.booking_owners(v_req.turf_id) loop
       perform private.booking_notify(v_owner, 'booking_cancelled_by_player', 'Booking cancelled',
-        v_req.player_name || ' cancelled ' || private.booking_when(v_req.starts_at, v_req.hours) || ' at ' || coalesce(v_turf, 'the turf')
+        'A player cancelled ' || private.booking_when(v_req.starts_at, v_req.hours) || ' at ' || coalesce(v_turf, 'the turf')
           || '. Those hours are free again.',
         jsonb_build_object('turfId', v_req.turf_id, 'requestId', v_req.id));
     end loop;
@@ -535,14 +602,14 @@ $$;
 
 revoke all on function public.booking_request_send(text, uuid, uuid, text, integer, text) from public;
 revoke all on function public.booking_requests_mine(text, uuid) from public;
-revoke all on function public.booking_request_cancel(text, uuid, uuid) from public;
+revoke all on function public.booking_request_cancel(text, uuid, uuid, text) from public;
 grant execute on function public.booking_request_send(text, uuid, uuid, text, integer, text) to anon, authenticated;
 grant execute on function public.booking_requests_mine(text, uuid) to anon, authenticated;
-grant execute on function public.booking_request_cancel(text, uuid, uuid) to anon, authenticated;
+grant execute on function public.booking_request_cancel(text, uuid, uuid, text) to anon, authenticated;
 
 -- ── 5. Owners (p_token, from the browser, as Free slots) ──
 
--- The owner's list and switch. {error: forbidden | not_claimed} for anyone else.
+-- The owner's list and switch. {error: forbidden | not_claimed} for anyone else (staff too).
 create or replace function public.owner_booking_requests(p_token text, p_turf_id uuid)
 returns jsonb
 language plpgsql
@@ -550,7 +617,7 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_err text := private.slots_guard(p_token, p_turf_id);
+  v_err text := private.booking_guard(p_token, p_turf_id);
 begin
   if v_err is not null then
     return jsonb_build_object('error', v_err);
@@ -567,7 +634,7 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_err text := private.slots_guard(p_token, p_turf_id);
+  v_err text := private.booking_guard(p_token, p_turf_id);
 begin
   if v_err is not null then
     return jsonb_build_object('error', v_err);
@@ -615,7 +682,7 @@ begin
   if v_turf_id is null then
     return jsonb_build_object('error', 'gone');
   end if;
-  v_err := private.slots_guard(p_token, v_turf_id);
+  v_err := private.booking_guard(p_token, v_turf_id);
   if v_err is not null then
     return jsonb_build_object('error', v_err);
   end if;
@@ -631,7 +698,7 @@ begin
     if v_state <> 'waiting' then
       return jsonb_build_object('error', 'answered', 'status', v_state);
     end if;
-    if private.booking_taken(v_turf_id, v_req.starts_at, v_req.ends_at, v_req.id) then
+    if private.booking_taken(v_turf_id, v_req.starts_at, v_req.ends_at) then
       return jsonb_build_object('error', 'taken');
     end if;
     select jsonb_agg(jsonb_build_object('at', private.slot_key(v_req.starts_at + make_interval(hours => g)), 'status', 'booked') order by g)

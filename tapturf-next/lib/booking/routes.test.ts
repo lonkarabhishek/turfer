@@ -131,6 +131,7 @@ test("send: every refusal, as the routes send it", async () => {
     [{ r: "taken" }, 409, { reason: "taken", booked: [], error: "conflict" }],
     [{ r: "past" }, 409, { reason: "past", error: "conflict" }],
     [{ r: "limit", kind: "day" }, 429, { reason: "day", error: "limit" }],
+    [{ r: "limit", kind: "overlap" }, 429, { reason: "overlap", error: "limit" }],
     [{ r: "limit", kind: "waiting" }, 429, { reason: "waiting", error: "limit" }],
     [{ r: "limit", kind: "sends" }, 429, { reason: "sends", error: "limit" }],
     [{ r: "unavailable" }, 503, { error: "unavailable" }],
@@ -185,7 +186,24 @@ test("DELETE: the player's own; every answer", async () => {
     net.rpc.booking_request_cancel = typeof answer === "function" ? answer : () => answer;
     const r = await del(REQ);
     assert.deepEqual([r.status, await read(r)], [status, body], JSON.stringify(typeof answer === "function" ? "missing" : answer));
-    assert.deepEqual(net.calls("booking_request_cancel")[0].args, { p_key: "test-account-key", p_user_id: "acc-3", p_request_id: REQ.toLowerCase() });
+    assert.deepEqual(net.calls("booking_request_cancel")[0].args, { p_key: "test-account-key", p_user_id: "acc-3", p_request_id: REQ.toLowerCase(), p_expect: null });
+  }
+});
+
+test("DELETE ?expect=: the state the row showed goes to the database; anything else is refused before it", async () => {
+  const del = (q: string) => deleteBookingRequest(req(`/api/booking-requests/${REQ}${q}`, { method: "DELETE", token: phoneToken() }), REQ);
+  for (const expect of ["waiting", "confirmed"]) {
+    signedIn("acc-4");
+    net.rpc.booking_request_cancel = () => ({ r: "answered", status: "confirmed" });
+    const r = await del(`?expect=${expect}`);
+    assert.deepEqual([r.status, await read(r)], [409, { reason: "answered", status: "confirmed", error: "conflict" }]);
+    assert.equal(net.calls("booking_request_cancel")[0].args.p_expect, expect);
+  }
+  for (const q of ["?expect=", "?expect=declined", "?expect=WAITING"]) {
+    signedIn("acc-4");
+    const r = await del(q);
+    assert.deepEqual([r.status, await read(r)], [400, { field: "expect", error: "bad" }], q);
+    assert.equal(net.calls("booking_request_cancel").length, 0);
   }
 });
 

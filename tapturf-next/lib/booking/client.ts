@@ -12,5 +12,8 @@ export type BookingAnswer<T> = { status: number; body: T | BookingErrorBody };
 export const sendBookingCall = (getToken: GetToken, body: SendBody) =>
   call<SentResponse>(getToken, "/api/booking-requests", { method: "POST", body: JSON.stringify(body) }) as Promise<BookingAnswer<SentResponse>>;
 export const myBookingsCall = (getToken: GetToken) => call<MineResponse>(getToken, "/api/booking-requests") as Promise<BookingAnswer<MineResponse>>;
-export const cancelBookingCall = (getToken: GetToken, requestId: string) =>
-  call<CancelledResponse>(getToken, `/api/booking-requests/${encodeURIComponent(requestId)}`, { method: "DELETE" }) as Promise<BookingAnswer<CancelledResponse>>;
+/** expect: the state the row showed, so a request the turf answered meanwhile is not cancelled (lib/booking/server.ts). */
+export const cancelBookingCall = (getToken: GetToken, requestId: string, expect: "waiting" | "confirmed") =>
+  call<CancelledResponse>(getToken, `/api/booking-requests/${encodeURIComponent(requestId)}?expect=${expect}`, { method: "DELETE" }) as Promise<
+    BookingAnswer<CancelledResponse>
+  >;

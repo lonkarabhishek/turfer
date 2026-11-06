@@ -14,8 +14,10 @@ import {
   REASON_MAX,
   SHEET_COPY,
   canCancel,
+  cancelOutcome,
   effectiveStatus,
   hourChoices,
+  limitText,
   meLine,
   parseMine,
   parseMineRow,
@@ -24,6 +26,7 @@ import {
   requestWhatsAppText,
   sendOutcome,
   sortMine,
+  toggleNotes,
   waitingCount,
   whenDay,
   whenText,
@@ -133,12 +136,15 @@ test("5. effectiveStatus and canCancel: a waiting request expires at its start",
   assert.equal(canCancel(row(), at), false, "expired");
   for (const s of ["declined", "cancelled", "expired"] as const) assert.equal(canCancel(row({ status: s }), before), false, s);
   const list = [
-    row({ id: "a1", status: "declined", created_at: "2026-11-06T09:00:00Z" }),
+    row({ id: "a1", status: "declined", can_cancel: false, created_at: "2026-11-06T09:00:00Z" }),
     row({ id: "a2", created_at: "2026-11-06T07:00:00Z" }),
     row({ id: "a3", status: "confirmed", created_at: "2026-11-06T08:00:00Z" }),
-    row({ id: "a4", status: "cancelled", created_at: "2026-11-06T10:00:00Z" }),
+    row({ id: "a4", status: "cancelled", can_cancel: false, created_at: "2026-11-06T10:00:00Z" }),
   ];
-  assert.deepEqual(sortMine(list, before).map((r) => r.id), ["a3", "a2", "a4", "a1"], "open ones first, newest first in each");
+  assert.deepEqual(sortMine(list).map((r) => r.id), ["a3", "a2", "a4", "a1"], "open ones first, newest first in each");
+  // Open is the database's can_cancel as of the read, never the phone's clock: a confirmed one that has started sorts with the rest.
+  const started = row({ id: "a5", status: "confirmed", can_cancel: false, created_at: "2026-11-06T11:00:00Z" });
+  assert.deepEqual(sortMine([...list, started]).map((r) => r.id), ["a3", "a2", "a5", "a4", "a1"]);
   assert.equal(waitingCount(list, before), 1);
   assert.equal(waitingCount(list, at), 0, "an expired one waits for nobody");
 });
@@ -154,6 +160,7 @@ test("6. sendOutcome: one sheet state for every answer", () => {
     [400, { error: "bad", field: "at" }, "taken"],
     [429, { error: "limit", reason: "waiting" }, "limit_waiting"],
     [429, { error: "limit", reason: "day" }, "limit_day"],
+    [429, { error: "limit", reason: "overlap" }, "limit_overlap"],
     [429, { error: "limit", reason: "sends" }, "limit_sends"],
     [401, { error: "sign_in" }, "sign_in"],
     [503, { error: "unavailable", reason: "not_ready" }, "failed"],
@@ -166,6 +173,11 @@ test("6. sendOutcome: one sheet state for every answer", () => {
     [200, { r: "nope" }, "failed"],
   ];
   for (const [status, body, want] of cases) assert.equal(sendOutcome(status, body), want, JSON.stringify([status, body]));
+  assert.deepEqual(
+    (["limit_waiting", "limit_day", "limit_overlap", "limit_sends"] as const).map((l) => limitText(l, "2026-11-08T00:00")),
+    [SHEET_COPY.limitWaiting, "You already have a request waiting at this turf for Sun 8 Nov.", SHEET_COPY.limitOverlap, SHEET_COPY.limitSends],
+    "each limit's words",
+  );
 });
 
 test("7. the WhatsApp after sending: exactly the agreed words, no emoji", () => {
@@ -184,7 +196,7 @@ test("8. words: the player's never say book, instant, guaranteed or hurry; nobod
     requestFooter(true),
     requestWhatsAppText({ turfName: "One Arena", when: "Sat 7 Nov, 7 PM to 9 PM" }),
     ...(["waiting", "confirmed", "declined", "cancelled", "expired"] as const).flatMap((s) =>
-      (["owner", "player", "taken", "clock", null] as const).map((by) => meLine({ status: s, changed_by: by, at: "2026-11-07T19:00" }, ist("2026-11-06 12:00"))),
+      (["owner", "player", "taken", "clock", null] as const).map((by) => meLine({ status: s, changed_by: by })),
     ),
   ];
   for (const s of player) {
@@ -206,22 +218,50 @@ test("8. words: the player's never say book, instant, guaranteed or hurry; nobod
   assert.equal(OWNER_COPY.confirmed(1), "Confirmed. Those hours are marked Booked. 1 other request for them was declined.");
   assert.equal(OWNER_COPY.confirmed(2), "Confirmed. Those hours are marked Booked. 2 other requests for them were declined.");
   assert.equal(OWNER_COPY.heading(2), "Booking requests · 2");
+  assert.equal(OWNER_COPY.heading(0), "Booking requests", "no count of 0 above a confirmed booking");
+  assert.equal(SHEET_COPY.limitOverlap, "You already have a request waiting at this turf for some of these hours.");
+  assert.equal(OWNER_COPY.toggleNever("Show free hours to players"), "Players can't send requests until your free hours show on your page. Tap Show free hours to players below.");
+  assert.equal(OWNER_COPY.toggleHidden("All correct"), "Players can't send requests while your free hours are hidden. Tap All correct below to show them.");
+  assert.equal(ME_COPY.confirmedMeanwhile, "The turf confirmed this just now. Tap Cancel if you still want to cancel it.");
   assert.equal(OWNER_COPY.askCancel("Priya"), "Cancel this booking? Priya will be told, and the hours go back to Free.");
   assert.equal(ME_COPY.heading, "Turf requests");
   assert.equal(ME_COPY.said("Rain"), 'The turf said: "Rain"');
 });
 
-test("9. meLine: what each state says on the Me tab", () => {
-  const now = ist("2026-11-06 12:00");
-  const at = "2026-11-07T19:00";
-  assert.equal(meLine({ status: "waiting", changed_by: null, at }, now), "The turf confirms here; you'll get a message.");
-  assert.equal(meLine({ status: "waiting", changed_by: null, at }, ist("2026-11-07 19:00")), "No answer before it started.");
-  assert.equal(meLine({ status: "confirmed", changed_by: "owner", at }, now), "Confirmed. Pay at the turf.");
-  assert.equal(meLine({ status: "declined", changed_by: "owner", at }, now), "The turf declined this.");
-  assert.equal(meLine({ status: "declined", changed_by: "taken", at }, now), "Those hours went to someone else.");
-  assert.equal(meLine({ status: "cancelled", changed_by: "player", at }, now), "You cancelled this.");
-  assert.equal(meLine({ status: "cancelled", changed_by: "owner", at }, now), "The turf cancelled this.");
-  assert.equal(meLine({ status: "expired", changed_by: "clock", at }, now), "No answer before it started.");
+test("9. meLine: what each state says on the Me tab, from the database's state alone (no clock, so it agrees with the pill)", () => {
+  assert.equal(meLine({ status: "waiting", changed_by: null }), "The turf confirms here; you'll get a message.");
+  assert.equal(meLine({ status: "confirmed", changed_by: "owner" }), "Confirmed. Pay at the turf.");
+  assert.equal(meLine({ status: "declined", changed_by: "owner" }), "The turf declined this.");
+  assert.equal(meLine({ status: "declined", changed_by: "taken" }), "Those hours went to someone else.");
+  assert.equal(meLine({ status: "cancelled", changed_by: "player" }), "You cancelled this.");
+  assert.equal(meLine({ status: "cancelled", changed_by: "owner" }), "The turf cancelled this.");
+  assert.equal(meLine({ status: "expired", changed_by: "clock" }), "No answer before it started.");
+  assert.equal(meLine.length, 1, "takes no clock");
+});
+
+test("11. cancelOutcome: answered meanwhile or gone reloads with no error; started says so; only a failed call says try again", () => {
+  assert.deepEqual(cancelOutcome(200, { r: "ok", status: "cancelled", request: {} }), { done: true });
+  assert.deepEqual(cancelOutcome(409, { error: "conflict", reason: "answered", status: "declined" }), { done: false, reload: true, error: null, note: null });
+  assert.deepEqual(cancelOutcome(409, { error: "conflict", reason: "answered", status: "expired" }), { done: false, reload: true, error: null, note: null });
+  assert.deepEqual(cancelOutcome(409, { error: "conflict", reason: "answered", status: "confirmed" }), { done: false, reload: true, error: null, note: ME_COPY.confirmedMeanwhile });
+  assert.deepEqual(cancelOutcome(400, { error: "bad", reason: "gone" }), { done: false, reload: true, error: null, note: null });
+  assert.deepEqual(cancelOutcome(409, { error: "not_allowed", reason: "started" }), { done: false, reload: true, error: ME_COPY.started, note: null });
+  for (const [status, body] of [[0, { error: "unavailable" }], [503, { error: "unavailable" }], [500, "<html>"], [200, { r: "nope" }]] as const)
+    assert.deepEqual(cancelOutcome(status, body), { done: false, reload: false, error: ME_COPY.cancelFailed, note: null }, JSON.stringify([status, body]));
+});
+
+test("12. toggleNotes: never two lines that disagree, and the button named is the one Free slots shows", () => {
+  const never = { kind: "never", button: "Show free hours to players" } as const;
+  const hidden = { kind: "hidden", button: "All correct" } as const;
+  const live = { kind: "live", button: "All correct" } as const;
+  const ending = { kind: "ending", button: "All correct" } as const;
+  assert.deepEqual(toggleNotes({ on: true, justOn: true, status: never }), { on: null, hidden: OWNER_COPY.toggleNever("Show free hours to players") }, "first use: only what stops requests");
+  assert.deepEqual(toggleNotes({ on: true, justOn: true, status: hidden }), { on: null, hidden: OWNER_COPY.toggleHidden("All correct") }, "a day old");
+  assert.deepEqual(toggleNotes({ on: true, justOn: true, status: live }), { on: OWNER_COPY.toggleOn, hidden: null });
+  assert.deepEqual(toggleNotes({ on: true, justOn: true, status: ending }), { on: OWNER_COPY.toggleOn, hidden: null });
+  assert.deepEqual(toggleNotes({ on: true, justOn: false, status: live }), { on: null, hidden: null }, "on, from before");
+  assert.deepEqual(toggleNotes({ on: true, justOn: false, status: never }), { on: null, hidden: OWNER_COPY.toggleNever("Show free hours to players") });
+  for (const status of [never, hidden, live]) assert.deepEqual(toggleNotes({ on: false, justOn: false, status }), { on: null, hidden: null }, `off: nothing (${status.kind})`);
 });
 
 test("10. the parsers: well formed rows kept, the rest dropped; junk is null", () => {

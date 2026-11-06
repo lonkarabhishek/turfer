@@ -1,4 +1,4 @@
-import { clockLabel, isSlotKey, keyTime, shortDate, slotDays, type SlotDay, type SlotHours, type SlotKey } from "../availability/slots";
+import { clockLabel, isSlotKey, keyTime, shortDate, slotDays, type ownerStatus, type SlotDay, type SlotHours, type SlotKey } from "../availability/slots";
 import type { BookingStatus, ChangedBy, MyBookingRequest, OwnerBookingRequest, OwnerBookings } from "./types";
 
 // Relative imports only, so node --test runs this (lib/booking/requests.test.ts, npm run test:booking).
@@ -99,9 +99,13 @@ export function canCancel(r: Pick<MyBookingRequest, "status" | "at">, nowMs: num
   return (s === "waiting" || s === "confirmed") && keyTime(r.at) > nowMs;
 }
 
-/** The Me tab's order: waiting and confirmed ones still to come first, then the rest; newest sent first in each. */
-export function sortMine(list: readonly MyBookingRequest[], nowMs: number): MyBookingRequest[] {
-  const open = (r: MyBookingRequest) => canCancel(r, nowMs);
+/**
+ * The Me tab's order: the ones they may still cancel first (can_cancel, the
+ * database's word as of the read, as the pill and the button), then the
+ * rest; newest sent first in each.
+ */
+export function sortMine(list: readonly MyBookingRequest[]): MyBookingRequest[] {
+  const open = (r: MyBookingRequest) => r.can_cancel;
   return [...list].sort((a, b) => Number(open(b)) - Number(open(a)) || (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
 }
 
@@ -112,7 +116,7 @@ export function waitingCount(list: readonly MyBookingRequest[], nowMs: number): 
 
 // ── The sheet ──
 
-export type SheetOutcome = "sent" | "off" | "own" | "no_phone" | "taken" | "limit_waiting" | "limit_day" | "limit_sends" | "sign_in" | "failed";
+export type SheetOutcome = "sent" | "off" | "own" | "no_phone" | "taken" | "limit_waiting" | "limit_day" | "limit_overlap" | "limit_sends" | "sign_in" | "failed";
 
 const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
 
@@ -136,11 +140,27 @@ export function sendOutcome(status: number, body: unknown): SheetOutcome {
       return "limit_waiting";
     case "day":
       return "limit_day";
+    case "overlap":
+      return "limit_overlap";
     case "sends":
       return "limit_sends";
   }
   if (b.error === "bad" && b.field === "at") return "taken";
   return "failed";
+}
+
+/** The sheet's words for a limit it met, for the hour tapped. */
+export function limitText(limit: Extract<SheetOutcome, `limit_${string}`>, at: SlotKey): string {
+  switch (limit) {
+    case "limit_waiting":
+      return SHEET_COPY.limitWaiting;
+    case "limit_day":
+      return SHEET_COPY.limitDay(whenDay(at));
+    case "limit_overlap":
+      return SHEET_COPY.limitOverlap;
+    case "limit_sends":
+      return SHEET_COPY.limitSends;
+  }
 }
 
 /** The WhatsApp the sent sheet offers: it says it was sent on TapTurf, names the day and hours, asks the turf to confirm. No emoji. */
@@ -242,6 +262,7 @@ export const SHEET_COPY = {
   failed: "Couldn't send. Check your connection and try again.",
   limitWaiting: `You have ${MAX_WAITING} requests waiting for an answer. Cancel one on your Me tab, or wait for an answer.`,
   limitDay: (day: string) => `You already have a request waiting at this turf for ${day}.`,
+  limitOverlap: "You already have a request waiting at this turf for some of these hours.",
   limitSends: `You've sent ${MAX_SENDS_PER_DAY} requests today. Try again tomorrow.`,
   taken: "That time isn't free any more. Pick another time.",
   pickAnother: "Pick another time",
@@ -271,11 +292,17 @@ export const ME_COPY = {
   keep: "Keep it",
   cancelFailed: "Couldn't cancel. Check your connection and try again.",
   started: "It has started, so it can't be cancelled here. Contact the turf directly.",
+  confirmedMeanwhile: "The turf confirmed this just now. Tap Cancel if you still want to cancel it.",
 } as const;
 
-/** The line under a request on the Me tab. */
-export function meLine(r: Pick<MyBookingRequest, "status" | "changed_by" | "at">, nowMs: number): string {
-  switch (effectiveStatus(r.status, r.at, nowMs)) {
+/**
+ * The line under a request on the Me tab, from its state as the database
+ * gave it (status, which already says expired for a waiting one whose start
+ * has come), so the pill, this line and the Cancel button always agree,
+ * whatever the phone's clock says.
+ */
+export function meLine(r: Pick<MyBookingRequest, "status" | "changed_by">): string {
+  switch (r.status) {
     case "waiting":
       return ME_COPY.waiting;
     case "confirmed":
@@ -289,9 +316,48 @@ export function meLine(r: Pick<MyBookingRequest, "status" | "changed_by" | "at">
   }
 }
 
+export type CancelOutcome = { done: true } | { done: false; reload: boolean; error: string | null; note: string | null };
+
+/**
+ * What the Me tab does with DELETE /api/booking-requests/<id>'s answer
+ * (status 0: no answer). Answered meanwhile (declined, expired, or
+ * confirmed while the row still said waiting) or gone: read the list again
+ * and let the row's new state say it, with a line only for a request the
+ * turf just confirmed. Started: say so. Only a failed call says to try
+ * again.
+ */
+export function cancelOutcome(status: number, body: unknown): CancelOutcome {
+  const b = isObj(body) ? body : {};
+  if (status >= 200 && status < 300 && b.r === "ok") return { done: true };
+  if (b.reason === "started") return { done: false, reload: true, error: ME_COPY.started, note: null };
+  if (b.reason === "answered") return { done: false, reload: true, error: null, note: b.status === "confirmed" ? ME_COPY.confirmedMeanwhile : null };
+  if (b.reason === "gone") return { done: false, reload: true, error: null, note: null };
+  return { done: false, reload: false, error: ME_COPY.cancelFailed, note: null };
+}
+
+/** Free slots' state on myTapturf (lib/availability/slots.ts ownerStatus): its kind and its button's words. */
+export type SlotsStatus = Pick<ReturnType<typeof ownerStatus>, "kind" | "button">;
+
+/**
+ * The lines under "Take booking requests on TapTurf": "On. Players see the
+ * request button..." just after turning it on, only while players see the
+ * free hours; and while they don't, what stops requests, naming the button
+ * Free slots shows below (first use: "Show free hours to players"; a day
+ * old: "All correct").
+ */
+export function toggleNotes(a: { on: boolean; justOn: boolean; status: SlotsStatus }): { on: string | null; hidden: string | null } {
+  const seen = a.status.kind === "live" || a.status.kind === "ending";
+  if (!a.on) return { on: null, hidden: null };
+  return {
+    on: a.justOn && seen ? OWNER_COPY.toggleOn : null,
+    hidden: a.status.kind === "never" ? OWNER_COPY.toggleNever(a.status.button) : a.status.kind === "hidden" ? OWNER_COPY.toggleHidden(a.status.button) : null,
+  };
+}
+
 /** The owner's list and switch on myTapturf (owners read "Booked" there, as Free slots says it). */
 export const OWNER_COPY = {
-  heading: (n: number) => `Booking requests · ${n}`,
+  /** The count of waiting requests; none when only confirmed ones are listed. */
+  heading: (n: number) => (n > 0 ? `Booking requests · ${n}` : "Booking requests"),
   call: "Call",
   sent: (ago: string) => `Sent ${ago}`,
   confirm: "Confirm",
@@ -320,6 +386,7 @@ export const OWNER_COPY = {
   toggle: "Take booking requests on TapTurf",
   toggleHelp: "Players can ask for a free hour on your page. You confirm or decline here. They pay at the turf.",
   toggleOn: "On. Players see the request button within 2 minutes.",
-  toggleHidden: "Players can't send requests while your free slots are hidden. Tap All correct to show them.",
+  toggleNever: (button: string) => `Players can't send requests until your free hours show on your page. Tap ${button} below.`,
+  toggleHidden: (button: string) => `Players can't send requests while your free hours are hidden. Tap ${button} below to show them.`,
   toggleFailed: "Couldn't change this. Check your connection and try again.",
 } as const;
