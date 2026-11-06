@@ -5,37 +5,15 @@ import { Check, Copy, Shuffle } from "lucide-react";
 import { trackTool } from "@/lib/analytics/tools";
 import { ToolCta } from "./ToolCta";
 import { PrimaryButton, SecondaryButton, Segmented } from "./inputs";
+import { splitTeams, type SplitMode } from "@/lib/tools/teams";
+
+// The split itself lives in lib/tools/teams.ts (the Turf Session Scorer deals sides with it too).
+export { splitTeams };
 
 const TOOL = "team_generator";
-type Mode = "random" | "balanced";
+type Mode = SplitMode;
 
 const SAMPLE = "Abhishek\nRohan\nOmkar\nShreyas\nAkash\nRaj\nSahil\nAman\nVarun\nKaran";
-
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-/** Random: shuffle and deal round-robin. Balanced: strongest first, snake order. */
-export function splitTeams(players: { name: string; rating: number }[], count: number, mode: Mode): { name: string; rating: number }[][] {
-  const teams: { name: string; rating: number }[][] = Array.from({ length: count }, () => []);
-  if (mode === "random") {
-    shuffle(players).forEach((p, i) => teams[i % count].push(p));
-    return teams;
-  }
-  const ordered = shuffle(players).sort((a, b) => b.rating - a.rating);
-  ordered.forEach((p, i) => {
-    const round = Math.floor(i / count);
-    const pos = i % count;
-    const idx = round % 2 === 0 ? pos : count - 1 - pos;
-    teams[idx].push(p);
-  });
-  return teams;
-}
 
 export function TeamGenerator({ cta }: { cta: { label: string; href: string } }) {
   const [text, setText] = useState("");

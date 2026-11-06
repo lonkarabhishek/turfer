@@ -32,3 +32,17 @@ export function verifyTournamentCode(code: unknown, key: string | null): boolean
   if (!key || typeof code !== "string" || !TOURNAMENT_CODE_RE.test(code)) return false;
   return timingSafeEqual(Buffer.from(code.slice(8)), tagOf(code.slice(0, 8), key));
 }
+
+/**
+ * A game's own tournament code, worked out from the game's id: the low 8
+ * base36 digits of an HMAC of the id, then the usual tag. The same game
+ * always gets the same code, so its page finds its turf session's live
+ * link with no stored link (lib/turfSession), and it verifies like any
+ * minted code. One per game: the code is the tournament's primary key.
+ */
+export function gameTournamentCode(gameId: string, key: string): string {
+  if (!key) throw new Error("gameTournamentCode: no key");
+  const digest = createHmac("sha256", key).update(`game-session:${gameId.toLowerCase()}`).digest();
+  const random = digest.readBigUInt64BE(0).toString(36).padStart(8, "0").slice(-8);
+  return random + tagOf(random, key).toString();
+}

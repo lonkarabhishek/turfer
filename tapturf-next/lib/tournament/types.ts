@@ -83,8 +83,14 @@ export type Settings = {
 
 export type Team = { id: number; name: string; short: string | null };
 
-/** A result entered by hand, home as a, away as b. */
-export type ManualResult = { a: Innings; b: Innings; result: ResultChoice; battedFirst: "a" | "b" };
+/**
+ * A result entered by hand, home as a, away as b. text: the margin in the
+ * words of whoever sent it, shown instead of the page's own
+ * (describeResult counts 10 wickets): a turf session sends "Strikers won
+ * by 3 wickets" for 6 a side (lib/turfSession/sync.ts). A hand result
+ * typed on the Manage tab has none.
+ */
+export type ManualResult = { a: Innings; b: Innings; result: ResultChoice; battedFirst: "a" | "b"; text?: string };
 
 /**
  * A live scorecard's result as it finished, as its match had it (team a
@@ -160,6 +166,13 @@ export type CreateBody = {
   settings: Settings;
   teams: { name: string; short: string | null }[];
   fixtures?: Omit<Fixture, "live" | "liveResult">[];
+  /**
+   * A turf session started from a game (/game/<id>): the tournament gets
+   * the game's own code (lib/tournament/codes.ts gameTournamentCode), so
+   * the game page finds it with no stored link. Only the game's host or a
+   * player in it, signed in, around the game's day.
+   */
+  game?: string;
 };
 
 /** Changes, one at a time (PATCH /api/tournament/<code> { secret, op, ...data }). */
@@ -191,6 +204,8 @@ export type OpName = Op["op"];
 export type TournamentError = "forbidden" | "gone" | "taken" | "limit" | "busy" | "slow" | "bad" | "login" | "unavailable";
 
 export type CreateResponse = { code: string; rev: number } | { error: TournamentError };
+/** A create with game (409): that game's tournament is there already, under this code (it may be this phone's, its reply lost). */
+export type CreateTaken = { error: "taken"; code: string };
 export type PatchResponse = { ok: true; rev: number; view: TournamentGetResponse | null } | { error: TournamentError; field?: string };
 
 /** A tournament of the signed-in organiser (GET /api/tournament/mine). */

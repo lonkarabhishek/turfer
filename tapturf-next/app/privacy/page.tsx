@@ -201,6 +201,11 @@ const SECTIONS: LegalSection[] = [
           kept: opening its page adds one to its view count (and, once a day per browser, to its count of
           viewers), which identifies nobody.
         </p>
+        <p>
+          A turf session&rsquo;s live link puts the team names and match results on a page anyone with the link
+          can see; player names stay on your phone. A session started from a game is also shown on that
+          game&rsquo;s page to anyone who can see the game.
+        </p>
         <p id="push" className="scroll-mt-24">
           <strong>Notifications on your phone.</strong> If you turn on &ldquo;Notifications on this phone&rdquo;
           on the Me tab and allow them when your phone asks, your browser gives us a push address for that phone

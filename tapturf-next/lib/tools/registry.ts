@@ -3,7 +3,7 @@
  * the sitemap, related-tool links and each page's metadata.
  */
 
-export type ToolSlug = "cricket-nrr-calculator" | "cricket-toss" | "cricket-scorecard-maker" | "cricket-live-scorer" | "live-scoreboard" | "cricket-tournament-scorer" | "cricket-team-generator";
+export type ToolSlug = "cricket-nrr-calculator" | "cricket-toss" | "cricket-scorecard-maker" | "cricket-live-scorer" | "turf-session" | "live-scoreboard" | "cricket-tournament-scorer" | "cricket-team-generator";
 
 export type ToolDef = {
   slug: ToolSlug;
@@ -79,6 +79,19 @@ export const TOOLS: ToolDef[] = [
     h1: "Live Cricket Scorer",
     cta: { label: "Find a box cricket turf near you", href: "/sport/box-cricket" },
     related: ["cricket-scorecard-maker", "cricket-toss", "cricket-team-generator"],
+  },
+  {
+    slug: "turf-session",
+    updated: "2026-11-06",
+    key: "turf_session",
+    name: "Turf Session Scorer",
+    tagline: "Every match of your turf slot, one running result.",
+    // Plain, for the site owner's approval (45 characters; 150 for the description).
+    title: "Turf Session Scorer for Box Cricket | TapTurf",
+    description: "Score every match of your box cricket slot on one phone: ball by ball or just the final score, the running result, and a summary to share on WhatsApp.",
+    h1: "Turf Session Scorer",
+    cta: { label: "Find a box cricket turf near you", href: "/sport/box-cricket" },
+    related: ["cricket-live-scorer", "cricket-team-generator"],
   },
   {
     slug: "live-scoreboard",

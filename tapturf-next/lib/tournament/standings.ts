@@ -82,7 +82,7 @@ export function formatLabel(s: Pick<Settings, "format" | "legs" | "matches" | "p
 }
 
 function resultOf(f: Fixture, homeName: string, awayName: string, live: LiveNow | null): { state: FixtureState; source: Resolved["source"]; r: ManualResult | null; text: string | null } {
-  if (f.result) return { state: "done", source: "manual", r: f.result, text: null };
+  if (f.result) return { state: "done", source: "manual", r: f.result, text: f.result.text ?? null };
   if (live?.status === "live") return { state: "live", source: "live", r: null, text: null };
   const lr = live?.status === "done" && live.result ? live.result : f.liveResult;
   if (lr) return { state: "done", source: "live", r: orientLive(lr, homeName, awayName), text: lr.text };

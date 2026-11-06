@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Activity, Calculator, Coins, ImageIcon, ListOrdered, Tally5, Users } from "lucide-react";
+import { Activity, Calculator, Coins, ImageIcon, ListOrdered, Repeat, Tally5, Users } from "lucide-react";
 import { TOOLS, TOOLS_BASE, toolPath, type ToolSlug } from "@/lib/tools/registry";
 import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
@@ -31,6 +31,7 @@ const ICONS: Record<ToolSlug, React.ComponentType<{ className?: string }>> = {
   "cricket-toss": Coins,
   "cricket-scorecard-maker": ImageIcon,
   "cricket-live-scorer": Activity,
+  "turf-session": Repeat,
   "live-scoreboard": Tally5,
   "cricket-tournament-scorer": ListOrdered,
   "cricket-team-generator": Users,

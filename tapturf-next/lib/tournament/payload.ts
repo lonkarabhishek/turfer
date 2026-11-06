@@ -136,7 +136,9 @@ export function readResult(x: unknown): ManualResult | null {
   const b = readInnings(o.b);
   const result = CHOICES.find((c) => c === o.result);
   if (!a || !b || !result) return null;
-  return { a, b, result, battedFirst: o.battedFirst === "b" ? "b" : "a" };
+  // The sender's words for the margin, when there are any (lib/tournament/types.ts ManualResult).
+  const text = cleanText(o.text, 120);
+  return { a, b, result, battedFirst: o.battedFirst === "b" ? "b" : "a", ...(text ? { text } : {}) };
 }
 
 const STAGES: readonly Stage[] = ["league", "semi", "final"];

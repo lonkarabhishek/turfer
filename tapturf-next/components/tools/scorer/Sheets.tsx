@@ -283,7 +283,26 @@ const CROSSING: ReadonlySet<Kind> = new Set<Kind>(["caught", "runOut", "obstruct
  * one sheet. The ball and the new batter are saved together, so undo
  * takes both back.
  */
-export function WicketSheet({ match, view, extra, nb, preset, onCommit, onClose }: { match: Match; view: MatchView; extra: Extra; nb: NbSource; preset?: "retire"; onCommit: Commit; onClose: () => void }) {
+export function WicketSheet({
+  match,
+  view,
+  extra,
+  nb,
+  preset,
+  autoBatter = false,
+  onCommit,
+  onClose,
+}: {
+  match: Match;
+  view: MatchView;
+  extra: Extra;
+  nb: NbSource;
+  preset?: "retire";
+  /** Quick mode (Turf Session Scorer): the scorer brings the next batter in itself, so this sheet never asks who. */
+  autoBatter?: boolean;
+  onCommit: Commit;
+  onClose: () => void;
+}) {
   const inn = view.current;
   const [kind, setKind] = useState<Kind | null>(preset ?? null);
   const [out, setOut] = useState<End>("striker");
@@ -351,7 +370,7 @@ export function WicketSheet({ match, view, extra, nb, preset, onCommit, onClose 
     const e = buildBall(extra === "bye" || extra === "legBye" ? "none" : extra, 0, nb, { kind: k as BallWicketKind });
     const v2 = derive(apply(match, e));
     const need = v2.status === "live" && v2.current.index === inn.index && (v2.needs.includes("striker") || v2.needs.includes("nonStriker"));
-    if (!need) onCommit([e]);
+    if (!need || autoBatter) onCommit([e]);
   };
 
   const extraWord = extra === "wide" ? "Wide" : extra === "noBall" ? "No-ball" : extra === "bye" ? "Byes" : extra === "legBye" ? "Leg byes" : null;
@@ -504,13 +523,13 @@ export function WicketSheet({ match, view, extra, nb, preset, onCommit, onClose 
         </p>
       )}
 
-      {after && !after.error && after.needBatter && after.view && (
+      {after && !after.error && after.needBatter && after.view && !autoBatter && (
         <>
           <SheetLabel>Next batter in</SheetLabel>
           <PlayerPicker options={batterOpts(after.view.batterOptions)} newName={defaultName(after.view, inn.batting, "Batter")} newLabel="New player" onPick={(name, id) => commit({ name, id })} onProfile={(profile, typed) => commit({ profile, typed })} />
         </>
       )}
-      {after && !after.error && !after.needBatter && (
+      {after && !after.error && (!after.needBatter || autoBatter) && (
         <button type="button" onClick={() => commit()} className="press-tight mt-5 w-full h-14 rounded-full bg-red-600 text-white text-[17px] font-bold hover:bg-red-700">
           <Check className="inline w-5 h-5 mr-1 -mt-0.5" aria-hidden /> {kind === "retire" ? "Confirm" : "Confirm wicket"}
         </button>

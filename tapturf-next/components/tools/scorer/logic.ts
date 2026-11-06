@@ -1,6 +1,6 @@
 // Relative, not "@/", so logic.test.ts compiles on its own (npm run test:scorer).
 import { readTag, sameTag, type Tag } from "../../../lib/account/tag";
-import { derive, newPlayerId, undoBall, type BallEvent, type BallWicket, type Extra, type Match, type MatchEvent, type MatchView, type Side } from "../../../lib/cricket/scoring";
+import { apply, derive, newPlayerId, undoBall, type BallEvent, type BallWicket, type Extra, type Match, type MatchEvent, type MatchView, type Side } from "../../../lib/cricket/scoring";
 
 /** Where the runs on a no-ball came from. */
 export type NbSource = "bat" | "bye" | "legBye";
@@ -187,6 +187,45 @@ export function playerEdits(view: MatchView, side: Side, id: string, edit: { nam
   const tag = edit.tag === undefined ? undefined : readTag(edit.tag);
   // A tag that is not a real one (and not null) changes nothing.
   if (tag !== undefined && (tag !== null || edit.tag === null) && !sameTag(tag, p.tag)) out.push({ type: "tagPlayer", team: side, player: id, tag });
+  return out;
+}
+
+/**
+ * Quick mode (the Turf Session Scorer with "Ask who bats and bowls" off):
+ * the batters and bowler the match needs right now, picked without a
+ * sheet, as setBatter and setBowler events to go in with the tap that
+ * needed them (stamped with it, so Undo takes them back together).
+ * Batters: the next named player of the batting side who has not batted
+ * this innings, in roster order, else a new "Batter n". Bowlers: the named
+ * player (or "Bowler n") of the bowling side with the fewest balls who may
+ * bowl this over, else a new "Bowler n". One pick at a time, each applied
+ * before the next is worked out. Nothing once the match is over, nor at
+ * the innings break unless chase (the "Start the chase" tap).
+ */
+export function autoPicks(m: Match, opts: { chase?: boolean } = {}): MatchEvent[] {
+  const out: MatchEvent[] = [];
+  let x = m;
+  for (let i = 0; i < 4; i++) {
+    const v = derive(x);
+    if (v.status !== "live" || !v.needs.length || (v.inningsBreak && !opts.chase)) break;
+    const inn = v.current;
+    let e: MatchEvent;
+    if (v.needs[0] === "bowler") {
+      const side = inn.bowling;
+      const free = v.bowlerOptions.filter((b) => !b.blocked && placeholderOf(b.name) !== "Batter");
+      const pick = [...free].sort((p, q) => p.balls - q.balls)[0];
+      e = pick ? { type: "setBowler", player: pick.id } : { type: "setBowler", player: newPlayerId(x, side), name: defaultName(v, side, "Bowler") };
+    } else {
+      const side = inn.batting;
+      const batted = new Set(inn.batters.map((b) => b.id));
+      const pick = v.teams[side].players.find((p) => !batted.has(p.id) && !placeholderOf(p.name) && p.id !== inn.striker?.id && p.id !== inn.nonStriker?.id);
+      e = pick ? { type: "setBatter", player: pick.id } : { type: "setBatter", player: newPlayerId(x, side), name: defaultName(v, side, "Batter") };
+    }
+    const y = apply(x, e);
+    if (y === x) break;
+    out.push(e);
+    x = y;
+  }
   return out;
 }
 
