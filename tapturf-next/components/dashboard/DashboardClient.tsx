@@ -12,6 +12,7 @@ import { useCityChoice } from "@/components/city/useCityChoice";
 import { labelFor, openCityPicker } from "@/lib/city";
 import { MyGames, type GamesView } from "./MyGames";
 import { MyRequests } from "./MyRequests";
+import { MyBookingRequests } from "./MyBookingRequests";
 import { NotificationsList } from "./NotificationsList";
 import { ProfileSection } from "./ProfileSection";
 import { NotificationsPrompt } from "./NotificationsPrompt";
@@ -144,6 +145,23 @@ function Me({
     window.location.href = "/";
   };
 
+  // Turf requests change on the turf's side (confirmed, declined): read them again each time the Requests tab
+  // is shown (a tab tap, or an alert's link to ?tab=requests while this page stays mounted) and when the
+  // phone comes back to it, so no row offers a cancel of a state that has passed. The first read is useMeData's.
+  const { reloadBookings } = data;
+  const lastTab = useRef(tab);
+  useEffect(() => {
+    const was = lastTab.current;
+    lastTab.current = tab;
+    if (tab !== "requests") return;
+    if (was !== "requests") void reloadBookings();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void reloadBookings();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [tab, reloadBookings]);
+
   // Players waiting for an answer, per hosted game (the Games tab's rows say so).
   const waiting = useMemo(() => {
     const m = new Map<string, number>();
@@ -152,7 +170,7 @@ function Me({
   }, [data.incoming]);
 
   // The Requests tab waits for the players waiting on them too, so its list and count never jump.
-  const requestsLoading = data.loading || data.extraLoading;
+  const requestsLoading = data.loading || data.extraLoading || data.bookingsLoading;
   const counts: Record<TabKey, number | null> = {
     games: data.loading ? null : data.upcoming,
     requests: requestsLoading ? null : data.pending,
@@ -389,6 +407,8 @@ function Me({
                 hosted={data.created}
                 loading={requestsLoading}
                 reloadRequests={data.reloadRequests}
+                hideEmpty={data.bookings.length > 0}
+                turfRequests={<MyBookingRequests bookings={data.bookings} reload={data.reloadBookings} />}
               />
             )}
             {tab === "notifications" && (

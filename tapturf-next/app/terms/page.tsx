@@ -5,7 +5,8 @@ import { CONTACT_EMAIL, CONTACT_MAILTO } from "@/lib/contact";
 import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
 import { CITY_LIST_AND } from "@/lib/city";
 
-const UPDATED = "2026-10-30";
+// Booking requests (held for the site owner's OK): moves to the day the new section goes live.
+const UPDATED = "2026-11-06";
 const PAGE_URL = "https://www.tapturf.in/terms";
 
 export const metadata: Metadata = {
@@ -58,14 +59,17 @@ const SECTIONS: LegalSection[] = [
           games.
         </p>
         <p>
-          <strong>We are not the venue.</strong> We don&rsquo;t own, run or book any turf. When you tap Call or
-          WhatsApp you contact the venue directly, and your booking, payment, cancellation and refund are
-          between you and them. We don&rsquo;t charge players a booking fee and we don&rsquo;t take payments.
+          We don&rsquo;t own or run any turf. For bookings, contact the turf directly: when you tap Call or
+          WhatsApp you contact the venue, and your booking, payment, cancellation and refund are between you and
+          them. Some turfs also take booking requests on TapTurf (<a href="#requests">below</a>). We don&rsquo;t
+          charge players a booking fee and we don&rsquo;t take payments.
         </p>
         <p>
           <strong>Listings can be out of date.</strong> Venue information comes from the venues, from public
           sources and from players. We check what we can, but prices, hours and facilities change. Confirm with
-          the venue before you travel. Where a price is marked as reported by players, it is unverified.
+          the venue before you travel. Where a price is marked as reported by players, it is unverified. Free
+          slots on a turf page are hours its owner marked free, shown with when they last updated them; the
+          venue confirms.
         </p>
       </>
     ),
@@ -75,7 +79,7 @@ const SECTIONS: LegalSection[] = [
     title: "Your account",
     body: (
       <ul>
-        <li>You need an account to host or join games, write reviews, suggest corrections, and turn on or keep following a live score link. Browsing is open to everyone.</li>
+        <li>You need an account to host or join games, send booking requests, write reviews, suggest corrections, and turn on or keep following a live score link. Browsing is open to everyone.</li>
         <li>Sign in with your own mobile number or Google account, and keep the name on your profile real enough that other players can recognise you.</li>
         <li>
           You can pick a username: 3 to 20 letters, digits or underscores, starting with a letter, and not one
@@ -112,6 +116,48 @@ const SECTIONS: LegalSection[] = [
           playing surface, bring what you need, and look after your belongings. TapTurf isn&rsquo;t
           responsible for injuries, losses or disputes arising from a game, a booking or a meeting arranged
           through the site.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "requests",
+    title: "Booking requests",
+    body: (
+      <>
+        <p>
+          <strong>What a request is.</strong> On a turf that takes requests you can ask for 1 to 3 of the hours its
+          owner marked free, in the next 7 days. TapTurf passes your request to the turf; it is not a booking until
+          the turf confirms it, and the turf may decline it. A request with no answer by its start time expires.
+        </p>
+        <p>
+          <strong>What the turf sees.</strong> Your name, the phone number on your account and your note go to
+          that turf&rsquo;s owner and managers on myTapturf. You need a phone number confirmed with a one-time code
+          to send one.
+        </p>
+        <p>
+          <strong>Paying.</strong> You pay the turf at the turf, at its price. Nothing is paid on TapTurf, and
+          TapTurf charges no fee.
+        </p>
+        <p>
+          <strong>Cancelling.</strong> You can cancel a waiting request, or a confirmed booking, on your Me tab
+          before it starts; if it was confirmed, the turf is told and those hours go back to Free. The turf can
+          cancel a booking it confirmed, and you are told. Any other
+          cancellation terms, refunds or charges are between you and the turf.
+        </p>
+        <p>
+          <strong>Limits.</strong> Up to 3 requests waiting at a time, one waiting per turf per day, and up to 10
+          sent a day. Send only requests you mean to keep, and cancel in time if your plans change.
+        </p>
+        <p>
+          <strong>If something goes wrong.</strong> The booking, the ground and any dispute about them are between
+          you and the turf. TapTurf passes the request on and shows the answer; it can&rsquo;t promise that a turf
+          will confirm a request, keep a booking or be open.
+        </p>
+        <p>
+          <strong>If you run a turf.</strong> Requests are off until you turn on &lsquo;Take booking requests on
+          TapTurf&rsquo; on myTapturf. Answer each with Confirm or Decline; confirming marks those hours Booked and
+          declines other requests for them. Use a player&rsquo;s name and number only for that booking.
         </p>
       </>
     ),

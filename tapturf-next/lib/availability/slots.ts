@@ -86,7 +86,8 @@ export type SlotDay = {
   /** The slots still to come (start after now), in time order. */
   slots: Slot[];
 };
-export type PublicAvailability = { updatedAt: string; now: string; booked: SlotKey[] };
+/** requests: the turf takes booking requests on TapTurf now (the availability route's flag, lib/booking). */
+export type PublicAvailability = { updatedAt: string; now: string; booked: SlotKey[]; requests: boolean };
 export type OwnerSlots = {
   ok: true;
   now: string;
@@ -134,11 +135,11 @@ export function clockLabel(minuteOfDay: number): string {
 const dayStart = (date: string) => Date.parse(`${date}T00:00:00Z`) - IST_MS;
 const addDays = (date: string, n: number) => new Date(Date.parse(`${date}T00:00:00Z`) + n * DAY_MS).toISOString().slice(0, 10);
 const weekdayOf = (date: string): DayName => WEEK[new Date(`${date}T00:00:00Z`).getUTCDay()];
-/** "Thu 5 Nov" */
-const shortDate = (date: string) => {
+/** A YYYY-MM-DD date as "Thu 5 Nov" (lib/booking/requests.ts whenText too). */
+export function shortDate(date: string): string {
   const d = new Date(`${date}T00:00:00Z`);
   return `${WEEK[d.getUTCDay()].slice(0, 3)} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
-};
+}
 /** "Saturday 7 Nov" */
 const longDate = (date: string) => {
   const d = new Date(`${date}T00:00:00Z`);
@@ -368,7 +369,7 @@ export function parsePublic(json: unknown, nowMs: number): PublicAvailability | 
   const { updated_at: updatedAt, now } = json;
   if (typeof updatedAt !== "string" || typeof now !== "string" || !Number.isFinite(timeOf(updatedAt)) || !Number.isFinite(timeOf(now))) return null;
   if (!isFresh(updatedAt, nowMs)) return null;
-  return { updatedAt, now, booked: keysOf(json.booked) };
+  return { updatedAt, now, booked: keysOf(json.booked), requests: json.requests === true };
 }
 
 /** An owner function's answer: the owner's view, an error, or null for anything malformed. */
@@ -434,6 +435,8 @@ export const PLAYER_COPY = {
   afterMidnight: "After midnight",
   hintWhatsApp: "Tap a time to ask the turf on WhatsApp.",
   hintCall: "Tap a time to call the turf.",
+  /** On a turf that takes booking requests on TapTurf (components/turf/RequestSheet.tsx). */
+  hintRequest: "Tap a time to send a request. The turf confirms.",
   freeMeans: "Free means the owner marked the hour free; the turf confirms it.",
   membersClub: "Members' club: ask the turf about guest access.",
 } as const;
@@ -441,6 +444,13 @@ export const PLAYER_COPY = {
 /** The card's last line, with the page's booking line, or for a members' club (no booking line, as on the page) that it is one. */
 export function playerFooter(membersOnly: boolean): string {
   return [PLAYER_COPY.freeMeans, membersOnly ? PLAYER_COPY.membersClub : bookingLine(membersOnly, true)].filter(Boolean).join(" ");
+}
+
+const REQUEST_FREE_MEANS = "Free means the owner marked the hour free. Pay at the turf; nothing is paid online.";
+
+/** The card's last line on a turf that takes booking requests: what Free means and that nothing is paid online; a members' club says it is one. */
+export function requestFooter(membersOnly: boolean): string {
+  return [REQUEST_FREE_MEANS, membersOnly ? PLAYER_COPY.membersClub : null].filter(Boolean).join(" ");
 }
 
 /** "Updated 2 h ago by the owner" */

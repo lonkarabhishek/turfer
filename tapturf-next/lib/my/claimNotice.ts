@@ -67,7 +67,15 @@ export function claimDecisionNotice(
   return null;
 }
 
-/** Where tapping a notification goes, and what its small link says: a game, or a claim decision's turf. Null: nowhere (it marks read). */
+/**
+ * Booking requests' notifications (20261106_booking_requests.sql): to the
+ * turf's owners and managers a new request and a player's cancel, to the
+ * player a confirm, a decline and the turf's cancel.
+ */
+export const BOOKING_TO_OWNER = ["booking_request", "booking_cancelled_by_player"] as const;
+export const BOOKING_TO_PLAYER = ["booking_confirmed", "booking_declined", "booking_cancelled"] as const;
+
+/** Where tapping a notification goes, and what its small link says: a game, a claim decision's turf, or a booking request. Null: nowhere (it marks read). */
 export function notificationLink(type: string, metadata: unknown): { href: string; label: string | null } | null {
   const m = metadata && typeof metadata === "object" && !Array.isArray(metadata) ? (metadata as Record<string, unknown>) : {};
   const id = (v: unknown) => (typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v) ? v.toLowerCase() : null);
@@ -75,6 +83,8 @@ export function notificationLink(type: string, metadata: unknown): { href: strin
   const turf = id(m.turfId);
   if (type === CLAIM_APPROVED && turf) return { href: `/my/turf/${turf}`, label: "Open myTapturf" };
   if (type === CLAIM_REJECTED && (slug || turf)) return { href: `/turf/${slug ?? turf}`, label: "Open the turf's page" };
+  if ((BOOKING_TO_OWNER as readonly string[]).includes(type) && turf) return { href: `/my/turf/${turf}#requests`, label: "Open myTapturf" };
+  if ((BOOKING_TO_PLAYER as readonly string[]).includes(type)) return { href: "/dashboard?tab=requests", label: "Your requests" };
   // Older rows stored either { gameId } or { game_id }.
   const game = typeof m.gameId === "string" ? m.gameId : typeof m.game_id === "string" ? m.game_id : null;
   return game ? { href: `/game/${game}`, label: null } : null;

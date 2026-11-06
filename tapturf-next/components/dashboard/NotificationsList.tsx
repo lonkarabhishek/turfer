@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Bell, Check, ChevronRight, Info, MapPin, Store, UserPlus, XCircle } from "lucide-react";
+import { Bell, CalendarCheck, CalendarPlus, CalendarX, Check, ChevronRight, Info, MapPin, Store, UserPlus, XCircle } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { quietToken } from "@/lib/account/client";
 import { getUserNotifications, markAsRead, markAllAsRead } from "@/lib/queries/notifications";
@@ -18,6 +18,12 @@ const ICON_MAP: Record<string, typeof Bell> = {
   // A turf claim TapTurf decided (20261106_owner_claims_clarity.sql admin_answer_owner_claim).
   [CLAIM_APPROVED]: Store,
   [CLAIM_REJECTED]: Info,
+  // Booking requests (20261106_booking_requests.sql): to the turf, a new one and a player's cancel; to the player, the turf's answer.
+  booking_request: CalendarPlus,
+  booking_confirmed: CalendarCheck,
+  booking_declined: CalendarX,
+  booking_cancelled: CalendarX,
+  booking_cancelled_by_player: CalendarX,
 };
 
 /** onUnread: how many are unread, after each load and change (the Me tab's Alerts count). */

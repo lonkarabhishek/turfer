@@ -23,6 +23,8 @@ import {
 } from "@/lib/availability/slots";
 import { fail, queueOf, settle, shown, takeBatch, tap, tapMany, unsaved, type Queue } from "@/lib/availability/queue";
 import { confirmOwnerSlots, getOwnerSlots, saveSlotHours, setOwnerSlots } from "@/lib/my/client";
+import { OWNER_COPY, toggleNotes, type SlotsStatus } from "@/lib/booking/requests";
+import { BookingRequests, useOwnerBookings, type OwnerBookingsHook } from "./BookingRequests";
 
 /** The first read, made with the dashboard's (components/my/MyTurf.tsx): not back yet, the answer, the database has no free slots yet, or the call failed. */
 export type InitialSlots = undefined | OwnerSlots | { error: string } | "missing" | "failed";
@@ -231,6 +233,10 @@ function Editor({
       setPhase((p) => (p === "ready" ? p : "failed"));
     }
   }, [turfId, commit, take]);
+
+  // Booking requests (components/my/BookingRequests.tsx): the switch and the list sit at the top of this section.
+  // A confirm or a cancel changes marks, so the hours below are read again.
+  const bookings = useOwnerBookings(turfId, { onSlotsChanged: () => void reload() });
 
   // The first answer's clock (tick keeps it), and a fresh read when the tab comes back.
   useEffect(() => {
@@ -494,6 +500,8 @@ function Editor({
 
   return (
     <Frame lead={lead}>
+      <BookingRequests turfId={turfId} hook={bookings} grounds={view.grounds} />
+      {hasNumber && bookings.state && <RequestsToggle hook={bookings} status={status} />}
       <div className={CARD}>
         {lineOnTop && statusRow(true, buttonOnTop, true)}
 
@@ -653,6 +661,61 @@ function SaveNote({ state, failed }: { state: "saving" | "saved" | "error" | nul
             "Not saved. Tap again."
           )}
         </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Take booking requests on TapTurf" (off until the owner turns it on): with
+ * it on, players can ask for a free hour on the turf's page and the owner
+ * confirms or declines above. Shown only where the page has a number. While
+ * the free hours don't show to players (never shown, or a day old), it says
+ * requests can't come either, naming the button below that shows them
+ * (lib/booking/requests.ts toggleNotes).
+ */
+function RequestsToggle({ hook, status }: { hook: OwnerBookingsHook; status: SlotsStatus }) {
+  const on = hook.state?.on === true;
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [justOn, setJustOn] = useState(false);
+  const flip = async () => {
+    if (saving) return;
+    setSaving(true);
+    setFailed(false);
+    const saved = await hook.setOn(!on);
+    setSaving(false);
+    if (!saved) return setFailed(true);
+    setJustOn(!on);
+  };
+  const lines = toggleNotes({ on, justOn, status });
+  return (
+    <div className={CARD}>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        disabled={saving}
+        onClick={() => void flip()}
+        className="w-full min-h-11 flex items-center justify-between gap-3 text-left cursor-pointer touch-manipulation disabled:cursor-wait"
+      >
+        <span className="text-[15px] font-semibold text-primary-900 leading-snug">{OWNER_COPY.toggle}</span>
+        <span
+          aria-hidden
+          className={`relative shrink-0 w-[52px] h-8 rounded-full transition-colors ${on ? "bg-accent-600" : "bg-primary-200"} ${saving ? "opacity-70" : ""}`}
+        >
+          <span className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow flex items-center justify-center transition-transform ${on ? "translate-x-5" : ""}`}>
+            {saving && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-500" />}
+          </span>
+        </span>
+      </button>
+      <p className="mt-1 text-[13px] text-primary-500 leading-snug">{OWNER_COPY.toggleHelp}</p>
+      {lines.on && <p className="mt-2 text-[13px] font-semibold text-accent-800">{lines.on}</p>}
+      {lines.hidden && <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-[13px] font-semibold text-amber-800 leading-snug">{lines.hidden}</p>}
+      {failed && (
+        <p role="alert" className="mt-2 text-[13px] text-red-600">
+          {OWNER_COPY.toggleFailed}
+        </p>
       )}
     </div>
   );

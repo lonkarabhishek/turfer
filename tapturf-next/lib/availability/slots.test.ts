@@ -34,6 +34,7 @@ import {
   parsePublic,
   playerDefault,
   playerFooter,
+  requestFooter,
   slotDays,
   slotKey,
   slotMessage,
@@ -280,7 +281,10 @@ test("14. the clock: the server's when the device runs behind", () => {
 test("15. the public answer: junk, malformed keys, stale", () => {
   const now = ist("2026-11-05 13:00");
   const good = { fresh: true, updated_at: iso(now - HOUR), now: iso(now), booked: ["2026-11-05T19:00", "2026-11-05T24:00", "2026-02-30T10:00", 5, "x"] };
-  assert.deepEqual(parsePublic(good, now), { updatedAt: good.updated_at, now: good.now, booked: ["2026-11-05T19:00"] });
+  assert.deepEqual(parsePublic(good, now), { updatedAt: good.updated_at, now: good.now, booked: ["2026-11-05T19:00"], requests: false });
+  // Booking requests: only a plain true turns the request button on.
+  assert.equal(parsePublic({ ...good, requests: true }, now)?.requests, true);
+  for (const r of [false, "true", 1, null, undefined, {}]) assert.equal(parsePublic({ ...good, requests: r }, now)?.requests, false, String(r));
   for (const junk of [null, undefined, "x", [], {}, { fresh: false }, { fresh: "true", updated_at: good.updated_at, now: good.now }, { ...good, now: undefined }, { ...good, updated_at: "junk" }])
     assert.equal(parsePublic(junk, now), null);
   assert.equal(parsePublic({ ...good, updated_at: iso(now - 25 * HOUR) }, now), null, "stale");
@@ -366,7 +370,7 @@ test("19. the hours picker: Closes lists the 23 hours after the opening; what it
 test("20. players' words: honest, with the site owner's booking line (a members' club says it is one instead)", () => {
   const [today, tomorrow] = slotDays(OVERNIGHT, ist("2026-11-05 12:00"));
   const [night] = slotDays(OVERNIGHT, ist("2026-11-07 00:30"));
-  const lines = [...Object.values(PLAYER_COPY), playerFooter(false), playerFooter(true), updatedLine("2 h ago"), updatedLine("just now"), noFreeLine(today), noFreeLine(tomorrow), noFreeLine(night), noFreeLine(slotDays(OVERNIGHT, ist("2026-11-05 12:00"))[3])];
+  const lines = [...Object.values(PLAYER_COPY), playerFooter(false), playerFooter(true), requestFooter(false), requestFooter(true), updatedLine("2 h ago"), updatedLine("just now"), noFreeLine(today), noFreeLine(tomorrow), noFreeLine(night), noFreeLine(slotDays(OVERNIGHT, ist("2026-11-05 12:00"))[3])];
   for (const s of lines) {
     assert.equal(bannedCopy(s), null, s);
     assert.doesNotMatch(s, /take bookings|takes no bookings|book now|instant|guarantee/i, s);
@@ -375,6 +379,11 @@ test("20. players' words: honest, with the site owner's booking line (a members'
   assert.equal(BOOKING_LINE, "For bookings, contact the turf directly.");
   assert.ok(!playerFooter(true).includes(BOOKING_LINE));
   assert.equal(playerFooter(true), `${PLAYER_COPY.freeMeans} Members' club: ask the turf about guest access.`, "a members' club says so");
+  // On a turf that takes booking requests: the hint and the footer say the turf confirms and nothing is paid online.
+  assert.equal(PLAYER_COPY.hintRequest, "Tap a time to send a request. The turf confirms.");
+  assert.equal(requestFooter(false), "Free means the owner marked the hour free. Pay at the turf; nothing is paid online.");
+  assert.equal(requestFooter(true), `${requestFooter(false)} Members' club: ask the turf about guest access.`);
+  for (const s of [PLAYER_COPY.hintRequest, requestFooter(false), requestFooter(true)]) assert.doesNotMatch(s, /\bbook|book now|instant|guarantee|hurry|only \d+ left/i, s);
   assert.equal(noFreeLine(today), "No free slots marked for the rest of today.");
   assert.equal(noFreeLine(night), "No free slots marked for Friday night.");
   assert.equal(noFreeLine(slotDays(OVERNIGHT, ist("2026-11-05 12:00"))[2]), "No free slots marked for Saturday.");

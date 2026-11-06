@@ -20,6 +20,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return { data, error };
     },
     Date.now(),
+    // Booking requests (20261106_booking_requests.sql): a boolean only; before that file, an error, which means no.
+    async (turfId) => {
+      const { data, error } = await createReadOnlyClient().rpc("turf_takes_requests", { p_turf_id: turfId });
+      return { data, error };
+    },
   );
   if (r.failed) console.error("availability: read failed", id, r.failed);
   return new Response(r.body, { status: r.status, headers: r.headers });

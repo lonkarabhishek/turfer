@@ -12,7 +12,9 @@ import { parsePublic } from "./slots";
  *
  * The body is the database's own shape (turf_availability,
  * 20261105_turf_availability.sql), checked again here with the same parser
- * the page uses: {"fresh":true,"updated_at","now","booked":[slot keys]}, or
+ * the page uses: {"fresh":true,"updated_at","now","booked":[slot keys],
+ * "requests":true|false} (requests: the turf takes booking requests on
+ * TapTurf, turf_takes_requests, read in parallel), or
  * {"fresh":false} for a turf with nothing fresh to show, before the
  * migration, and when the read fails. Never 503, never a stale copy: a card
  * that cannot be read is no card.
@@ -55,24 +57,44 @@ export type AvailabilityResponse = {
   failed?: string;
 };
 
-/** `id`: the route's param as Next gives it (decoded); `pathname` and `search`: the request URL's own, undecoded. */
+/**
+ * Whether the turf takes booking requests now (turf_takes_requests,
+ * 20261106_booking_requests.sql): only a plain `true` without an error
+ * counts. Before that migration, on an error or a throw: no, quietly; the
+ * card then keeps its Call and WhatsApp times.
+ */
+async function takesRequests(readRequests: Reader | undefined, id: string): Promise<boolean> {
+  if (!readRequests) return false;
+  try {
+    const { data, error } = await readRequests(id);
+    return !error && data === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `id`: the route's param as Next gives it (decoded); `pathname` and `search`: the request URL's own, undecoded.
+ * readRequests: the booking requests flag, read alongside; a fresh body says `requests: true` only when it answers true.
+ */
 export async function availabilityResponse(
   req: { id: string; pathname: string; search: string },
   read: Reader,
   nowMs: number,
+  readRequests?: Reader,
 ): Promise<AvailabilityResponse> {
   const { id, pathname, search } = req;
   if (!UUID.test(id) || pathname !== availabilityPath(id)) return { status: 404, headers: BAD_HEADERS, body: JSON.stringify({ error: "not_found" }) };
   if (search) return { status: 400, headers: BAD_HEADERS, body: JSON.stringify({ error: "bad_request" }) };
   try {
-    const { data, error } = await read(id);
+    const [{ data, error }, requests] = await Promise.all([read(id), takesRequests(readRequests, id)]);
     if (error) {
       if (error.code && MISSING.has(error.code)) return { status: 200, headers: OK_HEADERS, body: NOT_FRESH };
       return { status: 200, headers: FAILED_HEADERS, body: NOT_FRESH, failed: `${error.code ?? ""} ${error.message ?? ""}`.trim() || "error" };
     }
     const a = parsePublic(data, nowMs);
     if (!a) return { status: 200, headers: OK_HEADERS, body: NOT_FRESH };
-    return { status: 200, headers: OK_HEADERS, body: JSON.stringify({ fresh: true, updated_at: a.updatedAt, now: a.now, booked: a.booked }) };
+    return { status: 200, headers: OK_HEADERS, body: JSON.stringify({ fresh: true, updated_at: a.updatedAt, now: a.now, booked: a.booked, requests }) };
   } catch (e) {
     return { status: 200, headers: FAILED_HEADERS, body: NOT_FRESH, failed: e instanceof Error ? e.message : String(e) };
   }

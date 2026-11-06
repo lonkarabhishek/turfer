@@ -254,6 +254,17 @@ const SECTIONS: LegalSection[] = [
           were signed in, never who. Your browser keeps nothing on your device for this, and we don&rsquo;t store your
           IP address for it. This runs whichever cookie choice you make. Only TapTurf&rsquo;s team sees these counts.
         </p>
+        <p id="booking-requests" className="scroll-mt-24">
+          <strong>If you send a booking request.</strong> On a turf that takes requests on TapTurf you can ask for 1
+          to 3 of its free hours. We keep the turf, the day and hours, your note if you write one, your name and the
+          phone number on your account (you need one confirmed with a one-time code), when you sent it and what
+          became of it (waiting, confirmed, declined, cancelled or expired, who changed it, and the turf&rsquo;s
+          reason if it gave one). The turf gets an in-app notification when you send a request or cancel a
+          confirmed booking, and you get one when the turf confirms, declines or cancels it (on the phone too, for
+          whoever turned that on); we never email or text about it.
+          Nothing is paid on TapTurf: you pay at the turf. If you run a turf, we keep whether you turned requests on
+          and each answer you give.
+        </p>
         <p>
           <strong>Your location, only when you ask.</strong> On the Turf Near Me page, tapping &ldquo;Use my
           location&rdquo; sends your approximate coordinates to our server once so we can sort turfs by
@@ -262,7 +273,7 @@ const SECTIONS: LegalSection[] = [
         </p>
         <p>
           <strong>What we do not collect.</strong> We don&rsquo;t take payments, so we never see card, UPI or
-          bank details. Bookings happen directly between you and the venue.
+          bank details. You pay the venue directly for any booking.
         </p>
       </>
     ),
@@ -327,8 +338,12 @@ const SECTIONS: LegalSection[] = [
           player search, on games and on your reports. We never show either one, or which one is missing.
         </p>
         <p>
-          <strong>Venues.</strong> We don&rsquo;t pass your details to turf owners. When you tap Call or
-          WhatsApp you contact the venue yourself, and from then on their own privacy terms apply.
+          <strong>Venues.</strong> When you tap Call or WhatsApp you contact the venue yourself, and from then on
+          their own privacy terms apply. When you send a booking request, we pass your name, your number and your
+          note to the people who run that turf on myTapturf (its owner and managers), and to no one else, so they
+          can confirm it and reach you. They see them while the request waits for an answer and, once confirmed,
+          until its hours end; the notifications they get about it don&rsquo;t name you. If you run a turf, players see your turf&rsquo;s answer and the reason you give,
+          never your name or number.
         </p>
         <p>
           <strong>Service providers.</strong> We use a small number of companies to run TapTurf. They process
@@ -503,6 +518,7 @@ const SECTIONS: LegalSection[] = [
           Records of your map use stay with your account and are deleted with it, or sooner if you ask. The daily
           counts of the map&rsquo;s use name nobody and are kept as totals.
         </li>
+        <li>A booking request stays with your account and is deleted with it, or sooner if you ask.</li>
         <li>The daily counts of visits and pages opened name nobody and are kept as totals.</li>
         <li>
           A live link stops updating after 2 hours without a new score; people with the link then see the last

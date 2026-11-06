@@ -12,12 +12,40 @@ test("policy notice: a new id, so people who dismissed the last one see it", () 
   assert.ok(PRIVACY_NOTICE.id.slice(0, 10) <= PRIVACY_UPDATED, "a change the policy's date already covers");
 });
 
-test("policy notice: the map's use, and where the policy says it", () => {
-  assert.match(PRIVACY_NOTICE.text, /When you use the map signed in, we now note which account used it, on which days and when \(the first and last time each day\)/);
-  assert.match(PRIVACY_NOTICE.text, /Only TapTurf's team sees that/, "who sees it");
-  assert.match(PRIVACY_NOTICE.text, /never where you looked on it or your location/, "what is never kept");
-  assert.ok(privacyPage.includes(`id="${PRIVACY_NOTICE.anchor}"`), `the policy has #${PRIVACY_NOTICE.anchor}`);
+test("policy notice: booking requests, and where the policy says it", () => {
+  assert.equal(
+    PRIVACY_NOTICE.text,
+    "On turfs that take booking requests on TapTurf, you can now ask for a free hour. When you send one, that turf's owner and managers see your name, your number and your note, so they can confirm it and reach you; nobody else does. You pay at the turf; nothing is paid on TapTurf.",
+  );
+  assert.equal(PRIVACY_NOTICE.anchor, "booking-requests");
+  assert.match(PRIVACY_NOTICE.id, /-booking-requests$/);
   const at = privacyPage.indexOf(`id="${PRIVACY_NOTICE.anchor}"`);
+  assert.ok(at >= 0, `the policy has #${PRIVACY_NOTICE.anchor}`);
+  const para = privacyPage.slice(at, privacyPage.indexOf("</p>", at)).replace(/\s+/g, " ");
+  assert.match(para, /If you send a booking request\./);
+  assert.match(para, /your name and the phone number on your account \(you need one confirmed with a one-time code\)/, "what is kept");
+  assert.match(para, /waiting, confirmed, declined, cancelled or expired, who changed it, and the turf&rsquo;s reason/, "what became of it");
+  assert.match(para, /we never email or text about it/);
+  assert.match(para, /The turf gets an in-app notification when you send a request or cancel a confirmed booking, and you get one when the turf confirms, declines or cancels it/, "who is told when");
+  assert.match(para, /Nothing is paid on TapTurf: you pay at the turf\./);
+  assert.match(para, /If you run a turf, we keep whether you turned requests on and each answer you give\./);
+  const page = privacyPage.replace(/\s+/g, " ");
+  assert.match(page, /we pass your name, your number and your note to the people who run that turf on myTapturf \(its owner and managers\), and to no one else/, "who sees it, under Venues");
+  assert.match(page, /They see them while the request waits for an answer and, once confirmed, until its hours end; the notifications they get about it don&rsquo;t name you\./);
+  assert.match(page, /You pay the venue directly for any booking\./, "what we do not collect");
+  assert.match(page, /players see your turf&rsquo;s answer and the reason you give, never your name or number/);
+  assert.doesNotMatch(page, /We don&rsquo;t pass your details to turf owners/, "the old Venues line is gone");
+  assert.match(page, /A booking request stays with your account and is deleted with it, or sooner if you ask\./, "how long");
+  assert.doesNotMatch(page, /(doesn|don)&rsquo;t take bookings/);
+});
+
+test("policy notice: the map's use (the notice before), and where the policy says it", () => {
+  assert.match(PRIVACY_NOTICE.earlier.text, /When you use the map signed in, we now note which account used it, on which days and when \(the first and last time each day\)/);
+  assert.match(PRIVACY_NOTICE.earlier.text, /Only TapTurf's team sees that/, "who sees it");
+  assert.match(PRIVACY_NOTICE.earlier.text, /never where you looked on it or your location/, "what is never kept");
+  assert.equal(PRIVACY_NOTICE.earlier.id, "2026-11-02-map", "the map notice's id, so those who dismissed it see only what is new");
+  assert.ok(privacyPage.includes(`id="map"`), "the policy has #map");
+  const at = privacyPage.indexOf(`id="map"`);
   const map = privacyPage.slice(at, privacyPage.indexOf("</p>", at)).replace(/\s+/g, " ");
   assert.match(map, /per day/, "counts per day");
   assert.match(map, /never where on the map you looked, your location/, "no location from the map");
