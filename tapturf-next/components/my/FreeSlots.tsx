@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { CalendarCheck, Check, Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import {
   UNDO_MS,
   clockLabel,
@@ -45,21 +45,43 @@ const hasUnsaved = (x: Queue) => !!x.inflight || x.pending.size > 0;
  * numbers (#numbers in EditListing).
  *
  * Hidden before the database has free slots, and for anyone who doesn't run
- * the turf (forbidden, not_claimed).
+ * the turf (forbidden, not_claimed): then it shows whenOff(why), if given
+ * (the Slots tab says why there is nothing to mark), else nothing.
+ *
+ * Whether a tap saved shows on screen wherever the owner has scrolled to
+ * (SaveNote): Saving…, Saved, Not saved.
  */
-export function FreeSlots({ turfId, initial, hoursKey, onHoursSaved, hasNumber = true }: { turfId: string; initial: InitialSlots; hoursKey: string; onHoursSaved: () => void; /** The turf's page shows Call or WhatsApp (lib/my/numbers.ts pageHasNumber). */ hasNumber?: boolean }) {
+export function FreeSlots({
+  turfId,
+  initial,
+  hoursKey,
+  onHoursSaved,
+  hasNumber = true,
+  whenOff,
+}: {
+  turfId: string;
+  initial: InitialSlots;
+  hoursKey: string;
+  onHoursSaved: () => void;
+  /** The turf's page shows Call or WhatsApp (lib/my/numbers.ts pageHasNumber). */
+  hasNumber?: boolean;
+  /** What to show instead when there is nothing to mark: "missing" (no free slots in the database yet) or the refusal (forbidden, not_claimed, malformed). */
+  whenOff?: (why: string) => React.ReactNode;
+}) {
   if (initial === undefined) return <Frame hasNumber={hasNumber}><Skeleton /></Frame>;
-  if (initial === "missing" || (!isView(initial) && initial !== "failed")) return null;
-  return <Editor turfId={turfId} initial={initial} hoursKey={hoursKey} onHoursSaved={onHoursSaved} hasNumber={hasNumber} />;
+  if (initial === "missing") return whenOff?.("missing") ?? null;
+  if (!isView(initial) && initial !== "failed") return whenOff?.(initial.error) ?? null;
+  return <Editor turfId={turfId} initial={initial} hoursKey={hoursKey} onHoursSaved={onHoursSaved} hasNumber={hasNumber} whenOff={whenOff} />;
 }
 
 function Frame({ children, grounds, hasNumber }: { children: React.ReactNode; grounds?: number | null; hasNumber: boolean }) {
   return (
-    <section id="slots" className="mt-6 scroll-mt-20">
-      <h2 className="font-display text-[22px] text-primary-900 inline-flex items-center gap-2">
-        <CalendarCheck className="w-5 h-5 text-accent-700" aria-hidden /> Free slots
+    <section id="slots" aria-labelledby="slots-h" className="mt-5 scroll-mt-20">
+      {/* Named for screen readers; on screen the Slots tab above says it, and the hours start sooner. */}
+      <h2 id="slots-h" className="sr-only">
+        Free slots
       </h2>
-      <p className="mt-1 text-[14px] text-primary-500 leading-snug">{ownerLead(hasNumber)}</p>
+      <p className="text-[14px] text-primary-600 leading-snug">{ownerLead(hasNumber)}</p>
       {grounds != null && grounds >= 2 && (
         <p className="mt-1 text-[14px] text-primary-500 leading-snug">
           You have {grounds} grounds: mark an hour booked only when all of them are taken.
@@ -91,11 +113,27 @@ function Skeleton() {
   );
 }
 
-function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId: string; initial: OwnerSlots | "failed"; hoursKey: string; onHoursSaved: () => void; hasNumber: boolean }) {
+function Editor({
+  turfId,
+  initial,
+  hoursKey,
+  onHoursSaved,
+  hasNumber,
+  whenOff,
+}: {
+  turfId: string;
+  initial: OwnerSlots | "failed";
+  hoursKey: string;
+  onHoursSaved: () => void;
+  hasNumber: boolean;
+  whenOff?: (why: string) => React.ReactNode;
+}) {
   const first = isView(initial) ? initial : null;
   // The owner's view (hours, grounds), as the database last answered it.
   const [view, setView] = useState<OwnerSlots | null>(first);
   const [phase, setPhase] = useState<"ready" | "loading" | "failed" | "hidden">(first ? "ready" : "failed");
+  // Why a later read hid the section (the turf's claim ended, say), for whenOff.
+  const [offWhy, setOffWhy] = useState("forbidden");
   const [q, setQ] = useState<Queue>(() => queueOf(first?.booked ?? []));
   const qRef = useRef(q);
   const [updatedAt, setUpdatedAt] = useState<string | null>(first?.updated_at ?? null);
@@ -109,16 +147,25 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId
   const [pick, setPick] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
   const [err, setErr] = useState<SaveError | null>(null);
+  // "Not saved" on screen (SaveNote) for a few seconds after a failed save (the reason stays under the hours).
+  const [failNote, setFailNote] = useState(false);
   const [confirm, setConfirm] = useState<"idle" | "busy" | "done" | "error">("idle");
   const [undo, setUndo] = useState<{ day: string; status: SlotStatus; changes: SlotChange[] } | null>(null);
   const lastLoad = useRef(0);
   const sending = useRef(false);
   const timers = useRef<{
     flash?: ReturnType<typeof setTimeout>;
+    fail?: ReturnType<typeof setTimeout>;
     confirm?: ReturnType<typeof setTimeout>;
     undo?: ReturnType<typeof setTimeout>;
     clock?: ReturnType<typeof setTimeout>;
   }>({});
+  const saveFailed = useCallback((e: SaveError) => {
+    setErr(e);
+    setFailNote(true);
+    clearTimeout(timers.current.fail);
+    timers.current.fail = setTimeout(() => setFailNote(false), 4000);
+  }, []);
 
   const commit = useCallback((next: Queue) => {
     qRef.current = next;
@@ -155,7 +202,10 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId
     lastLoad.current = Date.now();
     try {
       const r = await getOwnerSlots(turfId);
-      if (r === "missing" || "error" in r) return setPhase("hidden");
+      if (r === "missing" || "error" in r) {
+        setOffWhy(r === "missing" ? "missing" : r.error);
+        return setPhase("hidden");
+      }
       if (hasUnsaved(qRef.current)) return; // a tap came in meanwhile: its own answer brings the marks
       commit(queueOf(r.booked));
       take(r);
@@ -183,6 +233,7 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId
       clearTimeout(t);
       document.removeEventListener("visibilitychange", onVisible);
       clearTimeout(tm.flash);
+      clearTimeout(tm.fail);
       clearTimeout(tm.confirm);
       clearTimeout(tm.undo);
       clearTimeout(tm.clock);
@@ -224,14 +275,14 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId
           commit(fail(qRef.current));
           setUndo(null);
           noFlash();
-          setErr("network");
+          saveFailed("network");
           break;
         }
         if ("error" in r) {
           commit(fail(qRef.current));
           setUndo(null);
           noFlash();
-          setErr(r.error === "forbidden" || r.error === "not_claimed" ? r.error : "other");
+          saveFailed(r.error === "forbidden" || r.error === "not_claimed" ? r.error : "other");
           break;
         }
         commit(settle(qRef.current, r.booked));
@@ -243,10 +294,11 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId
     } finally {
       sending.current = false;
     }
-  }, [turfId, commit, take, noFlash]);
+  }, [turfId, commit, take, noFlash, saveFailed]);
 
   const onTap = (key: string) => {
     setErr(null);
+    setFailNote(false);
     setConfirm("idle");
     commit(tap(qRef.current, key));
     void flush();
@@ -278,7 +330,7 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId
   const days = useMemo(() => (view && now != null ? slotDays(view.hours, now) : []), [view, now]);
   const booked = useMemo(() => shown(q), [q]);
 
-  if (phase === "hidden") return null;
+  if (phase === "hidden") return whenOff?.(offWhy) ?? null;
   if (phase === "loading" || (phase === "ready" && (!view || now == null))) return <Frame grounds={view?.grounds} hasNumber={hasNumber}><Skeleton /></Frame>;
   if (phase === "failed" || !view)
     return (
@@ -342,6 +394,7 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId
   const doWhole = () => {
     if (!whole || !day) return;
     setErr(null);
+    setFailNote(false);
     commit(tapMany(qRef.current, whole.changes));
     setUndo({ day: dayKey(day), status: whole.status, changes: whole.undo });
     clearTimeout(timers.current.undo);
@@ -360,17 +413,21 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId
   const lineTone = status.kind === "ending" ? "text-amber-800" : status.kind === "hidden" ? "text-red-700" : "text-primary-700";
 
   // Whether players see it, and the one tap that keeps it showing: on top for the daily check, under the hours on first use.
+  // A page with no number says so on top even on first use: players see none of this until it has one.
+  const statusOnTop = !firstUse || status.kind === "no_number";
   const statusRow = (
     <>
-      <div className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 ${firstUse ? "mt-4 border-t border-primary-100 pt-4" : ""}`}>
-        <p className={`min-w-0 flex-1 basis-48 inline-flex items-start gap-2 text-[13px] font-semibold leading-snug ${lineTone}`}>
+      {/* The line and All correct side by side down to 320px (the line wraps); a long line or button goes on its own row. */}
+      <div className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 ${statusOnTop ? "" : "mt-4 border-t border-primary-100 pt-4"}`}>
+        <p className={`min-w-0 flex-1 ${status.kind === "no_number" || status.kind === "never" ? "basis-48" : "basis-28"} inline-flex items-start gap-2 text-[13px] font-semibold leading-snug ${lineTone}`}>
           <span className={`mt-[5px] w-2 h-2 shrink-0 rounded-full ${dot}`} aria-hidden />
           <span>
             {status.line}
             {status.kind === "no_number" && (
               <>
                 {" "}
-                <a href="#numbers" className="text-accent-700 hover:underline">
+                {/* Padding: a bigger place to tap, the line's height unchanged. */}
+                <a href="#numbers" className="py-3 text-accent-700 underline underline-offset-2">
                   {OWNER_NO_NUMBER.link}
                 </a>
               </>
@@ -409,10 +466,10 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId
   return (
     <Frame grounds={view.grounds} hasNumber={hasNumber}>
       <div className={CARD}>
-        {!firstUse && statusRow}
+        {statusOnTop && statusRow}
 
         {/* Days */}
-        <div role="tablist" aria-label="Day" className={`${firstUse ? "" : "mt-3"} -mx-4 px-4 flex gap-2 overflow-x-auto scrollbar-hide`}>
+        <div role="tablist" aria-label="Day" className={`${statusOnTop ? "mt-3" : ""} -mx-4 px-4 flex gap-2 overflow-x-auto scrollbar-hide`}>
           {days.map((d) => {
             const on = day && dayKey(d) === dayKey(day);
             const quiet = d.state !== "open" || !d.slots.length;
@@ -438,23 +495,15 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId
 
         {day && (
           <>
-            <div className="mt-4 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[13px] font-semibold text-primary-700">{day.heading}</p>
-                {!day.night && day.open && <p className="text-[12px] text-primary-500">Open {day.open}</p>}
-              </div>
-              <p aria-live="polite" className="shrink-0 min-w-[4.75rem] justify-end text-[13px] font-semibold text-primary-500 inline-flex items-center gap-1">
-                {busy ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden /> Saving…
-                  </>
-                ) : flash ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-accent-700" aria-hidden /> Saved
-                  </>
-                ) : null}
-              </p>
-            </div>
+            <p className="mt-4 text-[14px] leading-snug">
+              <span className="font-semibold text-primary-900">{day.heading}</span>
+              {!day.night && day.open && (
+                <>
+                  {" "}
+                  <span className="whitespace-nowrap text-primary-500">· Open {day.open}</span>
+                </>
+              )}
+            </p>
 
             {day.slots.length > 0 ? (
               <div className="mt-2 grid grid-cols-3 min-[360px]:grid-cols-4 sm:grid-cols-6 gap-2">
@@ -524,10 +573,50 @@ function Editor({ turfId, initial, hoursKey, onHoursSaved, hasNumber }: { turfId
             )}
           </>
         )}
-        {firstUse && statusRow}
+        {!statusOnTop && statusRow}
       </div>
       {footnote}
+      <SaveNote state={busy ? "saving" : failNote ? "error" : flash ? "saved" : null} />
     </Frame>
+  );
+}
+
+/**
+ * Whether the taps saved, so the owner sees it wherever they tapped: Saving…
+ * and Saved at the bottom of the screen (above the phone's bottom bar); Not
+ * saved under the header, clear of the reason and what to do, which is under
+ * the hours. Always in the page, empty when there is nothing to say, so
+ * screen readers hear each change.
+ */
+function SaveNote({ state }: { state: "saving" | "saved" | "error" | null }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4 ${
+        state === "error" ? "top-[4.25rem] md:top-[4.75rem]" : "bottom-[calc(5.25rem+env(safe-area-inset-bottom))] md:bottom-6"
+      }`}
+    >
+      {state && (
+        <span
+          className={`inline-flex items-center gap-2 h-10 px-4 rounded-full shadow-elevated text-[14px] font-semibold text-white ${
+            state === "error" ? "bg-red-600" : state === "saved" ? "bg-accent-600" : "bg-primary-900"
+          }`}
+        >
+          {state === "saving" ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> Saving…
+            </>
+          ) : state === "saved" ? (
+            <>
+              <Check className="w-4 h-4" aria-hidden /> Saved
+            </>
+          ) : (
+            "Not saved. Tap again."
+          )}
+        </span>
+      )}
+    </div>
   );
 }
 
