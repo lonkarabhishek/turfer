@@ -71,9 +71,12 @@ import { post as howToCalculateNetRunRateCricket } from "./posts/how-to-calculat
 import { post as whatIsDlsMethodCricket } from "./posts/what-is-dls-method-cricket";
 // 2026-11-05: tool how-to, cricket tournament manager points table.
 import { post as howToMakeACricketPointsTable } from "./posts/how-to-make-a-cricket-points-table";
+// 2026-11-06: data post, turfs in Hadapsar, Pune.
+import { post as turfsInHadapsarPune } from "./posts/turfs-in-hadapsar-pune";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  turfsInHadapsarPune,
   howToMakeACricketPointsTable,
   whatIsDlsMethodCricket,
   howToCalculateNetRunRateCricket,
