@@ -22,8 +22,8 @@ function resultNote(r: AddResult): Note | null {
   const shown = r.live;
   if (shown > 0) parts.push(`${shown} ${plural(shown)} added. ${shown === 1 ? "It shows" : "They show"} on your page within a minute.`);
   if (r.waiting > 0) parts.push(`${r.waiting} ${plural(r.waiting)} still being checked. ${r.waiting === 1 ? "It goes" : "They go"} on your page in a few minutes.`);
-  if (r.held === 1) parts.push("1 photo kept off your page: it looks like a poster, price list or screenshot. Players want to see the ground. Put prices in Edit your listing below.");
-  else if (r.held > 1) parts.push(`${r.held} photos kept off your page: they look like posters, price lists or screenshots. Players want to see the ground. Put prices in Edit your listing below.`);
+  if (r.held === 1) parts.push("1 photo kept off your page: it looks like a poster, price list or screenshot. Players want to see the ground. Put prices in Edit your listing above.");
+  else if (r.held > 1) parts.push(`${r.held} photos kept off your page: they look like posters, price lists or screenshots. Players want to see the ground. Put prices in Edit your listing above.`);
   if (r.duplicates === 1) parts.push(ownerPhotoMessage("duplicate"));
   else if (r.duplicates > 1) parts.push(`You’ve already added ${r.duplicates} of these photos.`);
   if (r.error) parts.push(ownerPhotoMessage(r.error, undefined, r.left));

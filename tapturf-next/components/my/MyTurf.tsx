@@ -5,7 +5,6 @@ import Link from "next/link";
 import { ArrowLeft, CalendarCheck, Check, Circle, ExternalLink, Loader2, Star } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { DailyChart } from "@/components/admin/DailyChart";
-import { labelFor, isCity } from "@/lib/city";
 import { getOwnerSlots, ownerRpc, type OwnerDashboard, type OwnerTurf } from "@/lib/my/client";
 import { MY_LIST_HREF, TURF_TABS, turfTabHref, turfView, type TurfTab } from "@/lib/my/turfTabs";
 import { EditListing } from "./EditListing";
@@ -162,7 +161,8 @@ export function MyTurf({ id }: { id: string }) {
     return (
       <Shell>
         <p className="text-primary-700">
-          <Link href={`/login?next=${encodeURIComponent(`/my/turf/${id}`)}`} className="font-semibold text-accent-700">Sign in</Link> to open this turf on myTapturf.
+          {/* Back to the tab and section the link named (/my/turf/<id>?tab=analytics, #hours ...), once signed in. */}
+          <Link href={`/login?next=${encodeURIComponent(turfTabHref(id, view.tab, view.anchor))}`} className="font-semibold text-accent-700">Sign in</Link> to open this turf on myTapturf.
         </p>
       </Shell>
     );
@@ -181,7 +181,6 @@ export function MyTurf({ id }: { id: string }) {
   const views = sum("views");
   const calls = sum("calls");
   const wa = sum("whatsapp");
-  const place = [t.area, t.city && isCity(t.city) ? labelFor(t.city) : t.city].filter(Boolean).join(", ");
 
   return (
     <Shell onClick={onClick}>
@@ -194,8 +193,8 @@ export function MyTurf({ id }: { id: string }) {
           Public page <ExternalLink className="w-3.5 h-3.5" aria-hidden />
         </Link>
       </div>
+      {/* The name alone (no area line): the same on every tab, so the tabs never move, and the hours start sooner on Slots. */}
       <h1 className="mt-3 font-display text-[26px] md:text-[34px] leading-tight text-primary-900 [overflow-wrap:anywhere]">{t.name}</h1>
-      {place && <p className="text-[14px] text-primary-500">{place}</p>}
 
       {/* The tabs: links, so each is a URL (Back, a link from elsewhere, open in a new tab); onClick moves without a reload. */}
       <nav ref={tabsRef} aria-label="Your turf on myTapturf" className="mt-4 grid grid-cols-3 gap-1 rounded-full bg-primary-100 p-1 sm:max-w-md">
