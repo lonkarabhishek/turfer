@@ -55,7 +55,8 @@ export const ADMIN_COPY = {
   off: "Off",
   open: "Players can send requests now.",
   waitHours: "Players can't send requests until the owner's free hours show.",
-  turnedOff: "The owner hasn't turned them on, so players can't send any.",
+  noNumber: "Players can't send requests until the turf's page has a number to call or WhatsApp.",
+  offLine: "Players can't send new requests while they're off.",
   none: "No waiting or confirmed requests.",
   private: "Player names and numbers show only to the turf's owner and managers.",
   noHours: "This turf has no opening hours yet, so there are no hours to show. Its owner picks them the first time they open Slots.",
@@ -76,9 +77,13 @@ export function adminStatus(updatedAt: string | null, nowMs: number, hasNumber =
 /**
  * The booking requests card: "Booking requests: On", whether players can send
  * now, the counts, and each request by time alone ("Sat 8 Nov, 7 PM to 9 PM ·
- * waiting"), soonest first.
+ * waiting"), soonest first. The database's open flag (private.booking_open)
+ * doesn't know about the page's number, but the turf page shows its slots
+ * card, and so the request button, only with one (app/turf/[id]/page.tsx), so
+ * hasNumber (lib/my/numbers.ts pageHasNumber) comes first. Off says only that
+ * players can't send new ones: switching off keeps the requests already sent.
  */
-export function adminRequestLines(r: AdminRequests): {
+export function adminRequestLines(r: AdminRequests, hasNumber = true): {
   state: string;
   status: string;
   counts: string;
@@ -87,7 +92,7 @@ export function adminRequestLines(r: AdminRequests): {
   const all = [...r.waiting, ...r.confirmed].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.status === b.status ? 0 : a.status === "confirmed" ? -1 : 1));
   return {
     state: r.on ? ADMIN_COPY.on : ADMIN_COPY.off,
-    status: !r.on ? ADMIN_COPY.turnedOff : r.open ? ADMIN_COPY.open : ADMIN_COPY.waitHours,
+    status: !r.on ? ADMIN_COPY.offLine : !hasNumber ? ADMIN_COPY.noNumber : r.open ? ADMIN_COPY.open : ADMIN_COPY.waitHours,
     counts: all.length ? `${r.waiting.length} waiting · ${r.confirmed.length} confirmed` : ADMIN_COPY.none,
     rows: all.map((x, i) => ({ key: `${x.status}-${x.at}-${x.hours}-${i}`, when: x.when, status: x.status, text: `${x.when} · ${x.status}` })),
   };

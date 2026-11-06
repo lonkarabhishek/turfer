@@ -116,7 +116,7 @@ function View({ view, turfName, hasNumber }: { view: AdminView; turfName: string
     return (
       <Frame>
         {banner}
-        {requests && <Requests r={requests} />}
+        {requests && <Requests r={requests} hasNumber={hasNumber} />}
         <div className={CARD}>
           <p className="text-[14px] text-primary-700 leading-snug">{ADMIN_COPY.noHours}</p>
         </div>
@@ -135,7 +135,7 @@ function View({ view, turfName, hasNumber }: { view: AdminView; turfName: string
   return (
     <Frame>
       {banner}
-      {requests && <Requests r={requests} />}
+      {requests && <Requests r={requests} hasNumber={hasNumber} />}
       <div className={CARD}>
         <p className={`inline-flex items-start gap-2 text-[13px] font-semibold leading-snug ${lineTone}`}>
           <span className={`mt-[5px] h-2 w-2 shrink-0 rounded-full ${dot}`} aria-hidden />
@@ -223,8 +223,8 @@ function Hour({ slot, booked }: { slot: Slot; booked: boolean }) {
 }
 
 /** The turf's booking requests by time alone: On or Off, whether players can send now, and each waiting or confirmed one. */
-function Requests({ r }: { r: AdminRequests }) {
-  const l = adminRequestLines(r);
+function Requests({ r, hasNumber }: { r: AdminRequests; hasNumber: boolean }) {
+  const l = adminRequestLines(r, hasNumber);
   return (
     <section id="requests" aria-labelledby="admin-requests-h" className={`${CARD} scroll-mt-20`}>
       <h3 id="admin-requests-h" className="inline-flex items-center gap-2 text-[16px] font-bold text-primary-900">

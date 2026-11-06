@@ -120,12 +120,35 @@ test("adminRequestLines: On or Off, whether players can send now, counts, and ea
   assert.equal(new Set(l.rows.map((r) => r.key)).size, 3, "unique keys");
   assert.equal(adminRequestLines(REQ({ open: false })).status, "Players can't send requests until the owner's free hours show.");
   assert.equal(adminRequestLines(REQ({ on: false, open: false })).state, "Off");
-  assert.equal(adminRequestLines(REQ({ on: false, open: false })).status, "The owner hasn't turned them on, so players can't send any.");
+  assert.equal(adminRequestLines(REQ({ on: false, open: false })).status, "Players can't send new requests while they're off.");
   const none = adminRequestLines(REQ({ waiting: [], confirmed: [] }));
   assert.deepEqual([none.counts, none.rows], ["No waiting or confirmed requests.", []]);
   // A confirmed one and a waiting one at the same time (another ground): both, confirmed first.
   const same = adminRequestLines(REQ({ waiting: [{ at: "2026-11-08T18:00", hours: 1, when: "Sun 8 Nov, 6 PM to 7 PM", status: "waiting" }] }));
   assert.deepEqual(same.rows.map((r) => r.text), ["Sun 8 Nov, 6 PM to 7 PM · confirmed", "Sun 8 Nov, 6 PM to 7 PM · waiting"]);
+});
+
+test("adminRequestLines: no number on the turf's page means players can't send, whatever the database's open flag says", () => {
+  const noNumber = "Players can't send requests until the turf's page has a number to call or WhatsApp.";
+  assert.equal(adminRequestLines(REQ(), false).status, noNumber, "on and open, but the page shows no slots card");
+  assert.equal(adminRequestLines(REQ({ open: false }), false).status, noNumber, "the number comes first");
+  assert.equal(adminRequestLines(REQ(), true).status, "Players can send requests now.");
+  assert.equal(adminRequestLines(REQ()).status, "Players can send requests now.", "a number unless told otherwise, as MyTurf's pageHasNumber(t) ?? true");
+  // Off with no number: Off says it all.
+  assert.equal(adminRequestLines(REQ({ on: false, open: false }), false).status, "Players can't send new requests while they're off.");
+  assert.equal(adminRequestLines(REQ(), false).state, "On");
+  assert.equal(adminRequestLines(REQ(), false).rows.length, 3, "the requests already sent still show");
+});
+
+test("adminRequestLines: Off after taking requests keeps them and never says the owner hasn't turned them on", () => {
+  const l = adminRequestLines(REQ({ on: false, open: false }));
+  assert.deepEqual([l.state, l.counts], ["Off", "2 waiting · 1 confirmed"]);
+  assert.equal(l.rows.length, 3);
+  for (const hasNumber of [true, false]) {
+    const s = adminRequestLines(REQ({ on: false, open: false }), hasNumber).status;
+    assert.doesNotMatch(s, /hasn't turned|never|any\b/, s);
+    assert.match(s, /new requests/);
+  }
 });
 
 test("the words: short, plain, no dashes, no number; the banner names the turf and who can change it", () => {
