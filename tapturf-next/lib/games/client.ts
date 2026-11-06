@@ -29,7 +29,8 @@ export type GetToken = () => Promise<TokenCheck>;
 
 export type GameAnswer<T> = { status: number; body: T | GameErrorBody };
 
-async function call<T>(getToken: GetToken, path: string, init: RequestInit = {}): Promise<GameAnswer<T>> {
+/** One call to an account route with this sign-in's token (lib/booking/client.ts uses it too). */
+export async function call<T>(getToken: GetToken, path: string, init: RequestInit = {}): Promise<GameAnswer<T>> {
   let t: TokenCheck;
   try {
     t = await getToken();

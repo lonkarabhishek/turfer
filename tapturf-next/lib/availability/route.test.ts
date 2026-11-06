@@ -49,7 +49,7 @@ test("one URL per turf: capital letters or percent-escapes in the path are 404 w
 test("fresh: 200 with the database's own shape, kept a minute and served stale a minute more", async () => {
   const r = await get(ID, "", reader({ data: fresh, error: null }));
   assert.equal(r.status, 200);
-  assert.deepEqual(JSON.parse(r.body), fresh);
+  assert.deepEqual(JSON.parse(r.body), { ...fresh, requests: false });
   assert.deepEqual(r.headers, OK_HEADERS);
   assert.equal(OK_HEADERS["Cache-Control"], "public, max-age=0, s-maxage=60, stale-while-revalidate=60");
   const none = await get(ID, "", reader({ data: { fresh: false }, error: null }));
@@ -82,5 +82,45 @@ test("every answer is noindex JSON", async () => {
   for (const h of [OK_HEADERS, FAILED_HEADERS, BAD_HEADERS]) {
     assert.equal(h["X-Robots-Tag"], "noindex");
     assert.equal(h["Content-Type"], "application/json; charset=utf-8");
+  }
+});
+
+/** As the handler calls it, with the booking requests flag read alongside. */
+const withFlag = (read: Reader, flag: Reader) => availabilityResponse({ id: ID, pathname: availabilityPath(ID), search: "" }, read, NOW, flag);
+
+test("booking requests: requests true only on a fresh body whose flag read says a plain true; both reads run together", async () => {
+  const order: string[] = [];
+  const slow = (answer: Awaited<ReturnType<Reader>>, name: string, ms: number): Reader => async () => {
+    order.push(`${name}:start`);
+    await new Promise((r) => setTimeout(r, ms));
+    order.push(`${name}:end`);
+    return answer;
+  };
+  const yes = await withFlag(slow({ data: fresh, error: null }, "slots", 20), slow({ data: true, error: null }, "flag", 5));
+  assert.deepEqual(JSON.parse(yes.body), { ...fresh, requests: true });
+  assert.deepEqual(order.slice(0, 2), ["slots:start", "flag:start"], "in parallel");
+  assert.deepEqual(yes.headers, OK_HEADERS, "cached as before");
+  for (const data of [false, null, "true", 1, { requests: true }]) {
+    const r = await withFlag(reader({ data: fresh, error: null }), reader({ data, error: null }));
+    assert.equal(JSON.parse(r.body).requests, false, JSON.stringify(data));
+  }
+  // A turf with nothing fresh shows no card at all, whatever the flag says.
+  const stale = await withFlag(reader({ data: { fresh: false }, error: null }), reader({ data: true, error: null }));
+  assert.equal(stale.body, '{"fresh":false}');
+  // The database's own answer can't turn it on: only the flag read can.
+  const sneaky = await withFlag(reader({ data: { ...fresh, requests: true }, error: null }), reader({ data: false, error: null }));
+  assert.equal(JSON.parse(sneaky.body).requests, false);
+});
+
+test("booking requests: before the migration, on an error or a throw, requests false and never a failed body", async () => {
+  for (const flag of [
+    reader({ data: null, error: { code: "PGRST202", message: "Could not find the function public.turf_takes_requests" } }),
+    reader({ data: true, error: { code: "57014", message: "statement timeout" } }),
+    reader(() => {
+      throw new Error("fetch failed");
+    }),
+  ]) {
+    const r = await withFlag(reader({ data: fresh, error: null }), flag);
+    assert.deepEqual([r.status, r.headers, r.failed, JSON.parse(r.body)], [200, OK_HEADERS, undefined, { ...fresh, requests: false }]);
   }
 });

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CLAIM_APPROVED, CLAIM_REJECTED, KIND_LINE_MAX, claimDecisionNotice, kindLine, notificationLink } from "./claimNotice";
+import { BOOKING_TO_OWNER, BOOKING_TO_PLAYER, CLAIM_APPROVED, CLAIM_REJECTED, KIND_LINE_MAX, claimDecisionNotice, kindLine, notificationLink } from "./claimNotice";
 import { BOOKINGS_LINE, claimCopyProblem } from "../turfPage/claimPrompts";
 
 test("approved: their turf is on myTapturf now", () => {
@@ -64,4 +64,19 @@ test("notificationLink: a claim decision goes to myTapturf or the turf's page; g
   assert.deepEqual(notificationLink("game_request_accepted", { game_id: "g2" }), { href: "/game/g2", label: null });
   assert.equal(notificationLink("game_request", null), null);
   assert.equal(notificationLink("other", []), null);
+});
+
+test("notificationLink: booking requests go to the owner's list on myTapturf, or the player's requests", () => {
+  const turfId = "AAAAAAAA-0000-4000-8000-000000000001";
+  const requestId = "bbbbbbbb-0000-4000-8000-000000000002";
+  for (const type of BOOKING_TO_OWNER) {
+    assert.deepEqual(notificationLink(type, { turfId, requestId }), { href: `/my/turf/${turfId.toLowerCase()}#requests`, label: "Open myTapturf" }, type);
+    assert.equal(notificationLink(type, { requestId }), null, `${type}: no turf, nowhere`);
+    assert.equal(notificationLink(type, { turfId: "../admin", requestId }), null, `${type}: only an id`);
+  }
+  for (const type of BOOKING_TO_PLAYER) {
+    assert.deepEqual(notificationLink(type, { turfId, slug: "one-arena", requestId, by: "owner" }), { href: "/dashboard?tab=requests", label: "Your requests" }, type);
+    assert.deepEqual(notificationLink(type, null), { href: "/dashboard?tab=requests", label: "Your requests" }, `${type}: the list, whatever the metadata`);
+  }
+  assert.deepEqual([...BOOKING_TO_OWNER, ...BOOKING_TO_PLAYER].sort(), ["booking_cancelled", "booking_cancelled_by_player", "booking_confirmed", "booking_declined", "booking_request"]);
 });
