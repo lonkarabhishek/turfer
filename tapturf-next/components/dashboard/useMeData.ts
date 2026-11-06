@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getGameLines, getMyRequests, getPendingRequestsFor, getUserGames, getUserJoinedGames, type GameLine } from "@/lib/queries/games";
 import { getUnreadCount } from "@/lib/queries/notifications";
 import { quietToken } from "@/lib/account/client";
+import { myBookingsCall } from "@/lib/booking/client";
+import { parseMine } from "@/lib/booking/requests";
+import type { MyBookingRequest } from "@/lib/booking/types";
 import { ownerRpc, type OwnerHome } from "@/lib/my/client";
 import { createClient } from "@/lib/supabase/client";
 import type { SignedInWith } from "@/components/auth/AuthProvider";
@@ -29,8 +32,15 @@ export type MeData = {
   turfs: number | null;
   /** Hosted and joined games not over yet, each once. */
   upcoming: number;
-  /** Requests that wait on someone: theirs to answer (incoming) and theirs sent. */
+  /** Requests that wait on someone: theirs to answer (incoming), theirs sent, and their turf requests waiting for the turf. */
   pending: number;
+  /** Their booking requests to turfs (lib/booking), newest first; empty until read, or before the database has them. */
+  bookings: MyBookingRequest[];
+  /** When they were read (the states are as of then). */
+  bookingsAt: number;
+  /** The turf requests are not read yet. */
+  bookingsLoading: boolean;
+  reloadBookings: () => Promise<void>;
   setRequests: (r: GameRequest[]) => void;
   setUnread: (n: number) => void;
   reloadRequests: () => Promise<void>;
@@ -55,6 +65,27 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
   const [unreadFor, setUnreadFor] = useState<{ for: string; n: number } | null>(null);
   const [turfsFor, setTurfsFor] = useState<{ for: string; n: number | null } | null>(null);
   const [gamesRead, setGamesRead] = useState(0);
+  const [bookingsFor, setBookingsFor] = useState<{ for: string; list: MyBookingRequest[]; at: number } | null>(null);
+
+  /** The turf requests (GET /api/booking-requests), read with the quiet token; none on a failed read. */
+  const readBookings = useCallback(async (): Promise<{ list: MyBookingRequest[]; at: number }> => {
+    try {
+      const a = await myBookingsCall(readToken);
+      const mine = a.status === 200 ? parseMine(a.body) : null;
+      return { list: mine?.requests ?? [], at: Date.now() };
+    } catch {
+      return { list: [], at: Date.now() };
+    }
+  }, [readToken]);
+
+  // In parallel with the game requests below.
+  useEffect(() => {
+    let alive = true;
+    void readBookings().then((b) => alive && setBookingsFor({ for: userId, ...b }));
+    return () => {
+      alive = false;
+    };
+  }, [userId, readBookings]);
 
   useEffect(() => {
     let alive = true;
@@ -119,6 +150,14 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
   }, [userId, readToken]);
   const setUnread = useCallback((n: number) => setUnreadFor({ for: userId, n }), [userId]);
   const reloadGames = useCallback(() => setGamesRead((n) => n + 1), []);
+  const reloadBookings = useCallback(async () => {
+    const b = await readBookings();
+    setBookingsFor({ for: userId, ...b });
+  }, [userId, readBookings]);
+  const booked = bookingsFor && bookingsFor.for === userId ? bookingsFor : null;
+  const bookings = useMemo(() => booked?.list ?? [], [booked]);
+  // The states are the database's as of the read: a waiting one is waiting for the turf.
+  const bookingsWaiting = bookings.filter((r) => r.status === "waiting").length;
 
   return {
     loading: !mine,
@@ -131,7 +170,11 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
     unread: unreadFor && unreadFor.for === userId ? unreadFor.n : null,
     turfs: turfsFor && turfsFor.for === userId ? turfsFor.n : null,
     upcoming,
-    pending: incoming.length + requests.filter((r) => r.status === "pending").length,
+    pending: incoming.length + requests.filter((r) => r.status === "pending").length + bookingsWaiting,
+    bookings,
+    bookingsAt: booked?.at ?? 0,
+    bookingsLoading: !booked,
+    reloadBookings,
     setRequests,
     setUnread,
     reloadRequests,

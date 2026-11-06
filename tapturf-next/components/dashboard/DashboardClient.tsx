@@ -12,6 +12,7 @@ import { useCityChoice } from "@/components/city/useCityChoice";
 import { labelFor, openCityPicker } from "@/lib/city";
 import { MyGames, type GamesView } from "./MyGames";
 import { MyRequests } from "./MyRequests";
+import { MyBookingRequests } from "./MyBookingRequests";
 import { NotificationsList } from "./NotificationsList";
 import { ProfileSection } from "./ProfileSection";
 import { NotificationsPrompt } from "./NotificationsPrompt";
@@ -152,7 +153,7 @@ function Me({
   }, [data.incoming]);
 
   // The Requests tab waits for the players waiting on them too, so its list and count never jump.
-  const requestsLoading = data.loading || data.extraLoading;
+  const requestsLoading = data.loading || data.extraLoading || data.bookingsLoading;
   const counts: Record<TabKey, number | null> = {
     games: data.loading ? null : data.upcoming,
     requests: requestsLoading ? null : data.pending,
@@ -389,6 +390,8 @@ function Me({
                 hosted={data.created}
                 loading={requestsLoading}
                 reloadRequests={data.reloadRequests}
+                hideEmpty={data.bookings.length > 0}
+                turfRequests={<MyBookingRequests bookings={data.bookings} nowMs={data.bookingsAt} reload={data.reloadBookings} />}
               />
             )}
             {tab === "notifications" && (

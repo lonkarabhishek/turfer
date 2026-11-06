@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { OwnerMark } from "@/components/turf/OwnerMark";
 import { logContactClick, type ContactKind } from "@/lib/analytics/contactClicks";
@@ -19,6 +20,7 @@ import {
   playerDefault,
   playerFooter,
   noFreeLine,
+  requestFooter,
   slotDays,
   slotMessage,
   updatedLine,
@@ -26,16 +28,23 @@ import {
   type Slot,
   type SlotDay,
   type SlotHours,
+  type SlotKey,
 } from "@/lib/availability/slots";
 
 const dayKey = (d: SlotDay) => `${d.date}${d.night ? "n" : ""}`;
+// The request sheet is fetched on the first tap only, so the turf page's first load does not grow.
+const RequestSheet = dynamic(() => import("./RequestSheet").then((m) => m.RequestSheet), { ssr: false });
 
 /**
  * Free slots on a claimed turf's page: the start times its owner marked
  * free, for turfs whose owner changed or confirmed them in the last 24 hours
  * (lib/availability/slots.ts). Tapping a time asks the turf on WhatsApp with
  * the day and time in the message (or calls, where the page has no WhatsApp),
- * behind the same sign-in as the page's own buttons.
+ * behind the same sign-in as the page's own buttons. On a turf whose owner
+ * takes booking requests on TapTurf (the read's requests: true), a time is a
+ * button instead: it opens the request sheet (RequestSheet.tsx, fetched on
+ * the first tap), where the player asks for 1 to 3 hours and the turf
+ * confirms on myTapturf; nothing is paid online.
  *
  * Turf pages are built ahead and kept a day, so nothing here is in the page's
  * HTML: the server renders an empty, zero-height div; the browser reads
@@ -70,6 +79,8 @@ export function FreeSlotsCard({
   const [now, setNow] = useState<number | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [pick, setPick] = useState<string | null>(null);
+  // The request sheet's time, while it is open.
+  const [sheet, setSheet] = useState<{ day: SlotDay; slot: Slot } | null>(null);
   // How far the server's clock is ahead of the device's (never behind: clientNow), kept from the last read.
   const lead = useRef(0);
   const fetchedAt = useRef(0);
@@ -178,6 +189,17 @@ export function FreeSlotsCard({
     e.preventDefault();
     login();
   };
+  const requests = !!avail?.requests;
+  const time = (d: SlotDay, s: Slot) =>
+    requests ? (
+      <RequestTime key={s.key} day={d} slot={s} onOpen={() => setSheet({ day: d, slot: s })} />
+    ) : (
+      <Time key={s.key} day={d} slot={s} href={hrefFor(d, s)} wa={!!whatsapp} onClick={guard} />
+    );
+  // The server says hours were booked meanwhile: the card stops offering them.
+  const onTaken = (keys: SlotKey[]) => setAvail((a) => (a ? { ...a, booked: [...new Set([...a.booked, ...keys])] } : a));
+  // The turf stopped taking requests: the times go back to WhatsApp or Call.
+  const onOff = () => setAvail((a) => (a ? { ...a, requests: false } : a));
 
   return (
     <div ref={anchor} data-nosnippet="">
@@ -215,26 +237,54 @@ export function FreeSlotsCard({
             <p className="text-[13px] font-semibold text-primary-500">{day.heading}</p>
             {day.free.length > 0 ? (
               <div className="mt-2 grid grid-cols-3 min-[360px]:grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-2">
-                {day.free.filter((s) => !s.afterMidnight).map((s) => (
-                  <Time key={s.key} day={day} slot={s} href={hrefFor(day, s)} wa={!!whatsapp} onClick={guard} />
-                ))}
+                {day.free.filter((s) => !s.afterMidnight).map((s) => time(day, s))}
                 {!day.night && day.free.some((s) => s.afterMidnight) && (
                   <p className="col-span-full mt-1 text-[12px] text-primary-500">{PLAYER_COPY.afterMidnight}</p>
                 )}
-                {day.free.filter((s) => s.afterMidnight).map((s) => (
-                  <Time key={s.key} day={day} slot={s} href={hrefFor(day, s)} wa={!!whatsapp} onClick={guard} />
-                ))}
+                {day.free.filter((s) => s.afterMidnight).map((s) => time(day, s))}
               </div>
             ) : (
               <p className="mt-2 text-[14px] text-primary-600">{noFreeLine(day)}</p>
             )}
           </div>
 
-          {day.free.length > 0 && <p className="mt-4 text-[14px] text-primary-600">{whatsapp ? PLAYER_COPY.hintWhatsApp : PLAYER_COPY.hintCall}</p>}
-          <p className={`${day.free.length > 0 ? "mt-1" : "mt-4"} text-[13px] text-primary-500 leading-snug`}>{playerFooter(membersOnly)}</p>
+          {day.free.length > 0 && (
+            <p className="mt-4 text-[14px] text-primary-600">{requests ? PLAYER_COPY.hintRequest : whatsapp ? PLAYER_COPY.hintWhatsApp : PLAYER_COPY.hintCall}</p>
+          )}
+          <p className={`${day.free.length > 0 ? "mt-1" : "mt-4"} text-[13px] text-primary-500 leading-snug`}>{requests ? requestFooter(membersOnly) : playerFooter(membersOnly)}</p>
         </section>
       )}
+      {sheet && avail && (
+        <RequestSheet
+          turfId={turfId}
+          turfName={turfName}
+          pageUrl={pageUrl}
+          day={sheet.day}
+          slot={sheet.slot}
+          booked={new Set(avail.booked)}
+          phone={phone}
+          whatsappPhone={whatsappPhone}
+          onClose={() => setSheet(null)}
+          onTaken={onTaken}
+          onOff={onOff}
+        />
+      )}
     </div>
+  );
+}
+
+/** A free time on a turf that takes booking requests: it opens the request sheet. */
+function RequestTime({ day, slot, onOpen }: { day: SlotDay; slot: Slot; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={`Request ${slot.range}, ${day.heading}${slot.afterMidnight && !day.night ? ", after midnight" : ""}`}
+      aria-haspopup="dialog"
+      className="h-11 rounded-full bg-accent-50 border border-accent-200 text-accent-800 text-[15px] font-semibold tabular-nums flex items-center justify-center cursor-pointer touch-manipulation hover:bg-accent-100 active:bg-accent-100 transition-colors"
+    >
+      {slot.label}
+    </button>
   );
 }
 

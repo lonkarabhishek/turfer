@@ -23,6 +23,8 @@ export function MyRequests({
   hosted,
   loading,
   reloadRequests,
+  turfRequests,
+  hideEmpty = false,
 }: {
   requests: GameRequest[];
   requestGames: Map<string, GameLine>;
@@ -30,6 +32,10 @@ export function MyRequests({
   hosted: Game[];
   loading: boolean;
   reloadRequests: () => Promise<void>;
+  /** The player's booking requests to turfs (MyBookingRequests), between the players waiting on them and their game requests. */
+  turfRequests?: React.ReactNode;
+  /** There are turf requests: never "No requests yet" above them. */
+  hideEmpty?: boolean;
 }) {
   const { getToken } = useAuth();
   const handleCancel = async (requestId: string) => {
@@ -51,6 +57,7 @@ export function MyRequests({
   }
 
   if (requests.length === 0 && incoming.length === 0) {
+    if (hideEmpty) return <div className="space-y-7">{turfRequests}</div>;
     return (
       <div className="text-center py-14">
         <div className="w-14 h-14 bg-accent-50 border border-accent-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -115,6 +122,9 @@ export function MyRequests({
           </ul>
         </section>
       )}
+
+      {/* Turf requests (booking requests to turfs), when there are any */}
+      {turfRequests}
 
       {/* Requests you sent: pending first */}
       {requests.length > 0 && (
