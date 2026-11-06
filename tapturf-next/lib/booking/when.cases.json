@@ -1,0 +1,9 @@
+[
+  { "at": "2026-11-08T19:00", "hours": 2, "when": "Sun 8 Nov, 7 PM to 9 PM" },
+  { "at": "2026-11-08T23:00", "hours": 3, "when": "Sun 8 Nov, 11 PM to 2 AM" },
+  { "at": "2026-11-09T00:00", "hours": 1, "when": "Mon 9 Nov, 12 AM to 1 AM" },
+  { "at": "2026-11-08T06:30", "hours": 3, "when": "Sun 8 Nov, 6:30 AM to 9:30 AM" },
+  { "at": "2026-11-08T11:00", "hours": 1, "when": "Sun 8 Nov, 11 AM to 12 PM" },
+  { "at": "2026-11-08T12:00", "hours": 1, "when": "Sun 8 Nov, 12 PM to 1 PM" },
+  { "at": "2026-12-31T22:00", "hours": 3, "when": "Thu 31 Dec, 10 PM to 1 AM" }
+]
