@@ -38,7 +38,7 @@ export function PlayerReports({ reviews, turfSports, turfId }: { reviews: OwnerR
 
   return (
     <section className="mt-10" aria-labelledby="player-reports">
-      <h2 id="player-reports" className="font-display text-[22px] text-primary-900">Player reports</h2>
+      <h2 id="player-reports" className="font-display text-[22px] text-primary-900 scroll-mt-20">Player reports</h2>
       <p className="mt-0.5 text-[14px] text-primary-500">What players told you on TapTurf in the last 90 days. Google reviews are separate.</p>
 
       {knows && (

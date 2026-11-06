@@ -11,5 +11,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./*"] }
   },
-  "files": ["lib/my/numbers.test.ts", "lib/my/groundSizes.test.ts", "lib/my/claimFlow.test.ts", "lib/my/claimNotice.test.ts"]
+  "files": ["lib/my/numbers.test.ts", "lib/my/groundSizes.test.ts", "lib/my/claimFlow.test.ts", "lib/my/claimNotice.test.ts", "lib/my/turfTabs.test.ts"]
 }

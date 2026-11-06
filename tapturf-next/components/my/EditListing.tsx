@@ -178,7 +178,7 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
   const callKind = f.owner_phone !== undefined ? numberKind(f.owner_phone) : null;
 
   return (
-    <section className="mt-10" id="edit">
+    <section className="mt-10 scroll-mt-20" id="edit">
       <h2 className="font-display text-[22px] text-primary-900">Edit your listing</h2>
       <p className="mt-1 text-[14px] text-primary-500">What you save here shows on your TapTurf page within a minute.</p>
 
@@ -405,7 +405,7 @@ export function EditListing({ turf, onSaved }: { turf: OwnerTurf; onSaved: () =>
   );
 }
 
-/** id: a section other parts of the page link to (#hours and #numbers, from Free slots). */
+/** id: a section other parts of myTapturf link to (#hours and #numbers, from Free slots on the Slots tab; lib/my/turfTabs.ts ANCHOR_TABS). */
 function Group({ id, title, hint, children }: { id?: string; title: string; hint?: string; children: React.ReactNode }) {
   return (
     <div id={id} className={`mt-5 rounded-2xl border border-primary-200 bg-white p-4 md:p-5 ${id ? "scroll-mt-20" : ""}`}>

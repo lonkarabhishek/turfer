@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { RecaptchaVerifier } from "firebase/auth";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { BarChart3, CheckCircle2, ChevronRight, Clock, Loader2, Navigation, Phone, Search, Store, Users } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { createClient } from "@/lib/supabase/client";
@@ -24,6 +24,7 @@ import {
   turfPhone10,
   type ClaimRole,
 } from "@/lib/my/claimFlow";
+import { myLanding } from "@/lib/my/turfTabs";
 import { ManagerNameNote } from "./ManagerNameNote";
 
 const place = (t: { area: string | null; city: string | null }) =>
@@ -33,6 +34,8 @@ const place = (t: { area: string | null; city: string | null }) =>
  * myTapturf home: a pitch when signed out; your turfs, numbers we recognise and claim search when signed in.
  * From a turf page's claim link (?claim=<turf id>) it first asks "Do you own or manage <turf>?"
  * (lib/my/claimFlow.ts): players who came to book are sent back to the turf's page; owners answer once.
+ * An owner with exactly one confirmed turf and nothing waiting opens that turf's Slots tab instead
+ * (lib/my/turfTabs.ts myLanding); /my?list=1, the way back from a turf, keeps the list.
  */
 export function MyHome() {
   const { user, loading } = useAuth();
@@ -56,8 +59,27 @@ export function MyHome() {
     return () => clearTimeout(t);
   }, [user, load]);
 
+  // An owner with one confirmed turf and nothing else waiting: straight to that turf's Slots tab (lib/my/turfTabs.ts
+  // myLanding), in place of /my in the history, so Back doesn't land here again. The list stays for anyone else.
+  const router = useRouter();
+  const landing =
+    home?.signed_in && user
+      ? myLanding({ signedIn: true, admin: home.admin, turfs: home.turfs, claim: claimId, list: params?.get("list") === "1", tab: params?.get("tab"), hash: typeof window === "undefined" ? "" : window.location.hash })
+      : null;
+  useEffect(() => {
+    if (landing) router.replace(landing);
+  }, [landing, router]);
+
   if (loading) return <Shell><p className="text-primary-500">Loading…</p></Shell>;
   if (!user) return claimId && !saidOwner ? <ClaimQuestion claimId={claimId} signedIn={false} /> : <Landing claimId={claimId} />;
+  if (landing && home?.signed_in)
+    return (
+      <Shell>
+        <p className="text-primary-500 inline-flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> Opening {home.turfs[0]?.name ? cleanVenueName(home.turfs[0].name) : "your turf"}…
+        </p>
+      </Shell>
+    );
 
   // Signed in from a claim link: the question too, unless they answered it, run the turf already,
   // have a claim waiting, or their own number is on the listing.

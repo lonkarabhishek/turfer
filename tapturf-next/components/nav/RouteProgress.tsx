@@ -9,7 +9,8 @@ import { Suspense, useEffect, useRef, useState } from "react";
  *   1. A thin lime progress bar racing across the top.
  *   2. A tiny "sports slang" pill that appears near the top-center.
  * Both fire on click of an in-app link (or a [data-nav] button) and
- * clear the moment the route actually changes.
+ * clear the moment the route actually changes. Not for a #section link,
+ * or a [data-same-page] link, which changes a view on the page it is on.
  */
 
 const SLANGS = [
@@ -41,6 +42,8 @@ function isInAppNav(el: HTMLElement | null): boolean {
   if (/^(https?:|mailto:|tel:|#|blob:|data:)/i.test(href)) return false;
   if (link.target === "_blank") return false;
   if (link.hasAttribute("download")) return false;
+  // A link that switches a view on the same page without a request (myTapturf's tabs, components/my/MyTurf.tsx).
+  if (link.hasAttribute("data-same-page")) return false;
   return true;
 }
 
@@ -69,13 +72,13 @@ function RouteProgressInner() {
     return () => document.removeEventListener("click", onClick);
   }, []);
 
-  // Hide as soon as the route actually changed
+  // Hide as soon as the route actually changed (on the next tick: no state set in the effect's own pass)
   useEffect(() => {
-    if (key !== lastKey.current) {
-      lastKey.current = key;
-      setVisible(false);
-      if (maxTimer.current) window.clearTimeout(maxTimer.current);
-    }
+    if (key === lastKey.current) return;
+    lastKey.current = key;
+    if (maxTimer.current) window.clearTimeout(maxTimer.current);
+    const t = window.setTimeout(() => setVisible(false), 0);
+    return () => window.clearTimeout(t);
   }, [key]);
 
   return (
