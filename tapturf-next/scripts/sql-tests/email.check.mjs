@@ -25,8 +25,17 @@
 // claim (the address, what each email says, the skips and why, a reminder too late
 // for its words); the switches and
 // the link in an email; suppressions; every public function checks the server key;
-// the tables and helpers are closed to the API roles; the two jobs. Never touches a
-// real database. Made-up people and addresses only.
+// the tables and helpers are closed to the API roles; the two jobs. The mode (it starts
+// owner_only, running the file again keeps what the admin set): owner_only sends only
+// to the site owner's accounts (a Google-confirmed email or a proven number that is one
+// of the two keys of the real public._is_admin_key, read from 20261019_mytapturf.sql and
+// never written here), skips everyone else's as test_mode as they come due (at the
+// claim, or at the flush while the route is held) and never sends them after the mode
+// turns on; off skips all as mode_off; the queue, the in-app notifications and push are
+// the same in every mode; the admin RPCs (status, set the mode, the test send's address
+// at most once in 10 minutes) answer the site owner alone, by Google session or number,
+// and count without an address or a name. Never touches a real database. Made-up people
+// and addresses only.
 // Run: PGLITE=<pglite dist/index.js> node scripts/sql-tests/email.check.mjs supabase/migrations
 const { PGlite } = await import(process.env.PGLITE ?? "@electric-sql/pglite");
 import fs from "node:fs";
@@ -118,14 +127,61 @@ const FILES = ["20261030_games_lockdown.sql", "20261030_games_lockdown_step2.sql
   await bare.exec(CRON + NET + PROVEN);
   await bare.exec(FILES[0]);
   await bare.exec(FILES[1]);
-  await assert.rejects(bare.exec(sql), /email: apply 20261027_verified_tick\.sql/, "without the files it needs it refuses");
+  await assert.rejects(bare.exec(sql), /email: apply 20261019_mytapturf\.sql, 20261025_claims_account\.sql, 20261027_verified_tick\.sql/, "without the files it needs it refuses");
   passed++;
   eq((await bare.query(`select count(*)::int n from information_schema.tables where table_schema = 'private' and table_name like 'email%'`)).rows[0].n, 0, "and makes nothing");
   await bare.close();
 }
 
+// The site owner: public._phone10 and public._is_admin_key as 20261019_mytapturf.sql has them (the two keys are read
+// from the file, never written here); _caller_key the real one's Google path (this session signed in with Google), then
+// a "phone:<10 digits>" token for a phone sign-in (Firebase can't be reached here), as admin_slots_view.check.mjs; and
+// private.phone_proven a test list (the real rule is 20261027_verified_tick.sql, called by name).
+const fnFrom = (text, name) => {
+  const m = [...text.matchAll(new RegExp(`create or replace function ${name.replace(/\./g, "\\.")}\\([^]*?\\n\\$\\$;`, "g"))].at(-1);
+  assert.ok(m, `${name} is in the file`);
+  return m[0];
+};
+const MYTT = fs.readFileSync(`${M}/20261019_mytapturf.sql`, "utf8");
+const ADMIN_KEYS = [...bodyOf(MYTT, "public._is_admin_key").matchAll(/'([ep]:[^']+)'/g)].map((m) => m[1]);
+const ADMIN_EMAIL = ADMIN_KEYS.find((k) => k.startsWith("e:"))?.slice(2) ?? "";
+const ADMIN_PHONE = ADMIN_KEYS.find((k) => k.startsWith("p:"))?.slice(2) ?? "";
+ok(ADMIN_KEYS.length === 2 && ADMIN_EMAIL.includes("@") && /^[6-9]\d{9}$/.test(ADMIN_PHONE), "the site owner: one Google address and one number (read from the file)");
+const OWNER = `${fnFrom(MYTT, "public._phone10")}
+${fnFrom(MYTT, "public._is_admin_key")}
+create or replace function public._caller_key(p_token text) returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_email text := lower(coalesce(auth.jwt() ->> 'email', ''));
+begin
+  if v_email <> ''
+     and coalesce(auth.jwt() -> 'app_metadata' -> 'providers', '[]'::jsonb) @> '["google"]'::jsonb
+     and coalesce(auth.jwt() -> 'amr', '[]'::jsonb) @> '[{"method": "oauth"}]'::jsonb then
+    return 'e:' || v_email;
+  end if;
+  return case when p_token ~ '^phone:[6-9][0-9]{9}$' then 'p:' || substr(p_token, 7) end;
+end;
+$$;
+revoke all on function public._caller_key(text) from public, anon, authenticated;
+create table private.test_phone_proven (user_id uuid primary key);
+create function private.phone_proven(p_user_id uuid) returns boolean language sql stable security definer set search_path = '' as
+  $$ select exists (select 1 from private.test_phone_proven t where t.user_id = p_user_id) $$;
+revoke all on function private.phone_proven(uuid) from public, anon, authenticated;
+`;
+// The header names the functions the mode calls, each with production's md5 (read 10 Nov 2026), the repo's latest body.
+const MIGS = fs.readdirSync(M).filter((f) => f.endsWith(".sql")).sort().map((f) => fs.readFileSync(`${M}/${f}`, "utf8"));
+const repoBody = (name) => {
+  let last = null;
+  for (const t of MIGS) if (t.includes(`create or replace function ${name}(`)) last = bodyOf(t, name);
+  return last;
+};
+for (const fn of ["public._is_admin_key", "public._phone10", "public._caller_key", "private.phone_proven"]) {
+  const line = new RegExp(`^--\\s+${fn.replace(".", "\\.")}\\s+([0-9a-f]{32})\\s`, "m").exec(sql);
+  ok(!!line && md5(repoBody(fn) ?? "") === line[1], `the header names ${fn} with the md5 of its latest body in the repo`);
+}
+
 const db = await makeDb(PGlite);
-await db.exec(CRON + NET + PROVEN + START_AT + `\ninsert into private.app_secrets values ('revalidate', 'reval-secret');`);
+await db.exec(CRON + NET + PROVEN + START_AT + OWNER + `\ninsert into private.app_secrets values ('revalidate', 'reval-secret');`);
+eq(md5((await db.query(`select prosrc from pg_proc where proname = '_is_admin_key'`)).rows[0].prosrc), "c9e14ff9b4713cd87a73ceac3296f20b", "the real _is_admin_key is the one loaded here");
 for (const f of FILES) await db.exec(f);
 const q = async (s, p) => (await db.query(s, p)).rows;
 const one = async (s, p) => (await q(s, p))[0];
@@ -175,6 +231,9 @@ await db.exec(sql);
 passed++; // safe to run again
 eq((await one(`select value from private.email_settings where name = 'launch_at'`)).value, launch1, "running it again keeps launch_at");
 ok(Math.abs(Date.parse(launch1) - before) < 60000, "launch_at is when it first ran");
+eq((await one(`select value from private.email_settings where name = 'mode'`)).value, "owner_only", "the mode starts as owner_only: only the site owner's accounts get emails");
+// The checks below are of the emails as built (on); the mode's own come last.
+await q(`update private.email_settings set value = 'on' where name = 'mode'`);
 eq((await one(`select count(*)::int n from private.email_outbox`)).n, 0, "nothing from before the file is queued");
 eq(await q(`select name, schedule, command from cron.jobs where name like 'email%' order by 1`), [
   { name: "email-clock", schedule: "*/5 * * * *", command: "select private.email_clock()" },
@@ -735,5 +794,190 @@ await q(`update private.app_secrets set name = 'revalidate_away' where name = 'r
 eq((await flush()).r, "no_secret", "no secret: nothing posted");
 await q(`update private.app_secrets set name = 'revalidate' where name = 'revalidate_away'`);
 eq((await flush()).r, "posted", "with both: posted");
+
+/* ---------------- the mode: off, owner_only, on ---------------- */
+// The site owner's two accounts, as on production (10 Nov 2026): one whose email Google confirmed is the e: key, one
+// whose proven number is the p: key (with an email of its own). A decoy has the owner's number, never proven.
+const OWNER_G = U(40), OWNER_P = U(41), DECOY = U(42), TARA = U(43), ISHA = U(44), JAY = U(45);
+const LABEL = { [OWNER_G]: "owner (Google)", [OWNER_P]: "owner (number)", [DECOY]: "decoy", [TARA]: "Tara", [ISHA]: "Isha", [JAY]: "Jay" };
+const who = (id) => LABEL[id] ?? id;
+await q(`insert into public.users (id, name, phone, email, created_at) values
+  ($1, 'Site Owner', null, $7, now() - interval '30 days'),
+  ($2, 'Owner Phone', $8, 'owner.phone.standin@example.com', now() - interval '30 days'),
+  ($3, 'Decoy Number', $8, 'decoy.standin@example.com', now() - interval '30 days'),
+  ($4, 'Tara Host', '+919000000043', 'tara.standin@example.com', now() - interval '30 days'),
+  ($5, 'Isha Player', '+919000000044', 'isha.standin@example.com', now() - interval '30 days'),
+  ($6, 'Jay Player', '+919000000045', 'jay.standin@example.com', now() - interval '30 days')`, [OWNER_G, OWNER_P, DECOY, TARA, ISHA, JAY, ADMIN_EMAIL, `+91${ADMIN_PHONE}`]);
+await q(`insert into private.test_proven select unnest($1::uuid[])`, [[OWNER_G, OWNER_P, DECOY, TARA, ISHA, JAY]]);
+await q(`insert into private.test_phone_proven values ($1), ($2)`, [OWNER_P, TARA]);
+const siteOwner = async (id) => (await one(`select private.email_site_owner($1) r`, [id])).r;
+eq([await siteOwner(OWNER_G), await siteOwner(OWNER_P), await siteOwner(DECOY), await siteOwner(TARA), await siteOwner(ASHA), await siteOwner(U(99)), await siteOwner(null)],
+  [true, true, false, false, false, false, false], "the site owner's accounts: by the Google-confirmed email or the proven number; not the decoy with the number unproven, nor anyone else");
+await q(`update private.test_proven set user_id = $2 where user_id = $1`, [OWNER_G, U(98)]);
+eq(await siteOwner(OWNER_G), false, "the owner's address on an account where Google never confirmed it: not the owner's");
+await q(`update private.test_proven set user_id = $1 where user_id = $2`, [OWNER_G, U(98)]);
+const modeNow = async () => (await one(`select value from private.email_settings where name = 'mode'`)).value;
+await assert.rejects(q(`update private.email_settings set value = 'everyone' where name = 'mode'`), /email_settings_mode/, "the mode is one of the three");
+passed++;
+
+// Who calls the admin functions: a Google session (request.jwt.claims, as PostgREST sets it) or a phone sign-in's token.
+const GOOGLE = (email, oauth = true) => JSON.stringify({ email, role: "authenticated", app_metadata: { provider: "google", providers: ["google"] }, amr: [{ method: oauth ? "oauth" : "password", timestamp: 1 }] });
+const asCaller = async (claims, fn) => {
+  await q(`select set_config('request.jwt.claims', $1, false)`, [claims ?? ""]);
+  try { return await fn(); } finally { await q(`select set_config('request.jwt.claims', '', false)`); }
+};
+const admin = (claims, fn, args) => asCaller(claims, () => rpc(fn, args));
+const OWNER_GOOGLE = GOOGLE(ADMIN_EMAIL);
+const OWNER_PHONE = `phone:${ADMIN_PHONE}`;
+const testAt = async () => (await one(`select updated_at from private.email_settings where name = 'test_at'`))?.updated_at ?? null;
+const modeBefore = await modeNow();
+for (const [what, claims, token] of [["no sign-in", null, null], ["another Google account", GOOGLE("tara.standin@example.com"), null],
+  ["the owner's address signed in with a password, not Google", GOOGLE(ADMIN_EMAIL, false), null], ["a player's number", null, "phone:9000000044"],
+  ["another player's number", null, "phone:9000000045"], ["a token that isn't one", null, "nope"]]) {
+  eq(await admin(claims, "admin_email_status", [token]), { error: "forbidden" }, `admin_email_status refuses ${what}`);
+  eq(await admin(claims, "admin_email_set_mode", [token, "off"]), { error: "forbidden" }, `admin_email_set_mode refuses ${what}`);
+  eq(await admin(claims, "admin_email_test", [token]), { error: "forbidden" }, `admin_email_test refuses ${what}`);
+}
+eq([await modeNow(), await testAt()], [modeBefore, null], "and changed nothing: the mode as it was, no test slot taken");
+for (const fn of ["admin_email_status", "admin_email_set_mode", "admin_email_test"]) {
+  const f = (await q(`select p.prosecdef, p.proconfig::text cfg, has_function_privilege('anon', p.oid, 'execute') anon_x from pg_proc p where p.proname = $1`, [fn]))[0];
+  ok(f.prosecdef && f.cfg?.includes("search_path") && f.anon_x, `${fn}: a definer function with its own search_path, open to call (it checks the caller)`);
+}
+st = await admin(OWNER_GOOGLE, "admin_email_set_mode", [null, "owner_only"]);
+eq([st.r, st.mode], ["ok", "owner_only"], "the site owner (Google) sets owner_only");
+ok(Date.now() - Date.parse(st.mode_since) < 60000, "with when it changed");
+eq(await admin(OWNER_GOOGLE, "admin_email_set_mode", [null, "everyone"]), { error: "bad" }, "a mode that isn't one: bad");
+eq(await modeNow(), "owner_only", "(unchanged)");
+eq((await admin(null, "admin_email_status", [OWNER_PHONE])).mode, "owner_only", "the site owner by number reads it too");
+
+// owner_only: everything is queued as before; at the claim only the owner's accounts get theirs.
+await q(`update private.email_outbox set status = 'skipped', last_error = 'earlier' where status in ('queued', 'sending')`);
+await q(`update private.email_flush_state set last_poke_at = null, last_claim_at = null, hold_until = null`);
+await q(`insert into private.push_subscriptions (user_id, endpoint, p256dh, auth) values ($1, 'https://push.example.com/isha-standin-0001', $2, $3)`, [ISHA, "B".repeat(87), "a".repeat(22)]);
+const pushPosts = async () => (await one(`select count(*)::int n from net.posts where url like '%/api/push/dispatch'`)).n;
+const dispatchPosts = async () => (await one(`select count(*)::int n from net.posts where url like '%/api/email/dispatch'`)).n;
+const push0 = await pushPosts();
+const GT1 = await mkGame(TARA, { date: ist(3), start_time: "18:00", end_time: "19:00" });
+const ti = (await rpc("game_request_send", [KEY, ISHA, GT1, null])).request.id;
+const tOwner = (await rpc("game_request_send", [KEY, OWNER_P, GT1, null])).request.id;
+await rpc("game_request_answer", [KEY, TARA, ti, true]);
+await rpc("game_request_answer", [KEY, TARA, tOwner, true]);
+const GO1 = await mkGame(OWNER_G, { date: ist(3), start_time: "20:00", end_time: "21:00" });
+await rpc("game_request_send", [KEY, JAY, GO1, null]);
+rows = await outbox(`status = 'queued'`);
+const sortRows = (r) => r.map((x) => [who(x.user_id), x.kind]).sort((a, b) => (a.join() < b.join() ? -1 : 1));
+eq(sortRows(rows), [["Isha", "request_accepted"], ["Tara", "join_request"], ["owner (Google)", "join_request"], ["owner (number)", "request_accepted"]],
+  "owner_only: the queue as in on (every email queued, the owner's and everyone else's)");
+eq((await notes("game_request", GT1)).length + (await notes("game_request_accepted", GT1)).length + (await notes("game_request", GO1)).length, 5, "the in-app notifications as always");
+eq(await pushPosts(), push0 + 1, "and push as always (Isha's phone is told she's in)");
+await q(`update private.email_outbox set next_attempt_at = now() - interval '1 second' where status = 'queued'`);
+cl = await rpc("email_claim", [KEY, 20]);
+eq(cl.jobs.map((j) => [who(j.user_id), j.kind]).sort(), [["owner (Google)", "join_request"], ["owner (number)", "request_accepted"]], "the claim gives only the site owner's two accounts their emails");
+ok(cl.jobs.find((j) => j.user_id === OWNER_G)?.to === ADMIN_EMAIL, "the Google one to its own confirmed address");
+eq(cl.jobs.find((j) => j.user_id === OWNER_P)?.to, "owner.phone.standin@example.com", "the number's one to its own confirmed address");
+eq([cl.skipped, (await outbox(`user_id in ($1, $2)`, [TARA, ISHA])).map((r) => [who(r.user_id), r.status, r.last_error]).sort()],
+  [2, [["Isha", "skipped", "test_mode"], ["Tara", "skipped", "test_mode"]]], "everyone else's: skipped as test_mode, not held");
+await rpc("email_report", [KEY, JSON.stringify(cl.jobs.map((j) => ({ id: j.id, result: "sent", provider_id: "re_mode" })))]);
+
+// While the route is held (no Resend key yet), the flush skips them itself: they never wait for the key.
+eq(await rpc("email_hold", [KEY, "no_key"]), { r: "ok" }, "(the route holds: no Resend key)");
+const GT2 = await mkGame(TARA, { date: ist(3), start_time: "06:00", end_time: "07:00" });
+const t2i = (await rpc("game_request_send", [KEY, ISHA, GT2, null])).request.id;
+const t2o = (await rpc("game_request_send", [KEY, OWNER_P, GT2, null])).request.id;
+await rpc("game_request_answer", [KEY, TARA, t2i, true]);
+await rpc("game_request_answer", [KEY, TARA, t2o, true]);
+await q(`update private.email_outbox set next_attempt_at = now() - interval '1 second' where status = 'queued'`);
+const disp0 = await dispatchPosts();
+f = await flush();
+eq([f.r, f.due], ["held", 1], "owner_only and held: the owner's one waits for the route");
+eq((await outbox(`refs ->> 'game_id' = $1`, [GT2])).map((r) => [who(r.user_id), r.kind, r.status, r.last_error]).sort((a, b) => (a.join() < b.join() ? -1 : 1)),
+  [["Isha", "request_accepted", "skipped", "test_mode"], ["Tara", "join_request", "skipped", "test_mode"], ["owner (number)", "request_accepted", "queued", null]],
+  "and everyone else's are skipped now (test_mode), not left to wait");
+eq(await dispatchPosts(), disp0, "(nothing posted while held)");
+
+// On: what was held back is never sent; what comes due now goes to everyone.
+st = await admin(null, "admin_email_set_mode", [OWNER_PHONE, "on"]);
+eq([st.r, st.mode], ["ok", "on"], "the site owner (by number) turns emails on");
+await q(`update private.email_flush_state set hold_until = null, last_poke_at = null`);
+f = await flush();
+eq([f.r, f.due], ["posted", 1], "posted for the one still due");
+cl = await rpc("email_claim", [KEY, 20]);
+eq(cl.jobs.map((j) => [who(j.user_id), j.kind]), [["owner (number)", "request_accepted"]], "on: only it goes; the test_mode ones stay skipped");
+await rpc("email_report", [KEY, JSON.stringify(cl.jobs.map((j) => ({ id: j.id, result: "sent" })))]);
+eq((await outbox(`user_id in ($1, $2) and status <> 'skipped'`, [TARA, ISHA])).length, 0, "nothing of Tara's or Isha's from owner_only was ever sent");
+const GT3 = await mkGame(TARA, { date: ist(4), start_time: "18:00", end_time: "19:00" });
+const t3 = (await rpc("game_request_send", [KEY, ISHA, GT3, null])).request.id;
+await rpc("game_request_answer", [KEY, TARA, t3, true]);
+await rpc("game_request_send", [KEY, JAY, GT3, null]);
+await q(`update private.email_outbox set next_attempt_at = now() - interval '1 second' where status = 'queued'`);
+cl = await rpc("email_claim", [KEY, 20]);
+eq(cl.jobs.map((j) => [who(j.user_id), j.kind]).sort(), [["Isha", "request_accepted"], ["Tara", "join_request"]], "on: new ones go to everyone");
+await rpc("email_report", [KEY, JSON.stringify(cl.jobs.map((j) => ({ id: j.id, result: "sent" })))]);
+
+// Off: nothing goes, the owner's neither; never sent after.
+st = await admin(OWNER_GOOGLE, "admin_email_set_mode", [null, "off"]);
+eq(st.mode, "off", "the site owner turns emails off");
+const GO2 = await mkGame(OWNER_G, { date: ist(4), start_time: "20:00", end_time: "21:00" });
+const o2 = (await rpc("game_request_send", [KEY, JAY, GO2, null])).request.id;
+await rpc("game_request_answer", [KEY, OWNER_G, o2, true]);
+rows = await outbox(`refs ->> 'game_id' = $1`, [GO2]);
+eq(rows.map((r) => [who(r.user_id), r.kind, r.status]).sort(), [["Jay", "request_accepted", "queued"], ["owner (Google)", "join_request", "queued"]], "off: still queued as before");
+eq((await notes("game_request_accepted", GO2)).length, 1, "(and the in-app notice made)");
+await q(`update private.email_outbox set next_attempt_at = now() - interval '1 second' where status = 'queued'`);
+const disp1 = await dispatchPosts();
+f = await flush();
+eq([f.r, f.mode_skipped], ["idle", 2], "off: the flush skips both and calls nothing");
+eq(await dispatchPosts(), disp1, "(no post to the app)");
+eq((await outbox(`refs ->> 'game_id' = $1`, [GO2])).map((r) => [r.status, r.last_error]), [["skipped", "mode_off"], ["skipped", "mode_off"]], "as mode_off, the owner's too");
+await q(`insert into private.email_outbox (user_id, kind, dedupe_key, refs) values ($1, 'welcome', 'mode-off-claim', '{}')`, [OWNER_G]);
+cl = await rpc("email_claim", [KEY, 20]);
+eq([cl.jobs.length, cl.skipped, (await one(`select last_error from private.email_outbox where dedupe_key = 'mode-off-claim'`)).last_error], [0, 1, "mode_off"], "a claim while off: skipped as mode_off");
+await admin(OWNER_GOOGLE, "admin_email_set_mode", [null, "on"]);
+cl = await rpc("email_claim", [KEY, 20]);
+eq(cl.jobs.length, 0, "turned on again: nothing from while it was off is sent");
+await db.exec(sql);
+eq(await modeNow(), "on", "running the file again keeps the mode the admin set");
+await admin(OWNER_GOOGLE, "admin_email_set_mode", [null, "off"]);
+await db.exec(sql);
+eq(await modeNow(), "off", "(off too)");
+await admin(OWNER_GOOGLE, "admin_email_set_mode", [null, "on"]);
+
+// The card's counts: the last 24 hours and the last 7 days, by status, the skips by why; no address or name.
+await q(`insert into private.email_outbox (user_id, kind, dedupe_key, refs, status, last_error, created_at) values
+  ($1, 'welcome', 'old-3d', '{}', 'skipped', 'test_mode', now() - interval '3 days'), ($1, 'welcome', 'old-9d', '{}', 'sent', null, now() - interval '9 days')`, [JAY]);
+st = await admin(OWNER_GOOGLE, "admin_email_status", [null]);
+const expect = async (since) => {
+  const r = await q(`select status, coalesce(nullif(btrim(last_error), ''), 'other') why, count(*)::int n from private.email_outbox where created_at >= now() - $1::interval group by 1, 2`, [since]);
+  const sum = (pred) => r.filter(pred).reduce((a, x) => a + x.n, 0);
+  return { sent: sum((x) => x.status === "sent"), queued: sum((x) => ["queued", "sending"].includes(x.status)), failed: sum((x) => x.status === "failed"), expired: sum((x) => x.status === "expired"),
+    skipped: Object.fromEntries(r.filter((x) => x.status === "skipped").map((x) => [x.why, x.n]).sort()) };
+};
+const sortKeys = (o) => ({ ...o, skipped: Object.fromEntries(Object.entries(o.skipped).sort()) });
+eq([st.r, st.mode], ["ok", "on"], "admin_email_status: the mode");
+eq(sortKeys(st.day), await expect("24 hours"), "the last 24 hours: sent, queued, failed, expired, and skipped by why");
+eq(sortKeys(st.week), await expect("7 days"), "the last 7 days");
+ok(st.day.skipped.test_mode >= 4 && st.day.skipped.mode_off >= 3 && st.week.skipped.test_mode === st.day.skipped.test_mode + 1, "(test_mode and mode_off among them; the one 3 days old only in the week)");
+const said = JSON.stringify(st);
+ok(!said.includes("@") && !/Tara|Isha|Jay|Owner|Asha|Ravi/.test(said) && !said.includes(ADMIN_PHONE) && !/[0-9a-f]{8}-[0-9a-f]{4}-/.test(said), "no address, name, number or account id in it");
+
+// "Send me one of each": the owner's own confirmed address, at most once in 10 minutes; nothing in the outbox.
+const out0 = await allRows();
+let t = await admin(OWNER_GOOGLE, "admin_email_test", [null]);
+eq([t.r, t.user_id, t.name, t.to === ADMIN_EMAIL], ["ok", OWNER_G, "Site", true], "the test send's address: the owner's own Google-confirmed one, with that account (its turn-off link) and first name");
+t = await admin(null, "admin_email_test", [OWNER_PHONE]);
+ok(t.r === "wait" && t.seconds > 590 && t.seconds <= 600 && !t.to, "again within 10 minutes (by number too): wait, with how long, and no address");
+await q(`update private.email_settings set updated_at = now() - interval '9 minutes' where name = 'test_at'`);
+t = await admin(OWNER_GOOGLE, "admin_email_test", [null]);
+ok(t.r === "wait" && t.seconds > 50 && t.seconds <= 60, "9 minutes on: a minute to wait");
+await q(`update private.email_settings set updated_at = now() - interval '11 minutes' where name = 'test_at'`);
+eq((await admin(null, "admin_email_test", [OWNER_PHONE])).r, "ok", "11 minutes on: again (the same address, from the number's sign-in)");
+ok(Date.now() - Date.parse(await testAt()) < 60000, "the card's last test is now");
+eq(await allRows(), out0, "the test writes nothing to the outbox");
+await q(`update private.test_proven set user_id = $2 where user_id = $1`, [OWNER_G, U(98)]);
+await q(`update private.email_settings set updated_at = now() - interval '11 minutes' where name = 'test_at'`);
+const slot = await testAt();
+eq(await admin(OWNER_GOOGLE, "admin_email_test", [null]), { r: "no_address" }, "with no account where Google confirmed the owner's address: no_address (the number's own address is not used)");
+eq(String(await testAt()), String(slot), "and the 10 minutes are not used up");
+await q(`update private.test_proven set user_id = $1 where user_id = $2`, [OWNER_G, U(98)]);
 
 console.log(`email.check: ${passed} passed`);

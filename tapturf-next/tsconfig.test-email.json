@@ -12,5 +12,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./*"] }
   },
-  "files": ["lib/email/email.test.ts", "lib/email/routes.test.ts"]
+  "files": ["lib/email/email.test.ts", "lib/email/routes.test.ts", "lib/email/admin.test.ts"]
 }

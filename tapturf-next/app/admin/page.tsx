@@ -43,6 +43,7 @@ import { LinkRefusals } from "@/components/admin/LinkRefusals";
 import { OwnerClaims } from "@/components/admin/OwnerClaims";
 import { OwnerPhotos } from "@/components/admin/OwnerPhotos";
 import { ReviewFlags } from "@/components/admin/ReviewFlags";
+import { EmailsCard } from "@/components/admin/EmailsCard";
 import { MapSection, mapSummary } from "@/components/admin/MapUsage";
 import { TrafficSection, trafficSummary } from "@/components/admin/Traffic";
 
@@ -132,6 +133,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           A reported review stays up until you decide. Hide takes it off the page, its photos too; Keep leaves it. Its author is never told who reported it.
         </p>
         <ReviewFlags />
+      </Fold>
+
+      {/* Emails (20261110_email.sql): who gets them (off, the site owner only, everyone), the counts, and a test of each (read in the browser). */}
+      <Fold id="emails" title="Emails" line="Who gets TapTurf's emails, how many went, a test of each">
+        <EmailsCard />
       </Fold>
 
       {/* Signup windows, the tick, Ask and the suggestions queue (requests + notifications are in the reviews snapshot to keep the layout de-duped). */}

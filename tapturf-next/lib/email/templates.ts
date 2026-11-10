@@ -319,10 +319,10 @@ function text(c: Content, links: EmailLinks): string {
   return lines.join("\n");
 }
 
-/** The email for a job, or null when it can't be written. */
-export function renderEmail(job: EmailJob, links: EmailLinks): RenderedEmail | null {
+/** The email for a job, or null when it can't be written. subjectPrefix: "[Test] " for the admin's test sends. */
+export function renderEmail(job: EmailJob, links: EmailLinks, opts: { subjectPrefix?: string } = {}): RenderedEmail | null {
   const c = contentOf(job);
   if (!c) return null;
-  const subject = oneLine(c.subject, 140);
+  const subject = oneLine(`${opts.subjectPrefix ?? ""}${c.subject}`, 140);
   return { subject, preheader: oneLine(c.preheader, 140), html: html({ ...c, subject }, links), text: text(c, links) };
 }

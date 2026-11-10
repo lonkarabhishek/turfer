@@ -49,6 +49,24 @@ set local lock_timeout = '5s';
 -- One send per person: the address is read at send time and goes only to
 -- the route; nothing here stores an address or a name.
 --
+-- The mode (private.email_settings 'mode', set on the admin's Emails card,
+-- no deploy needed):
+--   off         nothing is sent: an email that comes due is skipped
+--               (mode_off), never sent later.
+--   owner_only  this file starts here: only the site owner's accounts get
+--               theirs (private.email_site_owner: an account whose
+--               Google-confirmed email, or whose proven number, is one of
+--               the two keys of public._is_admin_key, 20261019_mytapturf.sql;
+--               2 accounts on 10 Nov 2026). Everyone else's are skipped
+--               (test_mode) as they come due, never held, so turning emails
+--               on later sends none of them.
+--   on          everyone, as above.
+-- The mode is applied when an email comes due (email_job, which email_claim
+-- calls; the flush skips the same ones itself, even while the route is
+-- held), so the queue, the in-app notifications and push are the same in
+-- every mode. An email queued earlier but not yet due (a join request's 15
+-- minutes) follows the mode at the time it comes due.
+--
 -- How it runs:
 --   * notifications_email, after insert on public.notifications: for the
 --     types above, queues (or joins) a row in private.email_outbox. It
@@ -74,17 +92,32 @@ set local lock_timeout = '5s';
 --     waiting), and marks the rest skipped with why (answered, cancelled,
 --     started, moved, late, off, suppressed, no_address); email_report records
 --     what Resend answered: sent (its id), failed, or retry after 1, 5, 30,
---     120 minutes, failed after the 5th try.
+--     120 minutes, failed after the 5th try. The mode's skips: mode_off,
+--     test_mode.
 --   * The account routes (the verified caller, as the games routes):
 --     email_prefs_get and email_prefs_set, the Me tab's Emails block. The
 --     link in an email (signed by the app per account and group):
 --     email_unsubscribe. Resend's webhook (bounced, complained):
 --     email_suppress.
+--   * The admin's Emails card (components/admin/EmailsCard.tsx through
+--     /api/admin/emails, the site owner only: public._caller_key(p_token)
+--     and public._is_admin_key, as admin_turf_slots; anyone else gets
+--     {error: forbidden}): admin_email_status, the mode and how many emails
+--     in the last 24 hours and 7 days were sent, queued, failed, expired or
+--     skipped (by why), never an address, a name or an account;
+--     admin_email_set_mode, off, owner_only or on; admin_email_test, "Send
+--     me one of each": the site owner's own Google-confirmed address (the
+--     account whose users.email Google confirmed and is itself the e: key of
+--     public._is_admin_key), at most once in 10 minutes. The route sends the
+--     ten samples straight to Resend whatever the mode; none goes through
+--     the outbox or is counted there.
 --
 -- Tables (schema private, RLS on, no grant to anyone; only the functions
 -- below read or write them; no foreign keys, as private.booking_requests,
 -- so nothing here locks public.users or public.games):
---   private.email_settings     one row, launch_at (when this file first ran).
+--   private.email_settings     launch_at (when this file first ran), mode (off,
+--                              owner_only, on; when it last changed), test_at
+--                              (the last "Send me one of each").
 --   private.email_outbox       one row per email: account, kind, dedupe_key
 --                              (unique), refs (the game, the requests, what
 --                              changed), status (queued, sending, sent,
@@ -124,13 +157,17 @@ set local lock_timeout = '5s';
 --   email_queue(user, kind, key, refs, due), email_join(user, kind, game,
 --   key, value, extra), email_on_notification() (the trigger),
 --   email_venue_name(game), email_clock(now), email_flush(now),
---   email_job(row).
+--   email_job(row), email_mode(), email_site_owner(user),
+--   email_mode_skip(user), email_counts(since), email_admin_state().
 -- New public functions (server key; EXECUTE to anon as every other one,
 -- the key is the gate): email_claim(p_key, p_limit), email_report(p_key,
 -- p_results), email_hold(p_key, p_reason), email_prefs_get(p_key,
 -- p_user_id), email_prefs_set(p_key, p_user_id, p_requests, p_changes,
 -- p_reminders), email_unsubscribe(p_key, p_user_id, p_group),
--- email_suppress(p_key, p_address, p_reason).
+-- email_suppress(p_key, p_address, p_reason). And the site owner's (the
+-- caller's p_token or session, as admin_turf_slots; EXECUTE to anon, the
+-- check is the gate): admin_email_status(p_token),
+-- admin_email_set_mode(p_token, p_mode), admin_email_test(p_token).
 --
 -- Replaced: one function, public.game_update(text, uuid, uuid, jsonb,
 -- jsonb), with its body as production runs it (md5(prosrc) read 10 Nov
@@ -147,16 +184,24 @@ set local lock_timeout = '5s';
 --   private.game_start_at         870fe04f498b656d8c9435099fd8bfb9
 --   private.push_url              7194c64e4d38986c2f21fe7b60f911f8
 --   private.push_on_notification  1272b4bded03cbebd6289b1f25fa385c
+-- and, for the mode and the admin card (read 10 Nov 2026, equal to their
+-- latest body in the repo):
+--   public._is_admin_key          c9e14ff9b4713cd87a73ceac3296f20b  20261019_mytapturf.sql
+--   public._phone10               f833f28ee85cef2b7dc3556e2ef4f47c  20261019_mytapturf.sql
+--   public._caller_key            2ab91047132da79f8f3052f95c6f52de  20261025_claims_account.sql
+--   private.phone_proven          34cff6ff01c863fd8921c78d12b2fb99  20261027_verified_tick.sql
 -- push_url needs no change: the three new types carry gameId, so a push
 -- opens the game, as lib/my/claimNotice.ts notificationLink does.
 --
--- Needs 20261027_verified_tick.sql, 20261030_games_lockdown.sql,
+-- Needs 20261019_mytapturf.sql, 20261025_claims_account.sql,
+-- 20261027_verified_tick.sql, 20261030_games_lockdown.sql,
 -- 20261101_played_with.sql and 20261103_game_other_venue.sql (it refuses
 -- to run without them, changing nothing), pg_cron and pg_net.
 -- Additive: six tables, indexes, functions, one trigger, two cron jobs, the
 -- one replaced function above. Written without the destructive SQL
 -- keywords; nothing is removed. No grant or policy on a public table
--- changes. Safe to run again (launch_at keeps its first value).
+-- changes. Safe to run again (launch_at keeps its first value, the mode
+-- what the admin last set).
 -- The app works before this file: the Me tab hides the Emails block, the
 -- dispatch route is never called, and the email links say try later.
 -- Until RESEND_API_KEY is in Vercel the route sends nothing and says so
@@ -171,9 +216,13 @@ begin
      or to_regprocedure('private.email_proven(uuid)') is null
      or to_regprocedure('private.game_start_at(date,time)') is null
      or to_regprocedure('private.account_key_ok(text)') is null
+     or to_regprocedure('private.phone_proven(uuid)') is null
+     or to_regprocedure('public._is_admin_key(text)') is null
+     or to_regprocedure('public._phone10(text)') is null
+     or to_regprocedure('public._caller_key(text)') is null
      or not exists (select 1 from information_schema.columns
                      where table_schema = 'public' and table_name = 'games' and column_name = 'venue_name') then
-    raise exception 'email: apply 20261027_verified_tick.sql, 20261030_games_lockdown.sql, 20261101_played_with.sql and 20261103_game_other_venue.sql first';
+    raise exception 'email: apply 20261019_mytapturf.sql, 20261025_claims_account.sql, 20261027_verified_tick.sql, 20261030_games_lockdown.sql, 20261101_played_with.sql and 20261103_game_other_venue.sql first';
   end if;
 end;
 $$;
@@ -183,13 +232,18 @@ $$;
 create table if not exists private.email_settings (
   name text primary key,
   value text not null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint email_settings_mode check (name <> 'mode' or value in ('off', 'owner_only', 'on'))
 );
 comment on table private.email_settings is
-  'Emails: settings. launch_at: when 20261110_email.sql first ran; Welcome goes only to accounts made after it.';
--- The first run sets it; running the file again keeps it.
+  'Emails: settings. launch_at: when 20261110_email.sql first ran; Welcome goes only to accounts made after it. mode: off, owner_only or on (the admin''s Emails card). test_at: the last "Send me one of each".';
+-- The first run sets them; running the file again keeps them (the mode as the admin last set it).
 insert into private.email_settings (name, value)
 values ('launch_at', to_char(now() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))
+on conflict (name) do nothing;
+insert into private.email_settings (name, value)
+values ('mode', 'owner_only')
 on conflict (name) do nothing;
 
 create table if not exists private.email_outbox (
@@ -215,6 +269,7 @@ comment on table private.email_outbox is
 create index if not exists email_outbox_due_idx on private.email_outbox (next_attempt_at) where status = 'queued';
 create index if not exists email_outbox_lease_idx on private.email_outbox (lease_until) where status = 'sending';
 create index if not exists email_outbox_user_idx on private.email_outbox (user_id, created_at desc);
+create index if not exists email_outbox_created_idx on private.email_outbox (created_at);
 
 create table if not exists private.email_prefs (
   user_id uuid primary key,
@@ -460,6 +515,68 @@ returns text language sql stable security definer set search_path = '' as $$
                        nullif(btrim(p_game.venue_name), ''), 'the venue'), 60)
 $$;
 
+-- The mode now: 'off', 'owner_only' or 'on' (no row, or anything else: owner_only, as this file starts).
+create or replace function private.email_mode()
+returns text language sql stable security definer set search_path = '' as $$
+  select coalesce((select case s.value when 'off' then 'off' when 'on' then 'on' else 'owner_only' end
+                     from private.email_settings s where s.name = 'mode'), 'owner_only')
+$$;
+
+-- An account of the site owner's: its email, confirmed by Google, or its number, proven, is one of the two keys of
+-- public._is_admin_key (20261019_mytapturf.sql). Yes or no only; no address or number leaves it.
+create or replace function private.email_site_owner(p_user_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select coalesce((
+    select (u.email is not null
+            and coalesce(public._is_admin_key('e:' || lower(btrim(u.email::text))), false)
+            and private.email_proven(u.id))
+        or (u.phone is not null
+            and coalesce(public._is_admin_key('p:' || coalesce(public._phone10(u.phone::text), '')), false)
+            and private.phone_proven(u.id))
+      from public.users u
+     where u.id = p_user_id), false)
+$$;
+
+-- Why the mode holds back an email to this account now (mode_off, test_mode), or null when it may go.
+create or replace function private.email_mode_skip(p_user_id uuid)
+returns text language sql stable security definer set search_path = '' as $$
+  select case private.email_mode()
+           when 'on' then null
+           when 'off' then 'mode_off'
+           else case when private.email_site_owner(p_user_id) then null else 'test_mode' end
+         end
+$$;
+
+-- For the admin's card: the emails queued since p_since by what became of them (queued counts the ones being sent;
+-- skipped by why). Counts only: no account, address or name.
+create or replace function private.email_counts(p_since timestamptz)
+returns jsonb language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'sent', count(*) filter (where o.status = 'sent'),
+    'queued', count(*) filter (where o.status in ('queued', 'sending')),
+    'failed', count(*) filter (where o.status = 'failed'),
+    'expired', count(*) filter (where o.status = 'expired'),
+    'skipped', coalesce((select jsonb_object_agg(k.why, k.n order by k.why)
+                           from (select left(coalesce(nullif(btrim(x.last_error), ''), 'other'), 40) as why, count(*) as n
+                                   from private.email_outbox x
+                                  where x.status = 'skipped' and x.created_at >= p_since
+                                  group by 1) k), '{}'::jsonb))
+    from private.email_outbox o
+   where o.created_at >= p_since
+$$;
+
+-- What the admin's card shows: the mode (and since when), the counts for the last 24 hours and 7 days, the last test.
+create or replace function private.email_admin_state()
+returns jsonb language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'r', 'ok',
+    'mode', private.email_mode(),
+    'mode_since', (select s.updated_at from private.email_settings s where s.name = 'mode'),
+    'day', private.email_counts(now() - interval '24 hours'),
+    'week', private.email_counts(now() - interval '7 days'),
+    'test_at', (select s.updated_at from private.email_settings s where s.name = 'test_at'))
+$$;
+
 revoke all on function private.email_daily_cap() from public, anon, authenticated;
 revoke all on function private.email_claim_max() from public, anon, authenticated;
 revoke all on function private.email_max_attempts() from public, anon, authenticated;
@@ -478,6 +595,11 @@ revoke all on function private.email_ok(uuid, text) from public, anon, authentic
 revoke all on function private.email_queue(uuid, text, text, jsonb, timestamptz) from public, anon, authenticated;
 revoke all on function private.email_join(uuid, text, uuid, text, jsonb, jsonb) from public, anon, authenticated;
 revoke all on function private.email_venue_name(public.games) from public, anon, authenticated;
+revoke all on function private.email_mode() from public, anon, authenticated;
+revoke all on function private.email_site_owner(uuid) from public, anon, authenticated;
+revoke all on function private.email_mode_skip(uuid) from public, anon, authenticated;
+revoke all on function private.email_counts(timestamptz) from public, anon, authenticated;
+revoke all on function private.email_admin_state() from public, anon, authenticated;
 
 -- ── 3. Queueing: every new notification of the six kinds ──
 
@@ -730,6 +852,7 @@ declare
   v_req bigint;
   n_back integer;
   n_expired integer;
+  n_mode integer := 0;
 begin
   if not pg_try_advisory_xact_lock(hashtext('private.email_flush')) then
     return jsonb_build_object('r', 'busy');
@@ -753,10 +876,21 @@ begin
      and o.created_at < p_now - interval '24 hours';
   get diagnostics n_expired = row_count;
 
-  -- 3. Nothing due: nothing is called.
+  -- 3. The mode (off, or the site owner only): a due email it holds back is skipped now, as email_claim would,
+  --    even while the route can't send (a hold), so it is never sent later when emails come on.
+  if private.email_mode() <> 'on' then
+    update private.email_outbox o
+       set status = 'skipped', last_error = private.email_mode_skip(o.user_id), lease_until = null
+     where o.status = 'queued'
+       and o.next_attempt_at <= p_now
+       and private.email_mode_skip(o.user_id) is not null;
+    get diagnostics n_mode = row_count;
+  end if;
+
+  -- 4. Nothing due: nothing is called.
   select count(*) into v_due from private.email_outbox o where o.status = 'queued' and o.next_attempt_at <= p_now;
   if v_due = 0 then
-    return jsonb_build_object('r', 'idle', 'back', n_back, 'expired', n_expired);
+    return jsonb_build_object('r', 'idle', 'back', n_back, 'expired', n_expired, 'mode_skipped', n_mode);
   end if;
 
   select * into v_state from private.email_flush_state s where s.id for update;
@@ -796,7 +930,8 @@ revoke all on function private.email_flush(timestamptz) from public, anon, authe
 -- ── 6. What one email says, read when it is sent ───────────
 
 -- The email for an outbox row, with everything its template needs, or {skip: why} when it should not go:
--- no_address, suppressed, off, gone, closed, started, cancelled, answered, not_in, moved, late, no_change.
+-- mode_off, test_mode (the mode), no_address, suppressed, off, gone, closed, started, cancelled, answered, not_in,
+-- moved, late, no_change.
 create or replace function private.email_job(p_row private.email_outbox)
 returns jsonb
 language plpgsql
@@ -805,7 +940,8 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_to text := private.email_address(p_row.user_id);
+  v_held text := private.email_mode_skip(p_row.user_id);
+  v_to text;
   v_name text;
   v_game public.games;
   v_starts timestamptz;
@@ -813,6 +949,11 @@ declare
   v_turf record;
   v_players integer;
 begin
+  -- The mode first: emails off, or this account isn't the site owner's while only they get emails.
+  if v_held is not null then
+    return jsonb_build_object('skip', v_held);
+  end if;
+  v_to := private.email_address(p_row.user_id);
   if v_to is null then
     return jsonb_build_object('skip', 'no_address');
   end if;
@@ -1173,6 +1314,103 @@ grant execute on function public.email_prefs_get(text, uuid) to anon, authentica
 grant execute on function public.email_prefs_set(text, uuid, boolean, boolean, boolean) to anon, authenticated;
 grant execute on function public.email_unsubscribe(text, uuid, text) to anon, authenticated;
 grant execute on function public.email_suppress(text, text, text) to anon, authenticated;
+
+-- ── 8b. The admin's Emails card (the site owner only) ─────
+
+-- The mode and the counts (private.email_admin_state). {error: forbidden} for anyone but the site owner.
+create or replace function public.admin_email_status(p_token text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  k text := public._caller_key(p_token);
+begin
+  if k is null or not coalesce(public._is_admin_key(k), false) then
+    return jsonb_build_object('error', 'forbidden');
+  end if;
+  return private.email_admin_state();
+end;
+$$;
+
+-- Set the mode: off, owner_only or on. Answers as admin_email_status; {error: bad} for any other mode.
+create or replace function public.admin_email_set_mode(p_token text, p_mode text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  k text := public._caller_key(p_token);
+begin
+  if k is null or not coalesce(public._is_admin_key(k), false) then
+    return jsonb_build_object('error', 'forbidden');
+  end if;
+  if p_mode is null or p_mode not in ('off', 'owner_only', 'on') then
+    return jsonb_build_object('error', 'bad');
+  end if;
+  insert into private.email_settings as s (name, value, updated_at)
+  values ('mode', p_mode, now())
+  on conflict (name) do update
+     set value = excluded.value, updated_at = now()
+   where s.value is distinct from excluded.value;
+  return private.email_admin_state();
+end;
+$$;
+
+-- "Send me one of each": where the samples go, the site owner's own Google-confirmed address (the account whose
+-- users.email Google confirmed, private.email_address, and is itself the e: key of public._is_admin_key), with that
+-- account's id (the link that turns emails off) and first name. At most once in 10 minutes: {r: wait, seconds}.
+-- {r: no_address} when there is no such account. Sends nothing itself and writes nothing to the outbox.
+create or replace function public.admin_email_test(p_token text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  k text := public._caller_key(p_token);
+  v_user uuid;
+  v_to text;
+  v_name text;
+  v_ok boolean;
+  v_last timestamptz;
+begin
+  if k is null or not coalesce(public._is_admin_key(k), false) then
+    return jsonb_build_object('error', 'forbidden');
+  end if;
+  select u.id, private.email_address(u.id), left(nullif(split_part(btrim(coalesce(u.name::text, '')), ' ', 1), ''), 40)
+    into v_user, v_to, v_name
+    from public.users u
+   where u.email is not null
+     and coalesce(public._is_admin_key('e:' || lower(btrim(u.email::text))), false)
+     and private.email_address(u.id) is not null
+   order by u.created_at, u.id
+   limit 1;
+  if v_to is null then
+    return jsonb_build_object('r', 'no_address');
+  end if;
+  insert into private.email_settings as s (name, value, updated_at)
+  values ('test_at', to_char(now() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), now())
+  on conflict (name) do update
+     set value = excluded.value, updated_at = now()
+   where s.updated_at <= now() - interval '10 minutes'
+  returning true into v_ok;
+  if v_ok is null then
+    select s.updated_at into v_last from private.email_settings s where s.name = 'test_at';
+    return jsonb_build_object('r', 'wait', 'seconds', greatest(1, ceil(extract(epoch from v_last + interval '10 minutes' - now())))::integer);
+  end if;
+  return jsonb_build_object('r', 'ok', 'to', v_to, 'user_id', v_user, 'name', v_name);
+end;
+$$;
+
+revoke all on function public.admin_email_status(text) from public;
+revoke all on function public.admin_email_set_mode(text, text) from public;
+revoke all on function public.admin_email_test(text) from public;
+grant execute on function public.admin_email_status(text) to anon, authenticated;
+grant execute on function public.admin_email_set_mode(text, text) to anon, authenticated;
+grant execute on function public.admin_email_test(text) to anon, authenticated;
 
 -- ── 9. game_update: the date or start time changed (game_time_changed) ──
 
