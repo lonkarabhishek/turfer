@@ -73,9 +73,12 @@ import { post as whatIsDlsMethodCricket } from "./posts/what-is-dls-method-crick
 import { post as howToMakeACricketPointsTable } from "./posts/how-to-make-a-cricket-points-table";
 // 2026-11-06: data post, turfs in Hadapsar, Pune.
 import { post as turfsInHadapsarPune } from "./posts/turfs-in-hadapsar-pune";
+// 2026-11-10: data post, turfs in Wagholi, Pune.
+import { post as turfsInWagholiPune } from "./posts/turfs-in-wagholi-pune";
 
 // Ordered newest-first, but the listing page sorts by publishedAt anyway.
 export const ALL_POSTS: Post[] = [
+  turfsInWagholiPune,
   turfsInHadapsarPune,
   howToMakeACricketPointsTable,
   whatIsDlsMethodCricket,

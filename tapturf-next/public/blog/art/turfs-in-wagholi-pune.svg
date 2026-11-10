@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img" aria-labelledby="t"><title id="t">Summary card for turfs in Wagholi, Pune: 8 listed, a ₹900 typical weekday evening rate, ₹3,000 highest weekday evening, 3 open 24 hours, and a bar chart of weekday evening prices by venue</title>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1F14"/><stop offset="1" stop-color="#123524"/></linearGradient></defs>
+<rect width="1200" height="675" fill="url(#bg)"/>
+<g font-family="Arial, Helvetica, sans-serif" fill="#FFFFFF">
+<text x="80" y="105" font-size="46" font-weight="700">Turfs in Wagholi, Pune</text>
+<text x="80" y="145" font-size="24" fill-opacity="0.7">Wagholi, listed on TapTurf, 10 Nov 2026</text>
+<g>
+<rect x="80" y="190" width="240" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="104" y="258" font-size="56" font-weight="700" fill="#4ADE80">8</text>
+<text x="104" y="294" font-size="20" fill-opacity="0.8">turfs listed</text>
+<rect x="340" y="190" width="240" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="364" y="258" font-size="50" font-weight="700" fill="#E0A92E">₹900</text>
+<text x="364" y="294" font-size="20" fill-opacity="0.8">typical evening hour</text>
+<rect x="600" y="190" width="240" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="624" y="258" font-size="50" font-weight="700" fill="#E0A92E">₹3,000</text>
+<text x="624" y="294" font-size="20" fill-opacity="0.8">highest evening hour</text>
+<rect x="860" y="190" width="260" height="130" rx="14" fill="#FFFFFF" fill-opacity="0.08"/>
+<text x="884" y="258" font-size="56" font-weight="700" fill="#4ADE80">3</text>
+<text x="884" y="294" font-size="20" fill-opacity="0.8">open 24 hours</text>
+</g>
+<text x="80" y="362" font-size="22" font-weight="700" fill-opacity="0.9">Weekday evening rate per hour, priced venues</text>
+<g font-size="18">
+<text x="80" y="392">Arya Sports Complex</text><rect x="360" y="375" width="84" height="22" rx="5" fill="#16A34A"/><text x="456" y="392" font-weight="700">₹700</text>
+<text x="80" y="422">SATAV PATIL SPORTS</text><rect x="360" y="405" width="96" height="22" rx="5" fill="#16A34A"/><text x="468" y="422" font-weight="700">₹800</text>
+<text x="80" y="452">Boundary Bliss Sports</text><rect x="360" y="435" width="108" height="22" rx="5" fill="#16A34A"/><text x="480" y="452" font-weight="700">₹900</text>
+<text x="80" y="482">What-A-Shot Turf Grounds</text><rect x="360" y="465" width="108" height="22" rx="5" fill="#16A34A"/><text x="480" y="482" font-weight="700">₹900</text>
+<text x="80" y="512">Sportygen Sports Club</text><rect x="360" y="495" width="156" height="22" rx="5" fill="#16A34A"/><text x="528" y="512" font-weight="700">₹1,300</text>
+<text x="80" y="542">PlayOrbit</text><rect x="360" y="525" width="360" height="22" rx="5" fill="#E0A92E"/><text x="732" y="542" font-weight="700">₹3,000</text>
+</g>
+<text x="80" y="592" font-size="16" fill-opacity="0.6">Listed prices, not owner-confirmed. 2 venues have no listed price. tapturf.in</text>
+</g></svg>
