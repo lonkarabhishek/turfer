@@ -21,6 +21,9 @@ import { turfPath } from "@/lib/utils/turfPath";
 import { cardPriceOf, visualsToDraw } from "@/lib/ask/visuals";
 import { openAtWords } from "@/lib/ai/openAt";
 import { CompareTableView, HostCardView, PriceChartView, ResultsMapView } from "./AskVisuals";
+import { FreeHoursLine } from "@/components/turf/FreeHoursLine";
+import { FREE_FILTER_LABEL, freeHref, freeLine, parseFreeCard, type FreeLine } from "@/lib/availability/free";
+import { useEffect, useState } from "react";
 
 /** Compact cards for inside the chat. Horizontal snap row on phones. */
 
@@ -35,18 +38,21 @@ export function TurfMiniCard({
   priority = false,
   n,
   price: shown,
+  free = null,
 }: {
   turf: Turf & { distanceKm?: number };
   priority?: boolean;
   n?: number;
   price?: Pick<PriceSummary, "label" | "kind"> | null;
+  /** A free hours answer: the times its owner marked free (the card then opens the page at its free slots). */
+  free?: FreeLine | null;
 }) {
   const img = turfPhotos(turf)[0] ?? null;
   const price = shown === undefined ? summarisePrice(turf) : (shown ?? { label: "Prices not listed yet", kind: "unknown" });
   const area = areaFor(turf);
   return (
     <Link
-      href={turfPath(turf)}
+      href={free ? freeHref(turfPath(turf)) : turfPath(turf)}
       className="group snap-start shrink-0 w-[196px] sm:w-[208px] rounded-2xl bg-white border border-primary-100 shadow-soft overflow-hidden hover:border-primary-200 hover:shadow-elevated transition-[box-shadow,border-color] duration-200 cursor-pointer"
     >
       <div className="relative aspect-[4/3] bg-primary-100">
@@ -98,9 +104,28 @@ export function TurfMiniCard({
             <span className="text-primary-600">{price.label}</span>
           )}
         </p>
+        {free && <FreeHoursLine line={free} compact />}
       </div>
     </Link>
   );
+}
+
+/**
+ * The clock a free hours answer's cards are shown at: moved on every minute
+ * while the answer has any, so an hour drops off once it starts (and a
+ * thread opened later shows only what is still to come). Null for an
+ * answer without free hours.
+ */
+function useFreeClock(on: boolean): number | null {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    if (!on) return;
+    const tick = () => setNow(Date.now());
+    tick();
+    const id = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(id);
+  }, [on]);
+  return on ? now : null;
 }
 
 export function GameMiniCard({ game }: { game: Game & { distanceKm?: number } }) {
@@ -205,6 +230,7 @@ export function FilterChips({ res }: { res: AskResponse }) {
   // search's players are the spots it needs; the turf ones are no game's, nor the game ones a turf's.
   const game = res.intent === "find_game";
   if (f.players) out.push(res.router === 10 && game ? `${f.players}+ spot${f.players === 1 ? "" : "s"} left` : `${f.players} players`);
+  if (f.freeHours) out.push(FREE_FILTER_LABEL);
   if (!game) {
     if (f.claimed) out.push("Claimed");
     if (f.ownerPrices) out.push("Owner's prices");
@@ -245,6 +271,9 @@ export function AskResultBody({
   const v = res.visuals;
   const numbered = drawn.includes("map");
   const compared = drawn.includes("compare") ? v?.compare : undefined;
+  // A free hours answer: each card's marked free times, at the clock now.
+  const freeNow = useFreeClock(!!res.freeSlots);
+  const freeOf = (id: string) => (res.freeSlots && freeNow != null ? freeLine(parseFreeCard(res.freeSlots[id]), freeNow) : null);
 
   return (
     <div className="mt-2.5">
@@ -274,7 +303,7 @@ export function AskResultBody({
             <Row>
               {turfs.map((t, i) => (
                 // With a sport, the price the chart reads (none sent: its own, as on a reply saved before them).
-                <TurfMiniCard key={t.id} turf={t} priority={i < 2} n={numbered ? i + 1 : undefined} price={cardPriceOf(res.cardPrices, t.id)} />
+                <TurfMiniCard key={t.id} turf={t} priority={i < 2} n={numbered ? i + 1 : undefined} price={cardPriceOf(res.cardPrices, t.id)} free={freeOf(t.id)} />
               ))}
             </Row>
           )}

@@ -107,7 +107,8 @@ export function turfExtrasAsked(f: AskReading): TurfExtra[] {
 }
 
 /** A previous exchange, sent back so follow-ups can build on it. */
-export type AskTurn = { user: string; reply: string; filters: Partial<AskReading> & { top?: string[] } };
+/** free_hours: that turn answered which turfs have hours marked free (lib/ask/freeHours.ts), so "and tomorrow?" asks the same. */
+export type AskTurn = { user: string; reply: string; filters: Partial<AskReading> & { top?: string[]; free_hours?: boolean } };
 /** What the player is looking at when they ask (a turf page, a city page). turfId: that venue's row, as two can share a name in one city. */
 export type AskContext = { turf?: string | null; turfId?: string | null; city?: CityId | null };
 

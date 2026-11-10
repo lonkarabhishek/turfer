@@ -10,7 +10,8 @@
 //   { "claimed": [turf ids], "claimedCities": { "<city>": n }, "reports": { "<turf id>": n },
 //     "stars": { "<turf id>": players' average stars }, "ownerPrices": [turf ids],
 //     "ownerPriceCities": { "<city>": n }, "reportCities": { "<city>": n },
-//     "hours": { "<turf id>": week }, "allDay": [turf ids] }
+//     "hours": { "<turf id>": week }, "allDay": [turf ids],
+//     "free": [turf ids whose owners' free hours players see now (public.free_slots_now, read when the replies are saved)] }
 // (hours and allDay: scripts/ask-eval/hours-truth.mjs adds them.) Without it
 // those facts are skipped (said as such). Exit code 1 when any check fails.
 // npm run test:ask tests the checks themselves (grade.test.mjs).
@@ -22,6 +23,8 @@ import { fileURLToPath } from "node:url";
 const BOOKING_CLAIM = /\bbook(?:ed|ing)?\s+(?:it\s+)?(?:on|through|via|with)\s+tapturf\b|\bbook\s+(?:now|online|instantly)\b|\binstant\s+booking\b/gi;
 const BOOKING_APP = /\bplayo\b|\bhudle\b|\bkhelomore\b|\bplayspots\b|\bturf\s*town\b|\bkixar\b|\bbookmyshow\b|\bturfwala\b|\bsporloc\b/i;
 const NEGATION = /\b(?:no|not|nothing|never|nobody|cannot|can't|cant|don't|dont|doesn't|isn't|aren't|won't)\b/i;
+// Free hours (lib/ask/freeHours.ts SURE_COPY): never sure, never instant.
+const SURE_COPY = /\b(?:guarantee[ds]?|for sure|definitely (?:free|available)|book (?:now|instantly|online)|instant(?:ly)?|confirmed (?:free|slot)|100%)\b/i;
 
 /**
  * The words that claim a booking, or name a booking app; null when none do.
@@ -171,6 +174,29 @@ export const FACTS = {
     const none = city ? (counts?.[city] ?? 0) === 0 : counts && Object.values(counts).every((n) => !n);
     if (!counts || !none) return null;
     return /^No\b/.test(j.reply ?? "") ? null : `${city ?? "TapTurf"} has none, but the reply reads "${j.reply}"`;
+  },
+  // A free hours answer: never sure of a slot, never instant.
+  no_sure_copy: (j) => {
+    const m = SURE_COPY.exec(say(j));
+    return m ? `sure or instant copy "${m[0]}"` : null;
+  },
+  // Free times only on cards shown, and (with truth) only turfs whose owners' free hours show now.
+  free_cards_marked: (j, _arg, _q, truth) => {
+    const free = Object.keys(j.freeSlots ?? {});
+    const shown = new Set(cards(j).map((t) => t.id));
+    const stray = free.filter((id) => !shown.has(id));
+    if (stray.length) return `${stray.length} free card(s) not among the cards`;
+    if (!truth?.free) return "skip";
+    const set = new Set(truth.free);
+    const bad = free.filter((id) => !set.has(id));
+    return bad.length ? `${bad.length} card(s) said free that no owner marked: ${bad.join(", ")}` : null;
+  },
+  // With free times, the reply says the owner marked them; with none, it says so plainly (never "Here are free turfs").
+  free_reply_honest: (j) => {
+    const any = Object.keys(j.freeSlots ?? {}).length > 0;
+    const r = j.reply ?? "";
+    if (any) return /\bmarked free\b/i.test(r) ? null : `free cards, but the reply reads "${r}"`;
+    return /^No\b|hasn't marked|couldn't check/i.test(r) ? null : `no free cards, but the reply reads "${r}"`;
   },
   answer_truth_claimed: (j, name, _q, truth) => {
     if (!truth) return "skip";

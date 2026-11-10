@@ -88,6 +88,21 @@ import {
 import { answerLive } from "@/lib/ai/liveAnswer";
 import { verifyLiveCode } from "@/lib/live/codes";
 import { getLive, liveWriteKey } from "@/lib/live/server";
+import { getFreeSlots } from "@/lib/queries/freeSlots";
+import { freeCardOf, type FreeCard, type FreeRow } from "@/lib/availability/free";
+import {
+  FREE_UNREAD_LINE,
+  FREE_WHERE_LINE,
+  asksFreeHours,
+  freeFollowups,
+  freeNoneReply,
+  freeVenueReply,
+  freeWindow,
+  planFree,
+  readerHours,
+  type FreePickTurf,
+} from "@/lib/ask/freeHours";
+import { turfPlaysSport } from "@/lib/sports";
 
 // GET /api/ask?q=...&city=pune&lat=..&lng=..
 // One box, four intents: find a turf, find a game, compare venues,
@@ -217,7 +232,7 @@ function parseHistory(raw: string | null, version: RouterVersion): AskTurn[] {
       if (!h || typeof h.user !== "string") return [];
       const f = (h.filters && typeof h.filters === "object" ? h.filters : {}) as Record<string, unknown>;
       const keep: Record<string, unknown> = {};
-      for (const k of ["intent", "tool", "city", "sport", "areas", "turf_names", "max_price_per_hour", "time", "when", "skill", "open_24x7", "wants_nearby", "needs", "sort", "free_text", ...(version === 10 ? HISTORY_V10 : [])]) {
+      for (const k of ["intent", "tool", "city", "sport", "areas", "turf_names", "max_price_per_hour", "time", "when", "skill", "open_24x7", "wants_nearby", "needs", "sort", "free_text", "free_hours", ...(version === 10 ? HISTORY_V10 : [])]) {
         if (f[k] != null && f[k] !== false && !(Array.isArray(f[k]) && (f[k] as unknown[]).length === 0)) keep[k] = f[k];
       }
       if (version === 10) {
@@ -231,6 +246,8 @@ function parseHistory(raw: string | null, version: RouterVersion): AskTurn[] {
       // A venue named earlier stays in the conversation ("is it open late?"); trimmed like the rest.
       if (typeof keep.free_text === "string") keep.free_text = keep.free_text.slice(0, 80);
       else delete keep.free_text;
+      // A free hours answer (lib/ask/freeHours.ts): only true, so "and tomorrow?" asks the same.
+      if (keep.free_hours !== true) delete keep.free_hours;
       if (Array.isArray(f.top)) keep.top = (f.top as unknown[]).filter((x) => typeof x === "string").slice(0, 5).map((x) => String(x).slice(0, 80));
       return [{ user: String(h.user).slice(0, MAX_Q), reply: String(h.reply ?? "").slice(0, 200), filters: keep as AskTurn["filters"] }];
     });
@@ -559,8 +576,87 @@ export async function GET(req: Request) {
   // name in one city (three Huddle Arenas in Vadodara), so "this turf" is never looked up by name.
   const page = { name: ctx.turf, turf: ctx.turfId ? (turfs.find((t) => t.id === ctx.turfId) ?? null) : null };
 
+  // Free hours ("which turf is free near me", "any turf free tonight", "is
+  // Dribble Den free at 7"): which turfs' owners marked hours free on
+  // TapTurf, said from those rows (lib/ask/freeHours.ts), never by the model,
+  // with the usual cards carrying their free times. A turf with no hours
+  // marked is never said to be free. Asked of a list ("list"), or of one venue
+  // ("venue"); a follow-up that only names a time ("and tomorrow?") after
+  // such an answer asks the same.
+  const freeNow = Date.now();
+  const freeWin = freeWindow(q, freeNow);
+  const lastTurn = history[history.length - 1];
+  const carriesFree = lastTurn?.filters.free_hours === true && freeWin != null && filters.intent === "find_turf";
+  const freeMode: "list" | "venue" | null =
+    filters.intent === "question" && asksFreeHours(q, freeNow)
+      ? "venue"
+      : ((filters.intent === "find_turf" || filters.intent === "other" || filters.intent === "find_game") && asksFreeHours(q, freeNow)) || carriesFree
+        ? "list"
+        : null;
+  let freeLog: Record<string, unknown> | null = null;
+
   const handlerStart = performance.now();
   try {
+    if (freeMode === "list") {
+      const read = await getFreeSlots(null, readerHours(freeWin, freeNow)).catch((e) => {
+        console.error("ask: free hours read failed", e instanceof Error ? e.message : e);
+        return null;
+      });
+      const byId = new Map<string, Turf>(turfs.map((t) => [t.id, t]));
+      const pickTurfs = new Map<string, FreePickTurf>();
+      for (const r of read?.rows ?? []) {
+        const t = byId.get(r.id);
+        if (t) pickTurfs.set(r.id, { id: t.id, city: t.city ?? null, sports: t.sports ?? [], lat: t.lat ?? null, lng: t.lng ?? null, area: areaFor(t) });
+      }
+      const sportPage = filters.sport ? sportBySlug(filters.sport) : undefined;
+      const plan = planFree({
+        rows: read?.rows ?? null,
+        turfs: pickTurfs,
+        names: (id) => place(byId.get(id)!).name,
+        cityLabel: (id) => label(id),
+        window: freeWin,
+        nowMs: freeNow,
+        // Near the shared location unless a city is named; else the city named, the page's, the visitor's.
+        named: askedCity ?? filters.city,
+        fallbackCity: ctx.city ?? prefCity ?? null,
+        loc,
+        plays: sportPage ? (sp) => turfPlaysSport(sp, sportPage) : null,
+        areas: filters.areas,
+      });
+      const { near, city } = plan;
+      // The "Free hours marked" chip only over cards that have them.
+      const freeFilters = { ...(base.filters as Record<string, unknown>), city, freeHours: plan.picks.length > 0 };
+      const freeMemo = { ...(base.memo as Record<string, unknown>), intent: "find_turf", city, free_hours: true };
+      if (plan.picks.length) {
+        body = {
+          ...base,
+          intent: "find_turf",
+          reply: plan.reply,
+          followups: freeFollowups(plan.when, true),
+          filters: freeFilters,
+          memo: freeMemo,
+          relaxed: [],
+          total: plan.picks.length,
+          turfs: plan.picks.map((p) => card(p.km != null ? { ...byId.get(p.id)!, distanceKm: p.km } : byId.get(p.id)!)),
+          freeSlots: Object.fromEntries(plan.picks.map((p) => [p.id, p.card])) satisfies Record<string, FreeCard>,
+        };
+      } else {
+        // None marked (or the read failed): said plainly, and the usual cards for the place, to call or WhatsApp. Nothing on them says free.
+        const asked = { ...filters, intent: "find_turf" as const, free_text: null, turf_names: [], time: null, when: null, open_24x7: false, sort: near ? ("nearby" as const) : ("rating" as const), wants_nearby: near, city: city && isCity(city) ? city : null, ...(version === 10 ? NO_EXTRAS : {}) };
+        const r = near || city ? applyAskFilters(turfs, asked, { prefCity, loc, limit: 6, askedCity }) : null;
+        const shownCity = r?.city ?? city;
+        const cards = r?.turfs ?? [];
+        const reply =
+          plan.kind === "unread"
+            ? FREE_UNREAD_LINE
+            : !near && !city
+              ? `${freeNoneReply({ where: "", when: plan.when, cards: null, city: null })} ${filters.wants_nearby ? FREE_WHERE_LINE : ""}`.trim()
+              : freeNoneReply({ where: plan.where, when: plan.when, cards: cards.length ? (near ? "nearest" : "rated") : null, city: label(shownCity) });
+        // total: the cards shown, so nothing reads as "400 matches" under "none marked".
+        body = { ...base, intent: "find_turf", reply, followups: freeFollowups(plan.when, false), filters: { ...freeFilters, city: shownCity }, memo: freeMemo, relaxed: [], total: cards.length, turfs: cards.map(card) };
+      }
+      freeLog = { mode: "list", kind: plan.kind, shown: plan.picks.length, near, city, window: plan.when || null };
+    } else
     switch (filters.intent) {
       case "find_game": {
         const r = applyGameFilters(await loadOpenGames(), filters, { prefCity, loc, limit: 10, version });
@@ -640,6 +736,35 @@ export async function GET(req: Request) {
         const [hit] = resolveWithPage(turfs, names.slice(0, 1), prefer, page);
         if (!hit?.turf) {
           body = { ...base, relaxed: [], total: 0, missing: filters.turf_names, answer: null };
+          break;
+        }
+        // "Is Dribble Den free tonight": its owner's marked hours, from the rows, never the model's guess.
+        if (freeMode === "venue") {
+          const read = await getFreeSlots(null, readerHours(freeWin, freeNow)).catch(() => null);
+          const venue = hit.turf;
+          const row: FreeRow | undefined = read?.rows.find((r) => r.id === venue.id);
+          const span = freeWin ?? { fromMs: freeNow, toMs: freeNow + 36 * 3_600_000, words: "" };
+          const exact = row ? freeCardOf(row, freeNow, span.toMs, span.fromMs) : null;
+          // Not at the time asked: its other free hours that day, said as such.
+          const other = !exact && row && freeWin?.wide ? freeCardOf(row, freeNow, freeWin.wide.toMs, freeWin.wide.fromMs) : null;
+          const freeCard = exact ?? other;
+          const name = place(venue).name;
+          const reply = !read
+            ? FREE_UNREAD_LINE
+            : freeVenueReply({ name, found: !!freeCard, when: span.words, requests: !!freeCard?.requests, otherDay: other ? freeWin!.wide!.words : null });
+          body = {
+            ...base,
+            intent: "find_turf",
+            reply,
+            followups: freeFollowups(span.words, !!freeCard),
+            filters: { ...(base.filters as Record<string, unknown>), freeHours: !!freeCard },
+            memo: { ...(base.memo as Record<string, unknown>), intent: "find_turf", free_hours: true, free_text: venue.name },
+            relaxed: [],
+            total: 1,
+            turfs: [card(venue)],
+            ...(freeCard ? { freeSlots: { [venue.id]: freeCard } } : {}),
+          };
+          freeLog = { mode: "venue", read: !!read, shown: freeCard ? 1 : 0, window: span.words || null };
           break;
         }
         // A venue typed that isn't in the player's city (the one asked
@@ -888,6 +1013,8 @@ export async function GET(req: Request) {
       // _router: the reading was router v10's (its fields are in the filters above); _eval: an eval ask (scripts/ask-eval).
       ...(version === 10 ? { _router: 10 } : {}),
       ...(choice.eval ? { _eval: true } : {}),
+      // _free: a free hours answer (how many turfs, near or which city, the time asked), for tuning.
+      ...(freeLog ? { _free: freeLog } : {}),
       _src: via,
       _t: ms,
       ...(usage.calls ? { _usage: usage } : {}),

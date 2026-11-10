@@ -65,3 +65,24 @@ test("the owner's prices: none on TapTurf means the cards are none and the reply
   assert.match(fails[0], /without the owner's prices/);
   assert.match(fails[1], /has none/);
 });
+
+test("free hours: times only on cards shown and marked by an owner; the reply honest either way; never sure", () => {
+  const id = "dddddddd-0000-4000-8000-000000000001";
+  const card = { updatedAt: "2026-11-10T09:00:00Z", requests: false, days: [{ date: "2026-11-10", keys: ["2026-11-10T19:00"] }] };
+  const found = { reply: "Dribble Den in Bangalore has hours marked free tonight by its owner. For bookings, contact the turf directly.", turfs: [{ id, name: "Dribble Den" }], freeSlots: { [id]: card }, followups: [] };
+  assert.equal(FACTS.free_reply_honest(found), null);
+  assert.equal(FACTS.free_cards_marked(found, undefined, {}, { free: [id] }), null);
+  assert.match(FACTS.free_cards_marked(found, undefined, {}, { free: [] }), /no owner marked/);
+  assert.equal(FACTS.free_cards_marked(found, undefined, {}, null), "skip");
+  assert.match(FACTS.free_cards_marked({ ...found, turfs: [] }), /not among the cards/);
+  const none = { reply: "No turf in Pune has marked free hours for tonight on TapTurf yet. Call or WhatsApp a turf to ask. Here are the best rated in Pune.", turfs: [{ id: "x", name: "X" }], followups: [] };
+  assert.equal(FACTS.free_reply_honest(none), null);
+  assert.equal(FACTS.free_cards_marked(none, undefined, {}, { free: [] }), null);
+  assert.match(FACTS.free_reply_honest({ ...none, reply: "Here are turfs free tonight in Pune." }), /no free cards/);
+  assert.match(FACTS.free_reply_honest({ ...found, reply: "Here are turfs in Bangalore." }), /free cards, but/);
+  assert.equal(FACTS.free_reply_honest({ reply: "Dribble Den hasn't marked free hours for tonight on TapTurf. Call or WhatsApp the turf to ask." }), null);
+  assert.equal(FACTS.no_sure_copy(found), null);
+  assert.match(FACTS.no_sure_copy({ reply: "Guaranteed free at 7 PM, book now.", followups: [] }), /sure or instant/);
+  const q = { expect: { intent: "find_turf", free_hours: true }, facts: ["free_reply_honest"] };
+  assert.deepEqual(gradeReply(q, { ...found, router: 10, intent: "find_turf", memo: { free_hours: true } }, null).fails, []);
+});

@@ -41,6 +41,8 @@ export type AskResponse = {
     openAt?: string | null;
     freeToJoin?: boolean;
     turfBooked?: boolean;
+    /** A free hours answer (lib/ask/freeHours.ts): the cards are turfs whose owners marked hours free. */
+    freeHours?: boolean;
   };
   memo: Record<string, unknown>;
   needsLocation: boolean;
@@ -63,6 +65,8 @@ export type AskResponse = {
   visuals?: AskVisuals;
   /** find_turf with a sport: the cards' prices where the sport's rule changes them (lib/ask/cards.ts cardPrices), read with cardPriceOf. */
   cardPrices?: CardPrices;
+  /** A free hours answer: each card's free times its owner marked, by turf id (lib/availability/free.ts FreeCard), read with freeLine. */
+  freeSlots?: Record<string, unknown>;
   /** link: under an answer about what people say, the venue's Google reviews ("Read Google reviews"). */
   answer?: { answer: string; covered: boolean; link?: { label: string; href: string } } | null;
   /** For create_game: the sentence to draft the wizard from. */
