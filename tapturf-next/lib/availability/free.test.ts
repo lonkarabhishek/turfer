@@ -124,7 +124,19 @@ test("the card's line: the first day with an hour to come, at most four times an
   l = freeLine(tmrw, NOW)!;
   assert.equal(l.text, "Free tomorrow: 7 AM, 8 AM");
   assert.equal(l.requests, true);
-  assert.equal(dayWord({ date: "2026-11-13" }, NOW), "Fri");
+  assert.equal(dayWord("2026-11-13T19:00", NOW), "Fri");
+  // By the hour itself: tonight's after-midnight hours are "tonight", whichever business day holds them.
+  assert.equal(dayWord("2026-11-11T00:00", ist("2026-11-10 23:30")), "tonight");
+  assert.equal(dayWord("2026-11-11T07:00", ist("2026-11-10 23:30")), "tomorrow");
+  assert.equal(dayWord("2026-11-11T02:00", ist("2026-11-11 01:10")), "tonight");
+  assert.equal(dayWord("2026-11-11T06:00", ist("2026-11-11 01:10")), "today");
+  assert.equal(dayWord("2026-11-12T01:00", NOW), "Thu", "two nights on: its weekday");
+  // An overnight turf and a 24-hour turf at 11:30 PM say the same of 12 AM.
+  const at = ist("2026-11-10 23:30");
+  const overnight = freeCardOf(row({ updatedAt: iso(at) }), at, at + 36 * HOUR)!;
+  const round = freeCardOf(row({ updatedAt: iso(at), hours: H({ is_24x7: true }) }), at, at + 36 * HOUR)!;
+  assert.equal(freeLine(overnight, at)!.text, "Free tonight: 12 AM, 1 AM");
+  assert.equal(freeLine(round, at)!.text, "Free tonight: 12 AM, 1 AM, 2 AM, 3 AM +20");
   // Stale, or every hour started: no line.
   assert.equal(freeLine(card, NOW + 25 * HOUR), null);
   assert.equal(freeLine({ updatedAt: iso(NOW), requests: false, days: [{ date: "2026-11-10", keys: ["2026-11-10T15:00"] }] }, NOW), null);

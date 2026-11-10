@@ -1,5 +1,5 @@
 import type { SlotHours, SlotKey } from "./slots";
-import { DAYS_SHOWN, agoText, clockLabel, freeDays, isFresh, isSlotKey, istDate, keyTime, slotDays } from "./slots";
+import { DAYS_SHOWN, agoText, clockLabel, freeDays, isFresh, isSlotKey, istDate, keyTime, slotDays, slotKey } from "./slots";
 import { contactFieldsOf, hasUsableContact } from "../utils/contact";
 
 // Relative imports only, so node --test runs this (lib/availability/free.test.ts).
@@ -174,13 +174,20 @@ export function keyLabel(key: SlotKey): string {
 const WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const addDays = (date: string, n: number) => new Date(Date.parse(`${date}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
 
-/** A business day as a card says it, at nowMs: "today", "tomorrow", "tonight" (last night's after-midnight hours), else "Thu". */
-export function dayWord(day: Pick<FreeDay, "date" | "night">, nowMs: number): string {
+/**
+ * When a card's first free hour is, at nowMs, by the hour itself (not its
+ * business day, so an overnight turf's 12 AM and a 24-hour turf's read the
+ * same): "today"; "tonight" for an hour before 5 AM that is tonight's (after
+ * midnight, or now in the small hours); "tomorrow"; else its weekday ("Thu").
+ */
+export function dayWord(key: SlotKey, nowMs: number): string {
   const today = istDate(nowMs);
-  if (day.night || day.date < today) return "tonight";
-  if (day.date === today) return "today";
-  if (day.date === addDays(today, 1)) return "tomorrow";
-  return WEEK[new Date(`${day.date}T00:00:00Z`).getUTCDay()];
+  const date = key.slice(0, 10);
+  const small = Number(key.slice(11, 13)) < 5;
+  const nowSmall = Number(slotKey(nowMs).slice(11, 13)) < 5;
+  if (date === today) return small && nowSmall ? "tonight" : "today";
+  if (date === addDays(today, 1)) return small && !nowSmall ? "tonight" : "tomorrow";
+  return WEEK[new Date(`${date}T00:00:00Z`).getUTCDay()];
 }
 
 export type FreeLine = {
@@ -216,7 +223,7 @@ export function freeLine(card: FreeCard | null | undefined, nowMs: number): Free
     }
     const times = keys.slice(0, FREE_LINE_TIMES).map(keyLabel);
     const more = keys.length - times.length;
-    const lead = `Free ${dayWord(d, nowMs)}`;
+    const lead = `Free ${dayWord(keys[0], nowMs)}`;
     return { lead, times, more, text: `${lead}: ${times.join(", ")}${more > 0 ? ` +${more}` : ""}`, marked: markedLine(card.updatedAt, nowMs), requests: card.requests };
   }
   return null;
