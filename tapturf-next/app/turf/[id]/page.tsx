@@ -49,16 +49,28 @@ import { TurfSuggestions, NoContactNotice } from "@/components/turf/TurfSuggesti
 import { bookingFeeLine, bookingLine, membersNote, noContactLinks, turfCheck } from "@/lib/turfPage/noContact";
 import { NoteInterest } from "@/components/analytics/VisitTracker";
 
-// A day: since the 20 Oct outage the cache queue purges a turf's page
-// when the turf, its reviews or their votes, suggestions, games, claim or
-// trending pick change, so the timer is only a backstop. A refresh is one
-// turf_page call, plus one turf_managers call on a claimed turf (the
+// A week (a day until 10 Nov): since the 20 Oct outage the cache queue
+// purges a turf's page within about a minute when the turf, its reviews
+// or their votes, suggestions, games, claim or trending pick change, so
+// the timer is only a backstop for writes no trigger sees. Crawlers came
+// back to each page about every 1.4 days and re-rendered it on the day
+// timer (about 2,800 turf_page calls a day with no deploy). A refresh is
+// one turf_page call, plus one turf_managers call on a claimed turf (the
 // "Managed by @name" line; the queue also purges the page when one of its
 // managers changes their username or tagging switch, see
 // 20261028_turf_managers.sql). Nothing the page renders may be cached for
-// less than a day, or the page refreshes that often (the footer has its
-// own day-long city list for this reason, see getFooterCities).
-export const revalidate = 86400;
+// less than a week, or the page refreshes that often: the footer's city
+// list, the turf facts and the ground size peers are week-long entries for
+// this reason (getFooterCities, getTurfFacts, getGroundPeers;
+// lib/cache/revalidate.test.ts pins them).
+//
+// A page prerendered at deploy still gets a 15 to 30 minute first life
+// (loadTurfPage, lib/build/data.ts firstLifeOf), only while `next build`
+// renders it from the build-data step's files: a purge sent between that
+// read and go-live reached only the old deployment, and without one early
+// refresh that copy (hours, prices) would now be kept up to a week. It
+// costs at most one render per prerendered page per deploy.
+export const revalidate = 604800;
 
 // The [id] segment is the turf's slug (/turf/turf-up-hinjewadi). Old
 // links by id still resolve and 308 to the slug URL. Only the 300 most

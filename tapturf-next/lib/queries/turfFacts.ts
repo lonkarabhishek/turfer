@@ -19,8 +19,8 @@ async function readTurfFacts(): Promise<TurfFacts> {
  * the city and city+sport snippets and the turf titles. One paged read
  * of every active turf; only ids and keys are kept, never a number.
  *
- * Cached for a day and untagged, like getFooterCities: no page gains a
- * tag or a shorter revalidate (turf pages keep their day), and a snippet
+ * Cached for a week and untagged, like getFooterCities: no page gains a
+ * tag or a shorter revalidate (turf pages keep their week), and a snippet
  * a day behind a new phone number is fine. A regeneration skips the
  * data cache, so a warm instance also keeps it in memory for an hour,
  * and concurrent renders share one read. A failed read gives the last
@@ -33,7 +33,7 @@ async function readTurfFacts(): Promise<TurfFacts> {
  * promise only what the list rows show, as the build-data step decided.
  * Only pages call this.
  */
-const getTurfFactsCached = unstable_cache(readTurfFacts, ["turf-facts-v1"], { revalidate: 86400 });
+const getTurfFactsCached = unstable_cache(readTurfFacts, ["turf-facts-v1"], { revalidate: 604800 });
 const MEMO_MS = 3_600_000;
 let memo: { at: number; facts: TurfFacts } | null = null;
 let pending: Promise<TurfFacts | null> | null = null;

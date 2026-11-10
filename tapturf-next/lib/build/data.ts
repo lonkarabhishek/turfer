@@ -7,7 +7,7 @@
 // they prerendered (3 workers, 4 pages each, every worker reading the whole
 // turf list and the shared reads again), and during every build the live
 // site's reads on the same database timed out too. Now one step reads what
-// the pages share, one request at a time (3 at a time for turf pages),
+// the pages share, one request at a time (8 at a time for turf pages),
 // waiting out a slow database, and the pages read its files: page
 // generation sends the database nothing.
 //
@@ -156,7 +156,7 @@ export function recorded<T>(map: Record<string, T> | undefined, key: string): T 
  * its first refresh: 15, 20, 25 or 30 minutes, by its key. Turf purges are
  * revalidatePath calls, and those sent between the step and go-live reach
  * only the old deployment; one refresh soon after brings the page up to
- * date, and then it keeps its day. Spread over four marks so some 300
+ * date, and then it keeps its week. Spread over four marks so some 300
  * pages do not all refresh in the same minute.
  */
 export const FIRST_LIFE_S = [900, 1200, 1500, 1800] as const;

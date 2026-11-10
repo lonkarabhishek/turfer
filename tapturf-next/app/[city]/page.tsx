@@ -24,10 +24,15 @@ import { OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
 import { listingReach, reachOf } from "@/lib/seo/turfFacts";
 import { getTurfFacts } from "@/lib/queries/turfFacts";
+import { setListScope } from "@/lib/queries/listScope";
 
 // One page per city: a hard SEO landing so each city ranks for its own
-// local queries.
-export const revalidate = 600;
+// local queries. A day (10 minutes until 10 Nov): its own city's list posts
+// mark it stale (turf-data:<city>, lib/queries/listScope.ts), so its
+// turfs, prices, hours and pick follow the database within the list gap,
+// and another city's post no longer does. Only the other cities' counts
+// in its links can be up to the day old.
+export const revalidate = 86400;
 
 // Production builds render every live city up front (and the curated
 // ones, should the read fail); previews and local builds render none
@@ -62,6 +67,7 @@ export async function generateMetadata(
   { params }: { params: Promise<{ city: string }> }
 ): Promise<Metadata> {
   const { city } = await params;
+  setListScope(city);
   if (!isCity(city) || !(await isLiveCity(city))) return { title: "City not found", robots: ROBOTS_NOINDEX_FOLLOW };
   const label = labelFor(city);
   // The rows the page reads anyway (one read per render, React cache),
@@ -107,6 +113,7 @@ export async function generateMetadata(
 
 export default async function CityPage({ params }: { params: Promise<{ city: string }> }) {
   const { city } = await params;
+  setListScope(city);
   if (!isCity(city) || !(await isLiveCity(city))) notFound();
   const cityId = city as CityId;
   const label = labelFor(cityId);

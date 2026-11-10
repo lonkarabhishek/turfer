@@ -7,7 +7,7 @@ import { appTraceFiles, ERROR_PAGES, errorPageFiles, includeErrorPages } from ".
 import { buildData, FAILED, FIRST_LIFE_S, firstLifeOf, isFailed, manifestProblem, MANIFEST, MANIFEST_MAX_AGE_MS, recorded, type BuildDatasets, type Manifest } from "./data";
 import { buildDataDir } from "./env";
 import { backoffMs, createPatientFetch, readEach, retryAfterMs } from "./patient";
-import { CARD_COLUMNS, HOME_MARKET, livePicks, prerenderedListCities, prerenderTurfKeys, topTurfKeys, type TrendingRow } from "./reads";
+import { CARD_COLUMNS, HOME_MARKET, livePicks, prerenderedListCities, prerenderedTwinCities, prerenderTurfKeys, topTurfKeys, type TrendingRow } from "./reads";
 import { buildTripwire, createGuardedFetch } from "../supabase/guard";
 import { unusable, type ListMeta } from "../cache/rowStore";
 import { runBuildData, StepFailed, UNREACHABLE } from "../../scripts/build-data";
@@ -353,6 +353,16 @@ test("prerenderedListCities: the 8 biggest by live count (ties keep the list's o
   // Nashik not live: not added.
   assert.deepEqual(prerenderedListCities(live.filter((c) => c.id !== "nashik"), 2), ["hyderabad", "bangalore"]);
   assert.deepEqual(prerenderedListCities([]), []);
+});
+
+test("prerenderedTwinCities: the /c twins of cities with at least MIN_TURFS_TO_INDEX turfs, in the live list's order", () => {
+  const live = [{ id: "hyderabad", n: 386 }, { id: "pune", n: 120 }, { id: "patiala", n: 3 }, { id: "ooty", n: 2 }, { id: "kota", n: 1 }, { id: "pune", n: 120 }];
+  assert.deepEqual(prerenderedTwinCities(live, 3), ["hyderabad", "pune", "patiala"]);
+  assert.deepEqual(prerenderedTwinCities(live, 1), ["hyderabad", "pune", "patiala", "ooty", "kota"]);
+  assert.deepEqual(prerenderedTwinCities([], 3), []);
+  // The layout passes the indexing rule's own number (a city page is indexed from 3 turfs).
+  const layout = readFileSync(join(process.cwd(), "app", "c", "[city]", "layout.tsx"), "utf8");
+  assert.match(layout, /prerenderedTwinCities\(live, MIN_TURFS_TO_INDEX\)/);
 });
 
 test("livePicks: judged at the render, the latest start winning", () => {

@@ -43,10 +43,10 @@ export interface TurfPageData {
 /**
  * A turf page prerendered from the build-data step's files is kept 15, 20,
  * 25 or 30 minutes (by its key, lib/build/data.ts firstLifeOf) instead of a
- * day: its answer was read minutes before go-live, and the turf purges sent
+ * week: its answer was read minutes before go-live, and the turf purges sent
  * meanwhile reached only the old deployment. An unstable_cache entry lowers
  * the page's revalidate to its own (as markStaleRender does), only in that
- * render: the page's refresh reads the database and keeps its day. Each
+ * render: the page's refresh reads the database and keeps its week. Each
  * mark has a fixed name, so its key is the same in every bundle.
  */
 const FIRST_LIFE = new Map(
@@ -69,7 +69,7 @@ async function firstLife(key: string): Promise<void> {
  * Everything a turf page shows, in one database call (public.turf_page).
  * Until the 20 Oct outage a render made 3 calls in a row (the row by
  * slug, turf_claim_status, trending_turfs) and every view made 4 to 7
- * more from the browser; now the page is cached for a day, purged by the
+ * more from the browser; now the page is cached for a week, purged by the
  * cache queue when anything on it changes, and a view reads nothing.
  *
  * React cache() shares one call between generateMetadata and the page:
@@ -84,7 +84,7 @@ async function firstLife(key: string): Promise<void> {
  *
  * While building, the answer the build-data step recorded for this key
  * (it lists only keys it has a turf for), checked by the same rule, and
- * the page is kept 15 to 30 minutes instead of a day (firstLife).
+ * the page is kept 15 to 30 minutes instead of a week (firstLife).
  */
 export const loadTurfPage = cache(async (key: string): Promise<TurfPageData | null> => {
   const built = recorded(buildData("turf-pages")?.pages, key);

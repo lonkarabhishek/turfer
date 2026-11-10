@@ -26,10 +26,14 @@ import { getTurfFacts } from "@/lib/queries/turfFacts";
 import { getSportBandsForPage, listWithSportBands } from "@/lib/queries/sportBands";
 import { Unavailable } from "@/lib/cache/unavailable";
 import { courtNearMeLink } from "@/lib/near/courtNearMe";
+import { setListScope } from "@/lib/queries/listScope";
 
 // "Football turfs in Pune" style landing pages: the city + sport
-// queries people actually search. Built from the listings only.
-export const revalidate = 3600;
+// queries people actually search. Built from the listings only. A day (an
+// hour until 10 Nov): its city's list posts mark it stale
+// (turf-data:<city>, lib/queries/listScope.ts), another city's do not; only
+// the other cities' counts in its links can be up to the day old.
+export const revalidate = 86400;
 
 // Production builds render the indexable pages (3 or more venues, the
 // sitemap's rule) of the 8 biggest cities by live count and Nashik, the
@@ -78,6 +82,7 @@ export async function generateMetadata({
   params: Promise<{ city: string; sport: string }>;
 }): Promise<Metadata> {
   const { city, sport } = await params;
+  setListScope(city);
   const data = await load(city, sport);
   if (!data) return { title: "Not found", robots: ROBOTS_NOINDEX_FOLLOW };
   const { sport: s, turfs } = data;
@@ -136,6 +141,7 @@ export default async function CitySportPage({
   params: Promise<{ city: string; sport: string }>;
 }) {
   const { city, sport } = await params;
+  setListScope(city);
   const data = await load(city, sport);
   if (!data || data.turfs.length === 0) notFound();
   const { sport: s, turfs } = data;

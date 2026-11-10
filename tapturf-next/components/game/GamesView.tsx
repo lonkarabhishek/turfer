@@ -9,6 +9,7 @@ import { gameCity } from "@/lib/utils/game";
 import { GamesListingClient } from "./GamesListingClient";
 import type { Game } from "@/types/game";
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
+import { tagGamesRender } from "@/lib/queries/listScope";
 
 /** Its turf's city, or a typed venue's own (lib/utils/game.ts gameCity). */
 function cityOf(g: Game): string | null {
@@ -24,6 +25,8 @@ function cityOf(g: Game): string | null {
  * Never reads cookies, headers or the query string.
  */
 export async function GamesView({ requested }: { requested: string | null }) {
+  // The games key marks this page stale (app/api/revalidate), so its 10 minute timer is only a backstop.
+  await tagGamesRender();
   const [{ games, at }, live] = await Promise.all([getOpenGamesCached(), getLiveCities()]);
   // The listed games' hosts' public profiles, for the JSON-LD organizer url (none while building: the game page's url then).
   const hosts = await hostUsernames(games.slice(0, GAMES_JSON_LD_MAX).map((g) => ({ id: g.creator_id, name: g.host_name })));

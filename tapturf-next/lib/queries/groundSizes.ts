@@ -16,14 +16,14 @@ async function readPeers(): Promise<PeerTurf[]> {
  * Every active turf's owner ground sizes, numbers only, for the Ground
  * size card's "longer than 72% of turfs in Nashik" lines
  * (lib/turfSize/benchmark.ts). Read only by a turf page whose turf has
- * sizes. Cached for a day and untagged, like getTurfFacts: no page gains a
- * tag or a shorter revalidate (turf pages keep their day), and a benchmark
+ * sizes. Cached for a week and untagged, like getTurfFacts: no page gains a
+ * tag or a shorter revalidate (turf pages keep their week), and a benchmark
  * a day behind another turf's new sizes is fine. A warm instance keeps it
  * in memory for an hour too, and concurrent renders share one read. A
  * failed read gives the last copy, or none: the card then shows the size
  * words without percentiles. Never throws.
  */
-const getPeersCached = unstable_cache(readPeers, ["ground-peers-v1"], { revalidate: 86400 });
+const getPeersCached = unstable_cache(readPeers, ["ground-peers-v1"], { revalidate: 604800 });
 const MEMO_MS = 3_600_000;
 let memo: { at: number; peers: PeerTurf[] } | null = null;
 let pending: Promise<PeerTurf[]> | null = null;

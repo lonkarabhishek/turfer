@@ -9,6 +9,8 @@
 // key, pg_cron sends the batch once a minute, and a list change marks the
 // pages stale (they keep serving while they rebuild) instead of expiring them.
 
+import { GAMES_TAG, listPurgeTags } from "./listTags";
+
 /** At most this many keys per request; the flush never sends more. */
 export const MAX_KEYS = 1000;
 
@@ -16,7 +18,7 @@ export const MAX_KEYS = 1000;
  * list:<city>  the lists showing that city's turfs changed (cards, counts,
  *              trending spotlight). list:all is a turf with no valid city.
  * turf:<key>   one turf page, by slug, or by id for the /turf/<id> redirect.
- * games        open games changed (pages showing them run on a timer for now).
+ * games        open games changed (every page that shows them carries the games tag).
  */
 const KEY = /^(list:[a-z][a-z-]{1,30}|turf:[a-z0-9-]{1,120}|games)$/;
 
@@ -29,6 +31,30 @@ export type Purge = {
   /** Keys that did not match the shapes above (skipped, not retried). */
   rejected: string[];
 };
+
+/** What /api/revalidate does for one batch, in this order. */
+export type PurgeCalls = {
+  /** Read the new list version into the data cache first (warmTurfList): only before a list purge. */
+  warm: boolean;
+  /** revalidateTag(tag, "max") each: marked stale, served while they rebuild. */
+  tags: string[];
+  /** revalidatePath(path) each: one turf page, hard expired. */
+  paths: string[];
+};
+
+/**
+ * The purges for a batch (lib/cache/listTags.ts has the tags):
+ * list:<city> marks that city's pages, the all-India pages and the old
+ * "turf-data" readers stale, never another city's pages; games marks
+ * every page that shows open games; turf:<key> expires /turf/<key>.
+ * A legacy per-row post (no keys array) never purges the lists (see the
+ * route), and never carries games.
+ */
+export function purgeCalls(plan: Purge, legacy: boolean): PurgeCalls {
+  const lists = legacy ? [] : listPurgeTags(plan.cities);
+  const tags = plan.games ? [...lists, GAMES_TAG] : lists;
+  return { warm: lists.length > 0, tags, paths: plan.turfs.map((k) => `/turf/${k}`) };
+}
 
 /** Sort valid keys into what to purge. Duplicates collapse. */
 export function planPurge(keys: readonly unknown[]): Purge {

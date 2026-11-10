@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { GameDetailClient } from "@/components/game/GameDetailClient";
+import { cache } from "react";
 import { getGameByIdServer } from "@/lib/queries/games.server";
+import { tagGamesRender } from "@/lib/queries/listScope";
 import { hostUsernames } from "@/lib/games/hostProfile.server";
 import { gameShareImages } from "@/lib/og/gameCard";
 import { gameVenue, isGameExpired } from "@/lib/utils/game";
@@ -11,7 +13,23 @@ import { tournamentKey } from "@/lib/tournament/server";
 import { gameTournamentCode } from "@/lib/tournament/codes";
 import { formatFor } from "@/lib/turfSession/plan";
 
-export const revalidate = 60;
+// An ISR page since 10 Nov, kept 10 minutes: until then this route had no
+// generateStaticParams, so it was rendered on every request (two game reads
+// each, the 60 s revalidate did nothing). The games key (the games trigger:
+// a new game, a join, an edit, a cancel, close_past_games) marks every game
+// page stale within about a minute (the games tag, app/api/revalidate), so
+// its spots, venue and robots follow the game. A failed read throws
+// (getGameByIdServer strict): the last good page stays, never a cached
+// "Game not found".
+export const revalidate = 600;
+
+// None at build: each game page renders on its first visit and is cached.
+export function generateStaticParams(): { id: string }[] {
+  return [];
+}
+
+// Once per render: generateMetadata and the page share it.
+const loadGame = cache((id: string) => getGameByIdServer(id, { strict: true }));
 
 function humanDate(dateStr: string, timeStr?: string): string {
   const iso = timeStr ? `${dateStr}T${timeStr}` : dateStr;
@@ -31,7 +49,7 @@ export async function generateMetadata(
   { params }: { params: Promise<{ id: string }> }
 ): Promise<Metadata> {
   const { id } = await params;
-  const game = await getGameByIdServer(id);
+  const game = await loadGame(id);
 
   if (!game) {
     return {
@@ -75,7 +93,8 @@ export async function generateMetadata(
 
 export default async function GameDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const game = await getGameByIdServer(id);
+  await tagGamesRender();
+  const game = await loadGame(id);
   // The host's public profile for the organizer url, when they have one shown (else the game page).
   const hosts = game ? await hostUsernames([{ id: game.creator_id, name: game.host_name }]) : null;
   const jsonLd = game ? gameEventJsonLd(game, { id, hostUsername: hosts?.get(game.creator_id) ?? null }) : null;

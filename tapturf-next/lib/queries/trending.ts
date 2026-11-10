@@ -9,6 +9,8 @@ import { turfPhotos } from "@/lib/utils/images";
 import { livePicks, readTrendingRows } from "@/lib/build/reads";
 import { buildData } from "@/lib/build/data";
 import { markThinRender } from "@/lib/queries/turfs";
+import { scopedRead } from "@/lib/queries/listScope";
+import { cache } from "react";
 
 /** The live "Most Trending Turf" pick for a city (server-side). */
 export interface TrendingPick {
@@ -48,18 +50,24 @@ export async function readTrendingPicks(): Promise<Partial<Record<CityId, Trendi
  * /<city> page and every /turfs variant (600 s windows both). Each used to
  * read trending_turfs on every render, one read per city page per window,
  * which grew with every city added (88 city pages and 89 /turfs variants
- * on 26 Oct); now it is one read per window. Same window as those pages,
- * and tagged "turf-data" like the home's copy (getHomeExtras in
- * lib/home/data.ts), so a pick change or a window opening or closing
- * purges it through the cache queue. Throws, so a failure is never
- * stored. Never from turf pages (a day long: this would lower their
- * revalidate) or from inside another unstable_cache (getHomeExtras reads
- * readTrendingPicks directly).
+ * on 26 Oct); now it is one read per window. Tagged "turf-data" like the
+ * home's copy (getHomeExtras in lib/home/data.ts), so a pick change or a
+ * window opening or closing purges it through the cache queue (a
+ * list:<city> key). Throws, so a failure is never stored. Never from turf
+ * pages (a week long: this would lower their revalidate) or from inside
+ * another unstable_cache (getHomeExtras reads readTrendingPicks directly).
+ *
+ * Only for readers that name no list scope. A scoped page (a city's pages,
+ * the all-India ones, lib/queries/listScope.ts) reads the picks fresh, once
+ * per render, and takes its scope's tag: its day-long timer stands, and
+ * its own city's list key (queued when a pick changes or its window opens
+ * or closes) or any list key for an all-India page marks it stale.
  */
 const getTrendingPicksCached = unstable_cache(readTrendingPicks, ["trending-picks-v1"], {
   revalidate: 600,
   tags: ["turf-data"],
 });
+const freshPicks = cache(readTrendingPicks);
 
 // The last picks this process read (page and route-handler bundles share them).
 const kept = ((globalThis as typeof globalThis & { __tapturfTrendingKept?: { picks: Partial<Record<CityId, TrendingPick>> | null } }).__tapturfTrendingKept ??= { picks: null });
@@ -77,12 +85,12 @@ function stillLive(picks: Partial<Record<CityId, TrendingPick>>, now: number): P
  * The shared copy, but never throws. A failed lookup gives the last picks
  * this process read, those still live, else none (no spotlight); either
  * way the page is kept a minute only (markThinRender, not while
- * building), so a page without its spotlight is not kept 10 minutes
+ * building), so a page without its spotlight is not kept its day
  * because of one slow read.
  */
 export async function getTrendingPicks(): Promise<Partial<Record<CityId, TrendingPick>>> {
   try {
-    const picks = await getTrendingPicksCached();
+    const picks = await scopedRead(freshPicks, getTrendingPicksCached);
     kept.picks = picks;
     return picks;
   } catch {

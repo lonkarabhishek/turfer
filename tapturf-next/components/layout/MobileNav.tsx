@@ -86,6 +86,10 @@ export function MobileNav() {
             <li key={href} className="flex-1">
               <Link
                 href={href}
+                // No viewport prefetch (10 Nov): every page view prefetched
+                // the home, /turfs and /games twins, and a stale one
+                // regenerated even when nobody tapped it. A tap loads it.
+                prefetch={false}
                 aria-label={label}
                 aria-current={isActive ? "page" : undefined}
                 className="block w-full h-full"

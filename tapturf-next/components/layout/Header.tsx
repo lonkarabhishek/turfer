@@ -13,9 +13,23 @@ import { syncPush } from "@/lib/push/client";
 import { unreadWait, wakeWait } from "@/lib/notifications/unreadPoll";
 import { HeaderMenu } from "@/components/layout/HeaderMenu";
 import { UserAvatar } from "@/components/account/UserAvatar";
+import { useRouter } from "next/navigation";
+
+const NAV_LINK = "text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors";
 
 export function Header() {
   const { user, loading, login, signedInWith } = useAuth();
+  // No viewport prefetch on the nav (10 Nov): every page view prefetched
+  // the home, /turfs, /games, near me, two sport pages and the blog, and a
+  // stale one regenerated even when nobody tapped it. A pointer resting on
+  // a link (or focus on it) still prefetches that one page.
+  const router = useRouter();
+  const navLink = (href: string) => ({
+    href,
+    prefetch: false as const,
+    onMouseEnter: () => router.prefetch(href),
+    onFocus: () => router.prefetch(href),
+  });
   // Tagged with whose count it is, so signing out shows 0 without a reset.
   const [unreadFor, setUnreadFor] = useState<{ userId: string; n: number } | null>(null);
   const prevUnreadRef = useRef<number | null>(null);
@@ -162,29 +176,29 @@ export function Header() {
     <header className="sticky top-0 z-40 material-thin border-b border-primary-100/60">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 md:h-16 flex items-center justify-between gap-2 min-w-0">
         {/* Logo. The artwork carries the wordmark, so no text beside it. */}
-        <Link href="/" className="flex items-center group min-w-0 flex-shrink" aria-label="TapTurf home">
+        <Link {...navLink("/")} className="flex items-center group min-w-0 flex-shrink" aria-label="TapTurf home">
           <Logo height={46} priority className="md:hidden" />
           <Logo height={54} priority className="hidden md:block" />
         </Link>
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-1">
-          <Link href="/games" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
+          <Link {...navLink("/games")} className={NAV_LINK}>
             Games
           </Link>
-          <Link href="/turfs" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
+          <Link {...navLink("/turfs")} className={NAV_LINK}>
             Turfs
           </Link>
-          <Link href="/turf-near-me" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
+          <Link {...navLink("/turf-near-me")} className={NAV_LINK}>
             Near me
           </Link>
-          <Link href="/sport/box-cricket" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
+          <Link {...navLink("/sport/box-cricket")} className={NAV_LINK}>
             Box Cricket
           </Link>
-          <Link href="/sport/football" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
+          <Link {...navLink("/sport/football")} className={NAV_LINK}>
             Football
           </Link>
-          <Link href="/blog" className="text-sm text-primary-500 hover:text-primary-900 px-3 py-2 rounded-full transition-colors">
+          <Link {...navLink("/blog")} className={NAV_LINK}>
             Blog
           </Link>
 
