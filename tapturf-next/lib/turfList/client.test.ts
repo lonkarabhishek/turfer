@@ -11,6 +11,8 @@ import {
   addBatch,
   firstBatch,
   fromSaved,
+  FREE_SAVE_MS,
+  isFreeKey,
   isGeoKey,
   isTimedKey,
   istNow,
@@ -295,6 +297,19 @@ test("Back: an \"Open now\" list comes back only within its quarter hour; old sa
   const odd = JSON.parse(raw);
   odd.filters = { ...odd.filters, facets: ["nope"], price: 7 };
   assert.deepEqual(fromSaved(JSON.stringify(odd), "/pune?f=open", "pune", now)?.filters, DEFAULT);
+});
+
+test("Back: a \"Free hours marked\" list comes back only within a minute (its turfs and times move)", () => {
+  const now = Date.parse("2026-11-10T11:00:00Z");
+  const f: ListFilters = { ...DEFAULT, facets: ["free"] };
+  const key = listKey("bangalore", f, null);
+  assert.equal(isFreeKey(key), true);
+  assert.equal(isFreeKey(listKey("bangalore", { ...DEFAULT, facets: ["open"] }, null)), false);
+  assert.equal(isFreeKey(listKey("bangalore", { ...DEFAULT, q: ";f=free" }, null)), false, "a search for the words is not the toggle");
+  assert.equal(isTimedKey(key), false, "no quarter hour in its URL");
+  const raw = toSaved("/bangalore?f=free", "bangalore", f, startState(key, route()(0, 10)), 0, now)!;
+  assert.ok(fromSaved(raw, "/bangalore?f=free", "bangalore", now + FREE_SAVE_MS));
+  assert.equal(fromSaved(raw, "/bangalore?f=free", "bangalore", now + FREE_SAVE_MS + 1), null);
 });
 
 function prePaintAttrs(search: string): Record<string, string> {

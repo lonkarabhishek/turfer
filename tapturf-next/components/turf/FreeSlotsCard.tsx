@@ -7,6 +7,7 @@ import { OwnerMark } from "@/components/turf/OwnerMark";
 import { logContactClick, type ContactKind } from "@/lib/analytics/contactClicks";
 import { buildWhatsAppLink } from "@/lib/utils/whatsapp";
 import { availabilityPath } from "@/lib/availability/route";
+import { FREE_SLOTS_HASH } from "@/lib/availability/free";
 import {
   PLAYER_COPY,
   REFETCH_AFTER_MS,
@@ -54,6 +55,12 @@ const RequestSheet = dynamic(() => import("./RequestSheet").then((m) => m.Reques
  * or above it where the browser keeps the view still), and its time grid
  * never shrinks while a day is shown. Nothing is kept on the device and
  * nothing waits on the cookie banner.
+ *
+ * Opened at #free-slots (a "Free hours marked" list's card, an Ask answer's
+ * card): the player came for these, so the card is read at once, shown
+ * where it is, and scrolled to. The page's HTML stays the same (no id is
+ * added: the browser finds nothing to jump to, and this does it once the
+ * card is there).
  */
 export function FreeSlotsCard({
   turfId,
@@ -111,11 +118,15 @@ export function FreeSlotsCard({
     }
   }, [turfId, tick]);
 
-  // Once the page is idle, then again when the tab comes back after a while.
+  // Opened at #free-slots: read now, shown where it is, scrolled to once there.
+  const wanted = useRef(false);
+  // Once the page is idle (at once at #free-slots), then again when the tab comes back after a while.
   useEffect(() => {
     let idle: number | null = null;
     let timeout: ReturnType<typeof setTimeout> | null = null;
-    if (typeof window.requestIdleCallback === "function") idle = window.requestIdleCallback(() => void read(), { timeout: 2000 });
+    wanted.current = window.location.hash === FREE_SLOTS_HASH;
+    if (wanted.current) void read();
+    else if (typeof window.requestIdleCallback === "function") idle = window.requestIdleCallback(() => void read(), { timeout: 2000 });
     else timeout = setTimeout(() => void read(), 1200);
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
@@ -138,8 +149,14 @@ export function FreeSlotsCard({
   const ready = days.length > 0;
 
   // Appear only where it pushes nothing on screen: the anchor below the screen, or above it with scroll anchoring.
+  // At #free-slots, at once (the page moves to it next).
   useEffect(() => {
-    if (!ready || revealed || !anchor.current || typeof IntersectionObserver === "undefined") return;
+    if (!ready || revealed || !anchor.current) return;
+    if (wanted.current) {
+      setRevealed(true);
+      return;
+    }
+    if (typeof IntersectionObserver === "undefined") return;
     const el = anchor.current;
     const anchored = typeof CSS !== "undefined" && CSS.supports?.("overflow-anchor", "auto");
     const io = new IntersectionObserver((entries) => {
@@ -178,6 +195,17 @@ export function FreeSlotsCard({
   const { call, whatsapp } = contactLinks(phone, whatsappPhone);
   const kind: ContactKind | null = whatsapp ? "whatsapp" : call ? "call" : null;
   const show = ready && revealed && !!day && !!avail && now != null && !!kind;
+
+  // At #free-slots: once shown, scrolled into view (once).
+  useEffect(() => {
+    if (!show || !wanted.current) return;
+    wanted.current = false;
+    const el = anchor.current;
+    if (!el) return;
+    // Clear of the site's header (set here, not in the page's HTML).
+    el.style.scrollMarginTop = "88px";
+    el.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [show]);
 
   const hrefFor = (d: SlotDay, s: Slot) =>
     whatsapp ? buildWhatsAppLink({ phone: whatsapp.digits, text: slotMessage({ turfName, pageUrl, day: d, slot: s }) }) : call ? `tel:${call.e164}` : "#";

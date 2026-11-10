@@ -1,4 +1,5 @@
 import { parsePublic } from "./slots";
+import { freeCards, type FreeAnswer, type FreeCard, type FreeRow } from "./free";
 
 // Relative imports only, so node --test runs this (lib/availability/route.test.ts).
 
@@ -97,5 +98,53 @@ export async function availabilityResponse(
     return { status: 200, headers: OK_HEADERS, body: JSON.stringify({ fresh: true, updated_at: a.updatedAt, now: a.now, booked: a.booked, requests }) };
   } catch (e) {
     return { status: 200, headers: FAILED_HEADERS, body: NOT_FRESH, failed: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ── GET /api/availability/free/<city or india> ──
+
+/**
+ * Free hours nearby, public (app/api/availability/free/[scope]/route.ts):
+ * the turfs whose free slots players see now in one city (its id) or all of
+ * India ("india"), each with its free start times in the next 36 hours
+ * (lib/availability/free.ts freeCards), from the one cached reader
+ * (lib/queries/freeSlots.ts). Same CDN rules as a turf's: kept a minute,
+ * served stale a minute more, so the database sees at most one read a
+ * minute however many ask; any other spelling of the path is 404 and a
+ * query string 400, kept a day, with no read. A failed read is 503, kept
+ * 15 s: never "none marked" when we could not tell.
+ */
+const FREE_PREFIX = "/api/availability/free/";
+const SCOPE = /^[a-z][a-z-]{1,30}$/;
+export const ALL_INDIA = "india";
+
+/** The one URL of a city's free hours ("india" for all of India). */
+export function freePath(city: string | null): string {
+  return `${FREE_PREFIX}${city ?? ALL_INDIA}`;
+}
+
+export type FreeTurfOut = Pick<FreeRow, "id" | "slug" | "name" | "area" | "city" | "lat" | "lng"> & FreeCard;
+
+/** `scope`: the route's param as Next gives it; `pathname` and `search`: the request URL's own. read: the cached reader (all of India). */
+export async function freeResponse(
+  req: { scope: string; pathname: string; search: string },
+  read: () => Promise<FreeAnswer>,
+  nowMs: number,
+): Promise<AvailabilityResponse> {
+  const { scope, pathname, search } = req;
+  if (!SCOPE.test(scope) || pathname !== `${FREE_PREFIX}${scope}`) return { status: 404, headers: BAD_HEADERS, body: JSON.stringify({ error: "not_found" }) };
+  if (search) return { status: 400, headers: BAD_HEADERS, body: JSON.stringify({ error: "bad_request" }) };
+  const city = scope === ALL_INDIA ? null : scope;
+  try {
+    const answer = await read();
+    const rows = answer.rows.filter((r) => !city || r.city === city);
+    const cards = freeCards(rows, nowMs);
+    const turfs: FreeTurfOut[] = rows.flatMap((r) => {
+      const c = cards.get(r.id);
+      return c ? [{ id: r.id, slug: r.slug, name: r.name, area: r.area, city: r.city, lat: r.lat, lng: r.lng, ...c }] : [];
+    });
+    return { status: 200, headers: OK_HEADERS, body: JSON.stringify({ now: new Date(nowMs).toISOString(), turfs }) };
+  } catch (e) {
+    return { status: 503, headers: FAILED_HEADERS, body: JSON.stringify({ error: "unavailable" }), failed: e instanceof Error ? e.message : String(e) };
   }
 }

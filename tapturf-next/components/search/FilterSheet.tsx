@@ -6,12 +6,14 @@ import { Loader2, X } from "lucide-react";
 import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 import { FACET_LABELS, PRICE_STEPS, SURFACES, SURFACE_LABELS, rupees, type Facet, type SurfaceKind } from "@/lib/turfList/facts";
 import { extrasOf, hasExtras, type ExtraFilters, type ListCounts } from "@/lib/turfList/query";
+import { FREE_FILTER_HINT } from "@/lib/availability/free";
 
 /** The sheet's toggles, grouped, with a line under the ones that need one. */
 const GROUPS: { title: string; facets: [Facet, string | null][] }[] = [
   {
     title: "Timings",
     facets: [
+      ["free", FREE_FILTER_HINT],
       ["open", "By the hours we have, India time"],
       ["24h", null],
     ],

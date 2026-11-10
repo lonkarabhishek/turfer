@@ -25,6 +25,8 @@ import {
   isDefaultFilters,
   listCardSport,
   listSearch,
+  isFreeList,
+  needsFree,
   needsTime,
   pageOf,
   parseListParams,
@@ -56,8 +58,12 @@ function world(n: number, seed = 1) {
   const yes = (p: number) => (r() < p ? true : r() < 0.5 ? null : false);
   const turfs: Turf[] = [];
   const facts = new Map<string, TurfFilterFacts>();
+  // "Free hours marked": the turfs whose owners' free hours show now (the route's cached read), from a random of their own.
+  const rf = rng(seed + 1000);
+  const free = new Set<string>();
   for (let i = 0; i < n; i++) {
     const id = `t${String(i).padStart(4, "0")}`;
+    if (rf() < 0.15) free.add(id);
     const price = r() < 0.45 ? null : Math.round(4 + r() * 18) * 100;
     const slot = r() < 0.15;
     const turf = {
@@ -93,7 +99,7 @@ function world(n: number, seed = 1) {
     turfs.push(turf);
     facts.set(id, filterFactsOf(row, extra));
   }
-  return { turfs: turfs.sort(compareTopRated), facts };
+  return { turfs: turfs.sort(compareTopRated), facts, free };
 }
 
 const ids = (xs: { turf: Turf }[]) => xs.map((x) => x.turf.id);
@@ -102,9 +108,9 @@ const AT: IstTime = { day: 2, minute: 1290 }; // Wednesday 9:30 PM
 const base: RankQuery = { q: "", sport: null, sort: "rating", at: null, ist: AT };
 
 /** What the filters must keep, written out plainly against the facts (the reference). */
-function keeps(t: Turf, facts: Map<string, TurfFilterFacts>, q: RankQuery): boolean {
+function keeps(t: Turf, facts: Map<string, TurfFilterFacts>, q: RankQuery, free?: ReadonlySet<string>): boolean {
   const { facets, price, surface } = extrasOf(q);
-  const mask = facetMask(t, facts.get(t.id), q.ist ?? null);
+  const mask = facetMask(t, facts.get(t.id), q.ist ?? null, !!free?.has(t.id));
   if (!facets.every((f) => (mask & facetBit(f)) !== 0)) return false;
   if (price != null) {
     const h = hourlyPrice(t, listCardSport(q));
@@ -115,11 +121,11 @@ function keeps(t: Turf, facts: Map<string, TurfFilterFacts>, q: RankQuery): bool
 }
 
 test("each toggle alone keeps exactly the turfs that have it, in the list's own order", () => {
-  const { turfs, facts } = world(500, 3);
-  const all = rankTurfs(turfs, base, none, facts).ranked;
+  const { turfs, facts, free } = world(500, 3);
+  const all = rankTurfs(turfs, base, none, facts, { free }).ranked;
   for (const f of FACETS) {
-    const want = all.filter((x) => keeps(x.turf, facts, { ...base, facets: [f] }));
-    const got = rankTurfs(turfs, { ...base, facets: [f] }, none, facts).ranked;
+    const want = all.filter((x) => keeps(x.turf, facts, { ...base, facets: [f] }, free));
+    const got = rankTurfs(turfs, { ...base, facets: [f] }, none, facts, { free }).ranked;
     assert.deepEqual(ids(got), ids(want), f);
     // The made-up turfs have each toggle on some and off others, so this checks something.
     assert.ok(got.length > 0 && got.length < turfs.length, `${f}: ${got.length}`);
@@ -127,7 +133,7 @@ test("each toggle alone keeps exactly the turfs that have it, in the list's own 
 });
 
 test("toggles together: every one on must hold (an AND), with any search, chip and sort", () => {
-  const { turfs, facts } = world(500, 5);
+  const { turfs, facts, free } = world(500, 5);
   const r = rng(9);
   const at = roundCoords({ lat: 18.52, lng: 73.85 });
   for (let i = 0; i < 120; i++) {
@@ -143,10 +149,10 @@ test("toggles together: every one on must hold (an AND), with any search, chip a
       price: r() < 0.3 ? PRICE_STEPS[Math.floor(r() * PRICE_STEPS.length)] : null,
       surface: r() < 0.2 ? SURFACES[Math.floor(r() * 2)] : null,
     };
-    const plain = rankTurfs(turfs, { ...query, facets: [], price: null, surface: null }, none, facts).ranked;
-    const got = rankTurfs(turfs, query, none, facts).ranked;
+    const plain = rankTurfs(turfs, { ...query, facets: [], price: null, surface: null }, none, facts, { free }).ranked;
+    const got = rankTurfs(turfs, query, none, facts, { free }).ranked;
     // Filtering keeps the order the list has without it.
-    assert.deepEqual(ids(got), ids(plain.filter((x) => keeps(x.turf, facts, query))), JSON.stringify(query));
+    assert.deepEqual(ids(got), ids(plain.filter((x) => keeps(x.turf, facts, query, free))), JSON.stringify(query));
   }
 });
 
@@ -194,9 +200,9 @@ test("surface and open now: from the facts; without a time nothing is open now",
 });
 
 test("counts: each number is how many that choice would show, everything else as it is", () => {
-  const { turfs, facts } = world(500, 17);
+  const { turfs, facts, free } = world(500, 17);
   const r = rng(21);
-  const total = (q: RankQuery) => rankTurfs(turfs, q, none, facts).ranked.length;
+  const total = (q: RankQuery) => rankTurfs(turfs, q, none, facts, { free }).ranked.length;
   for (let i = 0; i < 80; i++) {
     const query: RankQuery = {
       ...base,
@@ -207,7 +213,7 @@ test("counts: each number is how many that choice would show, everything else as
       price: r() < 0.3 ? PRICE_STEPS[i % PRICE_STEPS.length] : null,
       surface: r() < 0.2 ? SURFACES[i % 2] : null,
     };
-    const { ranked, counts } = rankTurfs(turfs, query, none, facts, { counts: true });
+    const { ranked, counts } = rankTurfs(turfs, query, none, facts, { counts: true, free });
     assert.ok(counts);
     const e = extrasOf(query);
     for (const f of FACETS) assert.equal(counts.f[f], total({ ...query, facets: [...e.facets, f] }), `f ${f} ${JSON.stringify(query)}`);
@@ -215,7 +221,7 @@ test("counts: each number is how many that choice would show, everything else as
     for (const f of e.facets) assert.equal(counts.f[f], ranked.length);
     for (const step of PRICE_STEPS) assert.equal(counts.price[String(step)], total({ ...query, price: step }), `price ${step}`);
     assert.equal(counts.anyPrice, total({ ...query, price: null }));
-    assert.equal(counts.priced, rankTurfs(turfs, { ...query, price: null }, none, facts).ranked.filter((x) => hourlyPrice(x.turf, listCardSport(query)) != null).length);
+    assert.equal(counts.priced, rankTurfs(turfs, { ...query, price: null }, none, facts, { free }).ranked.filter((x) => hourlyPrice(x.turf, listCardSport(query)) != null).length);
     for (const k of SURFACES) assert.equal(counts.surface[k] ?? 0, total({ ...query, surface: k }), `surface ${k}`);
     assert.equal(counts.anySurface, total({ ...query, surface: null }));
   }
@@ -358,4 +364,55 @@ test("the page URL: the Filters choices as f, price and surface; unknown ones dr
   assert.equal(extrasKey({ facets: ["rated", "open"], price: 600, surface: "hard" }), "f=open,rated;p=600;s=hard");
   assert.equal(extrasKey({}), "");
   assert.deepEqual(withExtras({ q: "", sport: null, sort: "rating" as const, facets: ["open"] as Facet[] }, { facets: [], price: null }), { q: "", sport: null, sort: "rating" });
+});
+
+test("Free hours marked: the turfs in the route's cached read, nothing else; no read, none and no count; each card its times", () => {
+  const { turfs, facts, free } = world(300, 31);
+  const q: RankQuery = { ...base, facets: ["free"] };
+  const got = rankTurfs(turfs, q, none, facts, { free }).ranked;
+  assert.ok(got.length > 0 && got.length < turfs.length);
+  assert.ok(got.every((x) => free.has(x.turf.id)));
+  assert.equal(got.length, turfs.filter((t) => free.has(t.id)).length);
+  // In the list's own order.
+  assert.deepEqual(ids(got), ids(rankTurfs(turfs, base, none, facts).ranked.filter((x) => free.has(x.turf.id))));
+  // No read (it failed, or no batch asked for it): none have it, and the sheet shows no number for it.
+  assert.deepEqual(rankTurfs(turfs, q, none, facts).ranked, []);
+  const noRead = rankTurfs(turfs, base, none, facts, { counts: true }).counts!;
+  assert.equal("free" in noRead.f, false);
+  assert.equal(rankTurfs(turfs, base, none, facts, { counts: true, free }).counts!.f.free, free.size);
+  // With other toggles: an AND, as the rest.
+  const both = rankTurfs(turfs, { ...q, facets: ["free", "lights"] }, none, facts, { free }).ranked;
+  assert.deepEqual(ids(both), ids(got.filter((x) => keeps(x.turf, facts, { ...base, facets: ["lights"] }))));
+  // A page of a free list: each item carries its card; a list without the toggle carries none, even with the read.
+  const card = (id: string) => ({ updatedAt: "2026-11-10T09:00:00.000Z", requests: id.endsWith("1"), days: [{ date: "2026-11-10", keys: ["2026-11-10T19:00"] }] });
+  const cards = new Map([...free].map((id) => [id, card(id)]));
+  const page = pageOf(turfs, q, none, 0, 10, 4, facts, { free: cards, freeAt: "2026-11-10T11:00:00.000Z" });
+  assert.equal(page.total, got.length);
+  assert.ok(page.items.length > 0 && page.items.every((i) => i.free && i.free === cards.get(i.turf.id)));
+  assert.equal(page.freeAt, "2026-11-10T11:00:00.000Z");
+  const plainPage = pageOf(turfs, base, none, 0, 10, 4, facts, { counts: true, free: cards, freeAt: "x" });
+  assert.ok(plainPage.items.every((i) => !("free" in i)));
+  assert.equal(plainPage.freeAt, undefined);
+  assert.equal(plainPage.counts!.f.free, free.size);
+  // The route reads it only for a free list or the counts; a free list is kept a minute.
+  assert.equal(needsFree({}, 0), false);
+  assert.equal(needsFree({}, 10), false);
+  assert.equal(needsFree({}, 0, true), true);
+  assert.equal(needsFree({ facets: ["open"] }, 0), false);
+  assert.equal(needsFree({ facets: ["free"] }, 20), true);
+  assert.equal(isFreeList({ facets: ["free", "open"] }), true);
+  assert.equal(isFreeList({ facets: ["open"] }), false);
+  assert.equal(needsTime({ facets: ["free"] }, 10), false, "free alone needs no ist in the URL");
+});
+
+test("Free hours marked in the URLs: f=free, first in FACETS order, the same static page", () => {
+  assert.equal(FACETS[0], "free");
+  const f = withExtras({ q: "", sport: null, sort: "rating" as const }, { facets: ["lights", "free"] });
+  assert.equal(searchForFilters("", f, "city"), "?f=free%2Clights");
+  assert.deepEqual(filtersFromSearch("?f=free"), { q: "", sport: null, sort: "rating", facets: ["free"] });
+  const s = listSearch({ query: { ...f, city: "bangalore", at: null }, offset: 0, limit: 10 });
+  assert.equal(s, "city=bangalore&f=free%2Clights&offset=0&limit=10");
+  const back = parseListParams(new URLSearchParams(s));
+  assert.ok(back.ok && back.req.query.facets?.join() === "free,lights");
+  assert.equal(extrasKey({ facets: ["free"] }), "f=free");
 });

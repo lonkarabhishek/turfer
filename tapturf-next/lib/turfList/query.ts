@@ -3,6 +3,7 @@ import { sportMinimumPrice, type CardSport } from "../utils/cardSport";
 import { compareTopRated } from "../utils/ranking";
 import { haversineKm, type Coords } from "../utils/location";
 import { sportBySlug, turfPlaysSport } from "../sports";
+import type { FreeCard } from "../availability/free";
 import {
   FACETS,
   PRICE_STEPS,
@@ -208,8 +209,8 @@ export type FactsLookup = ReadonlyMap<string, TurfFilterFacts>;
  * other choices). A toggle that is on counts the list itself.
  */
 export type ListCounts = {
-  /** Per toggle: with it on as well. */
-  f: Record<Facet, number>;
+  /** Per toggle: with it on as well. "free" is missing when the free hours could not be read. */
+  f: Partial<Record<Facet, number>>;
   /** Per price step (its ₹ as the key): every other filter, at or under it. */
   price: Record<string, number>;
   /** Every other filter, with a listed price per hour at all. */
@@ -222,9 +223,9 @@ export type ListCounts = {
   anySurface: number;
 };
 
-function emptyCounts(): ListCounts {
+function emptyCounts(free: boolean): ListCounts {
   return {
-    f: Object.fromEntries(FACETS.map((f) => [f, 0])) as Record<Facet, number>,
+    f: Object.fromEntries(FACETS.filter((f) => f !== "free" || free).map((f) => [f, 0])) as Partial<Record<Facet, number>>,
     price: Object.fromEntries(PRICE_STEPS.map((p) => [String(p), 0])),
     priced: 0,
     anyPrice: 0,
@@ -266,16 +267,18 @@ export function listCardSport(query: Pick<RankQuery, "sport" | "pageSport">): Ca
  * "Open now" at `ist`), the price cap (the card's price rule, per hour:
  * hourlyPrice; a turf without a listed price is not under any cap) and the
  * surface. A turf with no facts in `facts` has none of the toggles that
- * need them. With `counts`, also the sheet's numbers (ListCounts), from
- * the same pass. The trending picks lead the default sort, except on a
- * sport page (leadingPicks).
+ * need them. "Free hours marked" holds for the turfs in `opts.free` (the
+ * route's cached read of the turfs whose owners' free hours show now);
+ * without that set, none (and its count is left out). With `counts`, also
+ * the sheet's numbers (ListCounts), from the same pass. The trending picks
+ * lead the default sort, except on a sport page (leadingPicks).
  */
 export function rankTurfs<T extends Turf>(
   turfs: readonly T[],
   query: RankQuery,
   trendingIds: ReadonlySet<string>,
   facts?: FactsLookup | null,
-  opts: { counts?: boolean } = {},
+  opts: { counts?: boolean; free?: ReadonlySet<string> | null } = {},
 ): { ranked: Ranked<T>[]; near: number | null; counts: ListCounts | null } {
   const q = normalizeQ(query.q).toLowerCase();
   const sport = query.sport ? query.sport.toLowerCase() : null;
@@ -285,23 +288,24 @@ export function rankTurfs<T extends Turf>(
   const at = query.ist ?? null;
   const cardSport = listCardSport(query);
   const lead = leadingPicks(query, trendingIds);
-  const counts = opts.counts ? emptyCounts() : null;
+  const free = opts.free ?? null;
+  const counts = opts.counts ? emptyCounts(!!free) : null;
   const wantPrice = cap != null || counts != null;
-  const bits = FACETS.map((f) => [f, facetBit(f)] as const);
+  const bits = FACETS.filter((f) => f !== "free" || free).map((f) => [f, facetBit(f)] as const);
   let result: Ranked<T>[] = [];
   for (const t of turfs) {
     if (q && !(t.name.toLowerCase().includes(q) || t.address.toLowerCase().includes(q) || t.sports.some((s) => s.toLowerCase().includes(q)))) continue;
     if (sport && !t.sports.some((s) => s.toLowerCase().includes(sport))) continue;
     if (page && !turfPlaysSport(t.sports, page)) continue;
     const f = facts?.get(t.id);
-    const mask = facetMask(t, f, at);
+    const mask = facetMask(t, f, at, !!free?.has(t.id));
     const hourly = wantPrice ? hourlyPrice(t, cardSport) : null;
     const kind = f?.surface ?? null;
     const okFacets = (mask & need) === need;
     const okPrice = cap == null || (hourly != null && hourly <= cap);
     const okSurface = surface == null || kind === surface;
     if (counts) {
-      if (okPrice && okSurface) for (const [name, bit] of bits) if ((mask & (need | bit)) === (need | bit)) counts.f[name]++;
+      if (okPrice && okSurface) for (const [name, bit] of bits) if ((mask & (need | bit)) === (need | bit)) counts.f[name] = (counts.f[name] ?? 0) + 1;
       if (okFacets && okSurface) {
         counts.anyPrice++;
         if (hourly != null) {
@@ -356,8 +360,8 @@ export function rankTurfs<T extends Turf>(
   return { ranked: result, near, counts };
 }
 
-/** One card in a page of results. `hot`: this week's trending pick (gold frame). */
-export type ListItem<T = Turf> = { turf: T; hot?: true };
+/** One card in a page of results. `hot`: this week's trending pick (gold frame). `free`: its free hours, on a "Free hours marked" list. */
+export type ListItem<T = Turf> = { turf: T; hot?: true; free?: FreeCard };
 
 export type ListPage<T = Turf> = {
   /** The list snapshot's version these rows came from (0: read from the table). */
@@ -384,6 +388,8 @@ export type ListPage<T = Turf> = {
   counts?: ListCounts;
   /** The India time "Open now" was worked out at (facts.ts istParam), when it was. Later batches of the list ask with the same. */
   ist?: string;
+  /** On a "Free hours marked" list: the server's time its items' free hours were worked out at (the cards' clock never runs behind it). */
+  freeAt?: string;
 };
 
 /**
@@ -409,6 +415,10 @@ export function picksTag(ids: Iterable<string>): string {
  * facts (a page's own first cards, which never read them), it carries none
  * rather than counts that would be wrong. Without `counts`, a first batch
  * needs no time ("Open now" off), so its answer is the same all day.
+ * `free`: the cached read's cards of the turfs whose owners' free hours
+ * show now, worked out at `freeAt` (the route reads them only when
+ * needsFree says so); on a "Free hours marked" list each item carries
+ * its card.
  */
 export function pageOf<T extends Turf>(
   turfs: readonly T[],
@@ -418,14 +428,23 @@ export function pageOf<T extends Turf>(
   limit: number,
   v: number,
   facts?: FactsLookup | null,
-  opts: { counts?: boolean } = {},
+  opts: { counts?: boolean; free?: ReadonlyMap<string, FreeCard> | null; freeAt?: string } = {},
 ): ListPage<T> {
-  const { ranked, near, counts } = rankTurfs(turfs, query, trendingIds, facts, { counts: !!opts.counts && offset === 0 && !!facts });
+  const free = opts.free ?? null;
+  const freeSet = free ? new Set(free.keys()) : null;
+  const { ranked, near, counts } = rankTurfs(turfs, query, trendingIds, facts, { counts: !!opts.counts && offset === 0 && !!facts, free: freeSet });
   const lead = leadingPicks(query, trendingIds);
-  const items = ranked.slice(offset, offset + limit).map(({ turf }) => (lead.has(turf.id) ? { turf, hot: true as const } : { turf }));
+  const withFree = !!free && extrasOf(query).facets.includes("free");
+  const items = ranked.slice(offset, offset + limit).map(({ turf }): ListItem<T> => {
+    const item: ListItem<T> = lead.has(turf.id) ? { turf, hot: true as const } : { turf };
+    const card = withFree ? free!.get(turf.id) : undefined;
+    if (card) item.free = card;
+    return item;
+  });
   const page: ListPage<T> = { v, t: picksTag(lead), total: ranked.length, near, offset, items };
   if (counts) page.counts = counts;
   if (query.ist) page.ist = istParam(query.ist);
+  if (withFree && opts.freeAt) page.freeAt = opts.freeAt;
   if (query.at && offset === 0) {
     page.nearAt = [];
     for (const r of ranked) if (r.km != null && r.km <= NEAR_KM + ROUND_SLACK_KM) page.nearAt.push([r.turf.lat as number, r.turf.lng as number]);
@@ -585,6 +604,21 @@ export function parseListParams(p: URLSearchParams): { ok: true; req: ListReques
  */
 export function needsTime(query: Pick<ListQuery, "facets">, offset: number, counts = false): boolean {
   return (counts && offset === 0) || extrasOf(query).facets.includes("open");
+}
+
+/**
+ * "Free hours marked" is on, or the batch carries the sheet's counts (one
+ * of them is its count): the route reads the free hours (its cached
+ * reader, a minute at a time). No other batch does, so a list that never
+ * uses the filter costs nothing more.
+ */
+export function needsFree(query: Pick<ListQuery, "facets">, offset: number, counts = false): boolean {
+  return (counts && offset === 0) || extrasOf(query).facets.includes("free");
+}
+
+/** "Free hours marked" is on: the answer changes as owners mark hours and hours start, so the CDN keeps it a minute. */
+export function isFreeList(query: Pick<ListQuery, "facets">): boolean {
+  return extrasOf(query).facets.includes("free");
 }
 
 /* ---------- the page URL ---------- */

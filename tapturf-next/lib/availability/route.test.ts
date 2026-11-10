@@ -124,3 +124,55 @@ test("booking requests: before the migration, on an error or a throw, requests f
     assert.deepEqual([r.status, r.headers, r.failed, JSON.parse(r.body)], [200, OK_HEADERS, undefined, { ...fresh, requests: false }]);
   }
 });
+
+// ── GET /api/availability/free/<city or india> ──
+import { ALL_INDIA, freePath, freeResponse } from "./route";
+import type { FreeAnswer } from "./free";
+
+const FREE_NOW = Date.parse("2026-11-10T11:00:00Z");
+const freeRow = (i: number, city: string) => ({
+  id: `dddddddd-0000-4000-8000-${String(i).padStart(12, "0")}`, slug: `t${i}`, name: `Turf ${i}`, area: "Made-up Layout", city, lat: 12.9, lng: 77.6,
+  updatedAt: new Date(FREE_NOW - 3_600_000).toISOString(), requests: i === 1, booked: [],
+  hours: { opening_hours: null, start_time: "06:00:00", end_time: "23:00:00", is_24x7: false, closed_days: null },
+});
+const freeRead = (rows = [freeRow(1, "bangalore"), freeRow(2, "pune")]) => {
+  const calls: number[] = [];
+  return { calls, read: async (): Promise<FreeAnswer> => (calls.push(1), { now: new Date(FREE_NOW).toISOString(), rows }) };
+};
+const getFree = (scope: string, search: string, read: () => Promise<FreeAnswer>, path = `/api/availability/free/${scope}`) => freeResponse({ scope, pathname: path, search }, read, FREE_NOW);
+
+test("free: one URL per city (or india); anything else 404, a query string 400, neither reads, both kept a day", async () => {
+  assert.equal(freePath("bangalore"), "/api/availability/free/bangalore");
+  assert.equal(freePath(null), `/api/availability/free/${ALL_INDIA}`);
+  const r = freeRead();
+  for (const [scope, path] of [["Bangalore", "/api/availability/free/Bangalore"], ["b", "/api/availability/free/b"], ["bangalore", "/api/availability/free/%62angalore"], ["bangalore", "/api/availability/free/bangalore/"]]) {
+    const out = await getFree(scope, "", r.read, path);
+    assert.deepEqual([out.status, out.headers], [404, BAD_HEADERS], path);
+  }
+  for (const q of ["?x=1", "?", "?hours=192"]) {
+    const out = await getFree("bangalore", q, r.read);
+    assert.deepEqual([out.status, out.body, out.headers], [400, '{"error":"bad_request"}', BAD_HEADERS]);
+  }
+  assert.equal(r.calls.length, 0);
+});
+
+test("free: a city's turfs with their next free times, kept a minute; india: all; a city with none: an empty list", async () => {
+  const r = freeRead();
+  const blr = await getFree("bangalore", "", r.read);
+  assert.deepEqual([blr.status, blr.headers], [200, OK_HEADERS]);
+  const body = JSON.parse(blr.body);
+  assert.equal(body.now, new Date(FREE_NOW).toISOString());
+  assert.deepEqual(body.turfs.map((t: { name: string }) => t.name), ["Turf 1"]);
+  assert.equal(body.turfs[0].requests, true);
+  assert.equal(body.turfs[0].days[0].keys[0], "2026-11-10T17:00", "4:30 PM in India: 5 PM first");
+  assert.deepEqual(Object.keys(body.turfs[0]).sort(), ["area", "city", "days", "id", "lat", "lng", "name", "requests", "slug", "updatedAt"]);
+  assert.deepEqual(JSON.parse((await getFree(ALL_INDIA, "", r.read)).body).turfs.map((t: { name: string }) => t.name), ["Turf 1", "Turf 2"]);
+  assert.deepEqual(JSON.parse((await getFree("nashik", "", r.read)).body).turfs, []);
+});
+
+test("free: a failed read is 503, kept 15 s, never an empty list", async () => {
+  const out = await getFree("bangalore", "", async () => {
+    throw new Error("down");
+  });
+  assert.deepEqual([out.status, out.body, out.headers, out.failed], [503, '{"error":"unavailable"}', FAILED_HEADERS, "down"]);
+});

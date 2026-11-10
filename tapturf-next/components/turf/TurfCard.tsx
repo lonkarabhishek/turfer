@@ -12,6 +12,8 @@ import { turfPath } from "@/lib/utils/turfPath";
 import { PhotoImg } from "@/components/ui/PhotoImg";
 import { OwnerMark } from "./OwnerMark";
 import { PlayedBadge } from "@/components/profile/PlayedHere";
+import { FreeHoursLine } from "./FreeHoursLine";
+import { freeHref, type FreeLine } from "@/lib/availability/free";
 
 interface TurfCardProps {
   turf: Turf;
@@ -37,12 +39,18 @@ interface TurfCardProps {
   trendRank?: number | null;
   /** The window that rank is over, in words, as lib/map/trending.ts trendSpan says it ("the last 7 days"); the last 24 hours when unset. */
   trendOver?: string;
+  /**
+   * A "Free hours marked" list: the turf's next free times its owner
+   * marked (lib/availability/free.ts freeLine), under the price, and the
+   * card opens the turf page at its free slots. Unset everywhere else.
+   */
+  free?: FreeLine | null;
 }
 
 // Slide duration when a swipe or arrow moves to the next photo.
 const FADE_MS = 500;
 
-export function TurfCard({ turf, distanceKm, priority = false, trending = false, cityLabel, sport, trendRank, trendOver = "the last 24 hours" }: TurfCardProps) {
+export function TurfCard({ turf, distanceKm, priority = false, trending = false, cityLabel, sport, trendRank, trendOver = "the last 24 hours", free = null }: TurfCardProps) {
   // Cover first (unless it is a tiny thumb), then the rest, with our own
   // copies ahead of Google links: a turf whose Google cover has expired
   // but has photos in our storage leads with one of those.
@@ -143,7 +151,7 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
 
   return (
     <Link
-      href={turfPath(turf)}
+      href={free ? freeHref(turfPath(turf)) : turfPath(turf)}
       className="block group rounded-2xl focus-neon"
       onClick={(e) => {
         if (swiped.current) e.preventDefault();
@@ -337,6 +345,7 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
               <span className="text-primary-500">Prices not listed yet</span>
             )}
           </p>
+          {free && <FreeHoursLine line={free} />}
         </div>
       </article>
     </Link>

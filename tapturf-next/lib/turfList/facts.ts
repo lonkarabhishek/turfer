@@ -15,8 +15,14 @@ import { cardPrice, type CardSport } from "../utils/cardSport";
  * simply not in the filtered list.
  */
 
-/** The sheet's toggles, in the order the URL writes them (`f=open,lights`). */
-export const FACETS = ["open", "24h", "lights", "covered", "parking", "washroom", "changing", "rated", "coaching", "equipment"] as const;
+/**
+ * The sheet's toggles, in the order the URL writes them (`f=open,lights`).
+ * "free": the turf's owner marked free hours that players see now (Free
+ * slots, lib/availability/free.ts), from the cached reader the route asks
+ * only when this toggle is on or the sheet's counts are asked for, never
+ * from the turf's facts.
+ */
+export const FACETS = ["free", "open", "24h", "lights", "covered", "parking", "washroom", "changing", "rated", "coaching", "equipment"] as const;
 export type Facet = (typeof FACETS)[number];
 
 const BIT = Object.fromEntries(FACETS.map((f, i) => [f, 1 << i])) as Record<Facet, number>;
@@ -275,9 +281,10 @@ export function hourlyPrice(turf: Turf, sport: CardSport | null): number | null 
   return null;
 }
 
-/** The facets this turf has at `at` (open and rated included), as bits. */
-export function facetMask(turf: Pick<Turf, "rating" | "total_reviews">, facts: TurfFilterFacts | undefined, at: IstTime | null): number {
+/** The facets this turf has at `at` (open and rated included), as bits. free: its owner's free hours show now (the route's cached read). */
+export function facetMask(turf: Pick<Turf, "rating" | "total_reviews">, facts: TurfFilterFacts | undefined, at: IstTime | null, free = false): number {
   let m = facts?.m ?? 0;
+  if (free) m |= BIT.free;
   if (Number(turf.rating) >= RATED_MIN && Number(turf.total_reviews) > 0) m |= BIT.rated;
   if (at && facts && openAt(facts.week, at)) m |= BIT.open;
   return m;
@@ -292,6 +299,8 @@ export function maskOf(facets: readonly Facet[]): number {
 /* ---------- the sheet's words ---------- */
 
 export const FACET_LABELS: Record<Facet, string> = {
+  // = lib/availability/free.ts FREE_FILTER_LABEL (lib/turfList/filters.test.ts ties them).
+  free: "Free hours marked",
   open: "Open now",
   "24h": "Open 24 hours",
   lights: "Floodlights",

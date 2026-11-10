@@ -124,6 +124,15 @@ export function isTimedKey(key: string): boolean {
   return !!f && f[1].split(",").includes("open");
 }
 
+/** True when the list's key has "Free hours marked" on: its turfs and times change as owners mark hours and hours start. */
+export function isFreeKey(key: string): boolean {
+  const f = /;f=([^;|]*)/.exec(key.split("|")[0] ?? "");
+  return !!f && f[1].split(",").includes("free");
+}
+
+/** A "Free hours marked" list saved for Back is used for this long; older, it is fetched again. */
+export const FREE_SAVE_MS = 60_000;
+
 export function addBatch(s: ListState, page: ListPage): ListState {
   const seen = new Set(s.items.map((i) => i.turf.id));
   const fresh = page.items.filter((i) => !seen.has(i.turf.id));
@@ -245,6 +254,8 @@ export function fromSaved(raw: string | null, url: string, scope: string, now: n
   const ist = typeof st.ist === "string" ? st.ist : null;
   // "Open now" as it was a quarter of an hour ago is not what is open now: fetched again.
   if (isTimedKey(st.key) && ist !== istNow(new Date(now))) return null;
+  // Nor the free hours of a minute ago.
+  if (isFreeKey(st.key) && now - s.at > FREE_SAVE_MS) return null;
   const filters = withExtras({ q: s.filters.q, sport: s.filters.sport ?? null, sort: s.filters.sort }, extrasOf(s.filters));
   const counts = st.counts && typeof st.counts === "object" ? st.counts : null;
   return { ...s, filters, state: { ...st, t: typeof st.t === "string" ? st.t : "", nearAt: null, ist, counts }, y: typeof s.y === "number" && Number.isFinite(s.y) ? s.y : 0 };

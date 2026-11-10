@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import { Search, ChevronDown, Navigation, Loader2, X, RotateCw, SlidersHorizontal } from "lucide-react";
+import Link from "next/link";
+import { Search, ChevronDown, Navigation, Loader2, X, RotateCw, SlidersHorizontal, CalendarClock } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
 import { TrendingSpotlight, type SpotlightTurf } from "@/components/turf/TrendingSpotlight";
 import { FilterSheet } from "@/components/search/FilterSheet";
@@ -45,6 +46,7 @@ import {
   type ListState,
 } from "@/lib/turfList/client";
 import type { CardSport } from "@/lib/utils/cardSport";
+import { OWNER_NUDGE, freeLine, noFreeTitle, parseFreeCard } from "@/lib/availability/free";
 
 /** A city+sport page's sport (lib/sports.ts): the list is its turfs, with no chips, and its cards and prices are that sport's. */
 export type ListSportPage = { slug: string; name: string; labels: readonly string[]; venue: string };
@@ -146,6 +148,18 @@ export function TurfListingClient({
   const [desktop, setDesktop] = useState(false);
   const [countsFailed, setCountsFailed] = useState<string | null>(null);
   const filtersButton = useRef<HTMLButtonElement>(null);
+  // "Free hours marked": the clock the cards' free times are shown at (never behind the server's, which
+  // worked them out), moved on every minute while any card has some, so an hour drops off once it starts.
+  const freeAt = useRef(0);
+  const [freeNow, setFreeNow] = useState<number | null>(null);
+  const hasFree = list.items.some((i) => !!i.free);
+  useEffect(() => {
+    if (!hasFree) return;
+    const tick = () => setFreeNow(Math.max(Date.now(), freeAt.current));
+    tick();
+    const id = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(id);
+  }, [hasFree]);
 
   const rounded = useMemo(() => (userLocation ? roundCoords(userLocation) : null), [userLocation]);
   const nearby = filters.sort === "nearby" && !!rounded;
@@ -288,6 +302,7 @@ export function TurfListingClient({
       })
       .then((page) => {
         if (ctrl.signal.aborted) return;
+        if (typeof page.freeAt === "string") freeAt.current = Math.max(freeAt.current, Date.parse(page.freeAt) || 0);
         setList((prev) => (fresh ? startState(key, page) : prev.key === key ? addBatch(prev, page) : prev));
       })
       .catch(() => {
@@ -647,7 +662,7 @@ export function TurfListingClient({
         {replaceFailed || (cityLabel && q && total === 0 && !replacing && !anyExtras) ? null : shown.length > 0 || pendingMore > 0 ? (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
-              {shown.map(({ item: { turf, hot }, km }, i) => (
+              {shown.map(({ item: { turf, hot, free }, km }, i) => (
                 <TurfCard
                   key={turf.id}
                   turf={turf}
@@ -656,6 +671,7 @@ export function TurfListingClient({
                   trending={hot === true}
                   cityLabel={cityLabel || !isCity(turf.city) ? undefined : labelFor(turf.city)}
                   sport={cardSport}
+                  free={free && freeNow != null ? freeLine(parseFreeCard(free), freeNow) : null}
                 />
               ))}
               {Array.from({ length: Math.min(pendingMore, 4) }, (_, i) => (
@@ -710,6 +726,30 @@ export function TurfListingClient({
             <button onClick={() => setFailedAt(null)} className="mt-4 text-[15px] text-accent-600 hover:text-accent-700">
               Try again
             </button>
+          </div>
+        ) : anyExtras && extras.facets.includes("free") ? (
+          // "Free hours marked" with none: said plainly, and a line for owners.
+          <div className="text-center py-16 px-2">
+            <CalendarClock className="mx-auto mb-4 w-12 h-12 text-primary-300" aria-hidden />
+            <p className="text-lg font-semibold text-primary-900">{noFreeTitle(cityLabel, extraCount > 1, noun)}</p>
+            <p className="text-sm text-primary-600 mt-2">
+              {OWNER_NUDGE.lead}{" "}
+              <Link href={OWNER_NUDGE.href} className="font-semibold text-accent-700 underline underline-offset-2 hover:text-accent-800">
+                {OWNER_NUDGE.link}
+              </Link>
+            </p>
+            <div className="mt-5 flex flex-col items-center gap-3">
+              <button
+                type="button"
+                onClick={clearExtras}
+                className="press-tight h-11 px-6 inline-flex items-center gap-2 rounded-full bg-primary-900 hover:bg-primary-700 text-white text-[15px] font-semibold cursor-pointer"
+              >
+                Clear filters
+              </button>
+              <button type="button" onClick={() => setSheetOpen(true)} className="text-[15px] font-semibold text-accent-600 hover:text-accent-700 cursor-pointer">
+                Change filters
+              </button>
+            </div>
           </div>
         ) : anyExtras ? (
           <div className="text-center py-16">

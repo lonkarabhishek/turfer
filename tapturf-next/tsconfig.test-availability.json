@@ -16,6 +16,8 @@
   "files": [
     "lib/availability/slots.test.ts",
     "lib/availability/queue.test.ts",
-    "lib/availability/route.test.ts"
+    "lib/availability/route.test.ts",
+    "lib/availability/free.test.ts",
+    "lib/availability/freeReader.test.ts"
   ]
 }
