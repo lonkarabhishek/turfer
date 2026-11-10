@@ -10,6 +10,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { ALL_CHANGE_MARKS_S, CHANGE_MARKS_S, changeMarkFor } from "./changeMarks";
 
 const src = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 const segment = (rel: string): number => {
@@ -96,4 +97,50 @@ test("the shared entries keep the old tag for readers with no scope (route handl
   assert.match(src("lib/queries/turfs.ts"), /\["turf-list-meta-v1"[^\]]*\], \{\s*revalidate: 3600,\s*tags: \["turf-data"\],/);
   assert.match(src("lib/queries/trending.ts"), /\["trending-picks-v1"\], \{\s*revalidate: 600,\s*tags: \["turf-data"\],/);
   assert.match(src("lib/home/data.ts"), /\["home-extras-v1"\], \{ revalidate: HOME_REVALIDATE, tags: \["turf-data", GAMES_TAG\] \}/);
+});
+
+test("list pages prerendered at a deploy get the turf pages' 15 to 30 minute first life (a post during the build reached the old deployment only)", () => {
+  const scoped = src("lib/queries/listScope.ts");
+  assert.match(scoped, /if \(isBuilding\(\)\) await firstLife\(`list:\$\{scope\}`\);/);
+  assert.match(scoped, /const isBuilding = \(\) => process\.env\.NEXT_PHASE === "phase-production-build";/);
+  assert.match(src("lib/queries/turfPage.ts"), /import \{ firstLife \} from "@\/lib\/queries\/firstLife";/);
+});
+
+test("a twin showing another city's (or India's) turfs carries that list's tag too", () => {
+  assert.match(src("components/search/TurfsView.tsx"), /await tagShownList\(requested, scope\);/);
+  assert.match(src("components/home/HomeView.tsx"), /await tagShownList\(requested, s\.scope\);/);
+});
+
+test("pages that list open games are kept no longer than just past the next one's expiry", () => {
+  assert.match(src("lib/home/data.ts"), /const games = filterNonExpiredGames\(extras\.games, now\);\n\s*await keepUntil\(nextGameExpiry\(games, now\), "home", now\);/);
+  assert.match(src("components/game/GamesView.tsx"), /await keepUntil\(nextGameExpiry\(games, at\), "games", at\);/);
+  assert.match(src("app/game/[id]/page.tsx"), /if \(game && !isGameExpired\(game\)\) await keepUntil\(gameExpiresAt\(game\), "games"\);/);
+});
+
+test("change marks: the first mark at or after the change, never more often than each page's old timer", () => {
+  // Home: its old timer was 10 minutes; games pages: a minute.
+  assert.equal(Math.min(...CHANGE_MARKS_S.home), 600);
+  assert.equal(Math.min(...CHANGE_MARKS_S.games), 60);
+  // Every mark is shorter than the page's own timer (else it does nothing).
+  assert.ok(Math.max(...CHANGE_MARKS_S.home) < HOUR);
+  assert.ok(Math.max(...CHANGE_MARKS_S.games) < 600);
+  assert.equal(changeMarkFor(5, "home"), 600);
+  assert.equal(changeMarkFor(600, "home"), 600);
+  assert.equal(changeMarkFor(601, "home"), 1200);
+  assert.equal(changeMarkFor(2999, "home"), 3000);
+  assert.equal(changeMarkFor(3100, "home"), null, "the hour comes first");
+  assert.equal(changeMarkFor(-30, "games"), 60, "already past (a slow render): soon");
+  assert.equal(changeMarkFor(100, "games"), 120);
+  assert.equal(changeMarkFor(301, "games"), null, "the 10 minutes come first");
+  assert.equal(changeMarkFor(Infinity, "home"), null);
+  assert.equal(changeMarkFor(NaN, "games"), null);
+  // The lag past the change is at most the gap between marks: 10 minutes on the home, 5 on games pages.
+  for (const [kind, page, most] of [["home", HOUR, 600], ["games", 600, 300]] as const) {
+    for (let s = 1; s <= page; s += 7) {
+      const kept = changeMarkFor(s, kind) ?? page;
+      assert.ok(kept >= s, `${kind} ${s}: rendered again after the change`);
+      assert.ok(kept - s <= most, `${kind} ${s}: at most ${most} s late (${kept})`);
+    }
+  }
+  assert.deepEqual(ALL_CHANGE_MARKS_S, [60, 120, 300, 600, 1200, 1800, 2400, 3000]);
 });

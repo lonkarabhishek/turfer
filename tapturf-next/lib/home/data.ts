@@ -4,7 +4,7 @@ import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { getLiveCities } from "@/lib/queries/cities";
 import { readTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { loadOpenGames } from "@/lib/ai/games";
-import { gameVenue, sortGamesByDateTime } from "@/lib/utils/game";
+import { filterNonExpiredGames, gameVenue, nextGameExpiry, sortGamesByDateTime } from "@/lib/utils/game";
 import { CITIES, cityInfo, guessCityFromAddress, isCity } from "@/lib/city";
 import { SPORT_PAGES, sportPageForLabel, turfPlaysSport } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
@@ -19,6 +19,7 @@ import type { HomeCityRow, HomeData, HomeGame, HomeHeroProps, HomePost, HomeStri
 import { formatTime12, plural } from "./format";
 import { GAMES_TAG } from "@/lib/cache/listTags";
 import { listScope, scopedRead, tagGamesRender } from "@/lib/queries/listScope";
+import { keepUntil } from "@/lib/queries/changeMark";
 
 // An hour (10 minutes until 10 Nov): the home and its /c/<city> twins show
 // open games, so the games key purges them too (tagGamesRender below).
@@ -153,11 +154,21 @@ async function getHomeExtras() {
 }
 
 async function buildHomeData(): Promise<HomeData> {
-  const [turfs, live, { picks, games }] = await Promise.all([
+  const [turfs, live, extras] = await Promise.all([
     getAllActiveTurfs(),
     getLiveCities().catch(() => []),
     getHomeExtras(),
   ]);
+  const { picks } = extras;
+  // Open games as of now (the shared entry's copy can be up to its hour
+  // old), and the page is kept no longer than until the next of them
+  // passes kickoff + 30 minutes: nothing writes to the database then, so
+  // no games key comes, and the block is server markup (OpenGames) with
+  // no filter in the browser. At most 10 minutes late, as with the old
+  // 10 minute timer, and never more often (lib/cache/changeMarks.ts).
+  const now = Date.now();
+  const games = filterNonExpiredGames(extras.games, now);
+  await keepUntil(nextGameExpiry(games, now), "home", now);
 
   // One pass: group by city. Rows come back in compareTopRated order,
   // so every per-city list is already ranked.

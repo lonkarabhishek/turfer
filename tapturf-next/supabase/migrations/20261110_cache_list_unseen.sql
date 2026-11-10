@@ -12,24 +12,35 @@
 -- app/api/revalidate), so such a version would otherwise reach a city page
 -- within a day and a turf page within a week.
 --
--- Now, when the hourly build moves the version, the turfs whose list row
--- (CARD_COLUMNS: prices, hours, name, photos, rating, active) it changed
--- are compared with the rows before it, and their keys are queued:
--- list:<city> for the old and the new city, turf:<slug> for the old and
--- the new slug (or id). The list keys go out with the next list post (the
--- gap, 15 minutes by default), the turf keys with flush_cache's next post
--- (about a minute). A build with nothing changed queues nothing. On
--- 10 Nov the live snapshot (v144, 3,857 rows) changed last at a list post
--- (changed_at = last_post): this is a backstop for bulk fixes run with
--- triggers off, not a new stream of purges.
+-- Now every build compares the turfs' list rows (CARD_COLUMNS: prices,
+-- hours, name, photos, rating, active) before and after it, and when it
+-- moved the version, queues the keys of the turfs it changed: list:<city>
+-- for the old and the new city, turf:<slug> for the old and the new slug
+-- (or id). Both builds do it:
+--   the build before a list post: on a busy day it is the one that takes
+--   in such a write, since every post stamps built_at and the hourly build
+--   then seldom runs. The list keys no waiting key carries go out with
+--   this same post (and are marked posted, so a failed post sends them
+--   again, as the others); the turf keys go to flush_cache (about a
+--   minute). A turf a trigger saw too gets its page key again: one more
+--   render of that page per such edit (about 25 turf purges on 9 Nov).
+--   the hourly build on a tick that posts nothing: the list keys wait for
+--   the next list post (the gap, 15 minutes by default), the turf keys go
+--   to flush_cache.
+-- A build with nothing changed queues nothing. On 10 Nov the live snapshot
+-- (v144, 3,857 rows) changed last at a list post (changed_at = last_post):
+-- this is a backstop for bulk fixes run with triggers off, not a new
+-- stream of purges.
 --
 -- The comparison parses the current version's parts once before the build
--- and once after it, only on the hourly tick (about 0.43 s each on 10 Nov,
--- measured read-only on production), well inside the tick's 30 s.
+-- and once after it (about 0.43 s each on 10 Nov, measured read-only on
+-- production): about 0.9 s more per list post (at most one per gap) and per
+-- hourly build, well inside the tick's 30 s.
 --
 -- Replaces private.flush_lists() only (as in 20261026_cache_list_snapshot.sql,
--- plus the queueing at its end). Production md5(prosrc) before this file,
--- read with a SELECT on 10 Nov 2026, the same as the repository's
+-- plus the comparison and queueing in both builds). Production md5(prosrc) before this file,
+-- read with a SELECT on 10 Nov 2026 (twice, the second after the post
+-- build's comparison was added), the same as the repository's
 -- 20261026_cache_list_snapshot.sql body:
 --   private.flush_lists()               f6f50f906813b213c5675f8c1bba82cc
 -- and, unchanged here, what it calls:
@@ -108,6 +119,9 @@ declare
   v_req    bigint;
   v_snap   pg_snapshot;
   v_before jsonb;
+  v_found  text[];
+  v_pages  text[];
+  v_more   text[];
 begin
   if not pg_try_advisory_xact_lock(hashtext('private.flush_lists')) then
     return;
@@ -150,9 +164,19 @@ begin
       exit post;
     end if;
 
-    -- The rows first, holding no key's lock.
+    -- The rows first, holding no key's lock, and what changed in them:
+    -- besides the writes the waiting keys carry, the build can take in a
+    -- write no trigger saw (no key waits for it). Its turfs' pages go to
+    -- flush_cache now; their lists go out with this post, below.
     v_snap := pg_current_snapshot();
-    perform private.build_turf_list();
+    v_before := private.turf_list_rows_now();
+    if private.build_turf_list() then
+      v_found := private.turf_list_changed_keys(v_before, private.turf_list_rows_now());
+    end if;
+    v_pages := array(select k from unnest(v_found) k where k like 'turf:%' order by k);
+    if cardinality(v_pages) > 0 then
+      perform private.mark_dirty(v_pages, false);
+    end if;
 
     select array_agg(key order by key) into v_keys from (
       select d.key from private.cache_list_dirty d
@@ -162,13 +186,33 @@ begin
               or pg_visible_in_snapshot(d.marked_xid, v_snap))
          for update of d skip locked
     ) s;
-    if v_keys is null then
+
+    -- The changed lists no waiting key carries. Marked posted with the
+    -- rest (a failed post queues them again at the next window, above):
+    -- a city never queued, or one posted before and held by no open
+    -- transaction. A key still waiting that the select above passed over
+    -- (an open transaction holds it, or it was marked after the snapshot)
+    -- keeps waiting: it goes out with the next post, built after its write.
+    v_more := array(select k from unnest(v_found) k where k like 'list:%' and k <> all (coalesce(v_keys, '{}'::text[])) order by k);
+    if cardinality(v_more) > 0 then
+      update private.cache_list_dirty d set first_at = v_now, last_at = v_now, posted_at = v_now
+       where d.key in (
+         select x.key from private.cache_list_dirty x
+          where x.key = any (v_more) and x.posted_at is not null
+            for update of x skip locked);
+      insert into private.cache_list_dirty (key, first_at, last_at, posted_at)
+      select k, v_now, v_now, v_now from unnest(v_more) k
+      on conflict (key) do nothing;
+    end if;
+
+    if v_keys is null and cardinality(v_more) = 0 then
       exit post;
     end if;
     v_req := net.http_post(
       url     := v_url,
       headers := jsonb_build_object('Content-Type', 'application/json', 'x-revalidate-secret', v_secret),
-      body    := jsonb_build_object('keys', to_jsonb(v_keys)),
+      body    := jsonb_build_object('keys', to_jsonb(array(
+                   select distinct k from unnest(coalesce(v_keys, '{}'::text[]) || v_more) k order by k))),
       timeout_milliseconds := 15000
     );
     update private.cache_list_dirty set posted_at = v_now where key = any (v_keys);

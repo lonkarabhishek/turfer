@@ -4,12 +4,15 @@
 // 20261025_turf_claimed.sql, then the three 20261026 cache files), with the
 // same stand-ins for pg_net (net.http_post records each post in net.sent)
 // and pg_cron as cache_list_snapshot.check.mjs (its setup, copied), and
-// checks that the hourly build queues the keys of exactly the turfs it
-// found changed by a write no trigger saw: their city's list key (old and
-// new city) and their page key (old and new slug), nothing when nothing
-// changed, nothing within the hour, and that the next list post carries
-// them. The new file is applied twice (safe to run again). Never touches a
-// real database. Time moves by shifting the stored timestamps back.
+// checks that both builds queue the keys of exactly the turfs they found
+// changed by a write no trigger saw: their city's list key (old and new
+// city) and their page key (old and new slug). The hourly build: nothing
+// when nothing changed, nothing within the hour, the next list post
+// carries them. The build before a list post: the lists no waiting key
+// carries go out with that same post (and again after a failed post), the
+// pages to flush_cache. The new file is applied twice (safe to run again).
+// Never touches a real database. Time moves by shifting the stored
+// timestamps back.
 // Run: PGLITE=<pglite dist/index.js> node scripts/sql-tests/cache_list_unseen.check.mjs supabase/migrations
 const { PGlite } = await import(process.env.PGLITE ?? "@electric-sql/pglite");
 import fs from "node:fs";
@@ -45,8 +48,13 @@ eq(md5(bodyOf(read(BASE[2]), "private.build_turf_list()")), "ea7f6e22f13d268e2d4
 {
   const before = bodyOf(read(BASE[2]), "private.flush_lists()");
   const after = bodyOf(read(FILE), "private.flush_lists()");
-  const tailAt = before.indexOf("  -- Nothing posted this tick");
-  ok(tailAt > 0 && after.startsWith(before.slice(0, tailAt).replace("  v_snap   pg_snapshot;\n", "  v_snap   pg_snapshot;\n  v_before jsonb;\n")), "everything before the hourly build is unchanged");
+  const BUILD = "    -- The rows first, holding no key's lock";
+  const decl = (b) => b.replace("  v_snap   pg_snapshot;\n", "  v_snap   pg_snapshot;\n  v_before jsonb;\n  v_found  text[];\n  v_pages  text[];\n  v_more   text[];\n");
+  ok(before.indexOf(BUILD) > 0 && after.startsWith(decl(before.slice(0, before.indexOf(BUILD)))), "everything before the post's build is unchanged");
+  // The waiting keys are still chosen as before (skip locked, the snapshot rule), and only they are marked posted by the post itself.
+  const pick = before.slice(before.indexOf("    select array_agg(key order by key) into v_keys"), before.indexOf("    if v_keys is null then"));
+  ok(pick.length > 100 && after.includes(pick), "the waiting keys are picked as before");
+  ok(after.includes("    update private.cache_list_dirty set posted_at = v_now where key = any (v_keys);"), "and marked posted as before");
 }
 
 const STUBS = `
@@ -201,6 +209,90 @@ await hourLater();
 const v6 = await version();
 await q("select private.flush_lists()");
 eq([await version(), await waitingLists(), await waitingPages()], [v6, [], []], "no list column changed: nothing");
+
+// 7a. The build before a list post takes in a write no trigger saw (the
+// review's case): an unseen price change in one city, then a normal edit
+// in another. The post carries both cities; the unseen turf's page goes to
+// flush_cache; nothing is left for the hourly build to find.
+{
+  await settle();
+  const cA = await cityOf("turf-8");
+  const other = await one("select slug, city from public.turfs where is_active and city <> $1 and slug <> 'turf-8' order by slug limit 1", [cA]);
+  const v0 = await version();
+  await unseen(`update public.turfs set morning_price = 4321 where slug = 'turf-8'`);
+  await q(`update public.turfs set evening_price = coalesce(evening_price, 0) + 1 where slug = $1`, [other.slug]);
+  eq(await waitingLists(), [`list:${other.city}`], "only the seen edit's city waits");
+  await later(20);
+  before = await sentCount();
+  await q("select private.flush_lists()");
+  eq(await sentCount(), before + 1, "one post");
+  eq((await lastSent()).keys, [`list:${cA}`, `list:${other.city}`].sort(), "with the seen city and the city of the write no trigger saw");
+  eq(await version(), v0 + 1, "one build took in both");
+  ok((await waitingPages()).includes("turf:turf-8"), "the unseen turf's page waits for flush_cache");
+  eq(await waitingLists(), [], "nothing waits");
+  eq((await one("select posted_at = (select last_post from private.cache_list_state) p from private.cache_list_dirty where key = $1", [`list:${cA}`])).p, true, "the added city is marked posted with the post");
+
+  // 7b. That post failed (no 2xx): at the next window both cities go again.
+  await q("insert into net._http_response (id, status_code) values ((select last_request from private.cache_list_state), 500)");
+  await settle();
+  await q(`update public.turfs set evening_price = coalesce(evening_price, 0) + 1 where slug = 'turf-15'`);
+  const c15 = await cityOf("turf-15");
+  await later(20);
+  before = await sentCount();
+  await q("select private.flush_lists()");
+  eq((await lastSent()).keys, [...new Set([`list:${cA}`, `list:${other.city}`, `list:${c15}`])].sort(), "a failed post's cities, the added one too, go again");
+  await q("insert into net._http_response (id, status_code) values ((select last_request from private.cache_list_state), 200)");
+  await settle();
+
+  // 7c. The hourly tick after all that: the version already holds the unseen write; nothing more.
+  await hourLater();
+  await later(20);
+  before = await sentCount();
+  const v1 = await version();
+  await q("select private.flush_lists()");
+  eq([await version(), await waitingLists(), await waitingPages(), await sentCount()], [v1, [], [], before], "the hourly build finds nothing new");
+}
+
+// 7d. An unseen write in the city a post already carries: no key twice.
+// A turf a trigger saw gets its page key again (its row changed in this
+// build too): one more render of that page, the cost of not missing one.
+{
+  await settle();
+  const cB = await cityOf("turf-20");
+  const same = await one("select slug from public.turfs where is_active and city = $1 and slug <> 'turf-20' order by slug limit 1", [cB]);
+  await unseen(`update public.turfs set afternoon_price = 999 where slug = 'turf-20'`);
+  await q(`update public.turfs set afternoon_price = 998 where slug = $1`, [same.slug]);
+  await q("update private.cache_dirty set sent_at = now() where sent_at is null"); // flush_cache posted the seen page already
+  await later(20);
+  await q("select private.flush_lists()");
+  eq((await lastSent()).keys, [`list:${cB}`], "the city once");
+  eq(await waitingPages(), [`turf:${same.slug}`, "turf:turf-20"].sort(), "both pages wait: the unseen one, and the seen one again");
+  await q("insert into net._http_response (id, status_code) values ((select last_request from private.cache_list_state), 200)");
+  await settle();
+}
+
+// 7e. A list post whose build changes nothing beyond its keys queues no page
+// it did not change: a trending pick (a list key, no list row) posts that key only.
+{
+  await settle();
+  const tid = (await one("select id from public.turfs where slug = 'turf-30'")).id;
+  const c30 = await cityOf("turf-30");
+  await q("insert into public.trending_turfs (city, turf_id, starts_at, ends_at) values ($1, $2, now(), now() + interval '1 day')", [c30, tid]);
+  const lists = await waitingLists();
+  await q("update private.cache_dirty set sent_at = now() where sent_at is null");
+  const v2 = await version();
+  await later(20);
+  before = await sentCount();
+  await q("select private.flush_lists()");
+  if (lists.length) {
+    eq((await lastSent()).keys, lists, "the pick's own keys only");
+  } else {
+    eq(await sentCount(), before, "the pick queued no list key: nothing posted");
+  }
+  eq([await version(), await waitingPages()], [v2, []], "no row changed: no version, no page queued");
+  await q("insert into net._http_response (id, status_code) values ((select last_request from private.cache_list_state), 200)");
+  await settle();
+}
 
 // 7. The pure comparison: nothing before (a first build) queues nothing; equal maps queue nothing.
 eq((await one(`select private.turf_list_changed_keys('{}'::jsonb, private.turf_list_rows_now()) k`)).k, null, "no rows before: nothing");

@@ -5,7 +5,8 @@ import { getGameByIdServer } from "@/lib/queries/games.server";
 import { tagGamesRender } from "@/lib/queries/listScope";
 import { hostUsernames } from "@/lib/games/hostProfile.server";
 import { gameShareImages } from "@/lib/og/gameCard";
-import { gameVenue, isGameExpired } from "@/lib/utils/game";
+import { gameExpiresAt, gameVenue, isGameExpired } from "@/lib/utils/game";
+import { keepUntil } from "@/lib/queries/changeMark";
 import { gameCityLabel, gameEventJsonLd } from "@/lib/seo/gameJsonLd";
 import { OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
@@ -18,7 +19,8 @@ import { formatFor } from "@/lib/turfSession/plan";
 // each, the 60 s revalidate did nothing). The games key (the games trigger:
 // a new game, a join, an edit, a cancel, close_past_games) marks every game
 // page stale within about a minute (the games tag, app/api/revalidate), so
-// its spots, venue and robots follow the game. A failed read throws
+// its spots and venue follow the game; its robots turn noindex a few
+// minutes after it has been played at most (keepUntil). A failed read throws
 // (getGameByIdServer strict): the last good page stays, never a cached
 // "Game not found".
 export const revalidate = 600;
@@ -95,6 +97,10 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   await tagGamesRender();
   const game = await loadGame(id);
+  // Its robots turn noindex once it has been played (generateMetadata,
+  // isGameExpired), when nothing writes to the database: kept no longer
+  // than a few minutes past that (lib/cache/changeMarks.ts).
+  if (game && !isGameExpired(game)) await keepUntil(gameExpiresAt(game), "games");
   // The host's public profile for the organizer url, when they have one shown (else the game page).
   const hosts = game ? await hostUsernames([{ id: game.creator_id, name: game.host_name }]) : null;
   const jsonLd = game ? gameEventJsonLd(game, { id, hostUsername: hosts?.get(game.creator_id) ?? null }) : null;

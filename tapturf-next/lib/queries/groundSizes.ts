@@ -16,9 +16,11 @@ async function readPeers(): Promise<PeerTurf[]> {
  * Every active turf's owner ground sizes, numbers only, for the Ground
  * size card's "longer than 72% of turfs in Nashik" lines
  * (lib/turfSize/benchmark.ts). Read only by a turf page whose turf has
- * sizes. Cached for a week and untagged, like getTurfFacts: no page gains a
- * tag or a shorter revalidate (turf pages keep their week), and a benchmark
- * a day behind another turf's new sizes is fine. A warm instance keeps it
+ * sizes. Cached for a week (a day until 10 Nov) and untagged, like
+ * getTurfFacts: no page gains a tag or a shorter revalidate (turf pages
+ * keep their week), and a benchmark up to a week behind another turf's new
+ * sizes is fine (only a first render reads the entry; percentiles, no
+ * price or hour). A warm instance keeps it
  * in memory for an hour too, and concurrent renders share one read. A
  * failed read gives the last copy, or none: the card then shows the size
  * words without percentiles. Never throws.

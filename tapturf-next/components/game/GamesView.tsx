@@ -5,11 +5,12 @@ import { resolveCityScope } from "@/lib/city";
 import { cityLineFor } from "@/lib/cityLine";
 import { GAMES_JSON_LD_MAX, gamesJsonLd } from "@/lib/seo/gameJsonLd";
 import { hostUsernames } from "@/lib/games/hostProfile.server";
-import { gameCity } from "@/lib/utils/game";
+import { gameCity, nextGameExpiry } from "@/lib/utils/game";
 import { GamesListingClient } from "./GamesListingClient";
 import type { Game } from "@/types/game";
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
 import { tagGamesRender } from "@/lib/queries/listScope";
+import { keepUntil } from "@/lib/queries/changeMark";
 
 /** Its turf's city, or a typed venue's own (lib/utils/game.ts gameCity). */
 function cityOf(g: Game): string | null {
@@ -28,6 +29,10 @@ export async function GamesView({ requested }: { requested: string | null }) {
   // The games key marks this page stale (app/api/revalidate), so its 10 minute timer is only a backstop.
   await tagGamesRender();
   const [{ games, at }, live] = await Promise.all([getOpenGamesCached(), getLiveCities()]);
+  // A game that passes kickoff + 30 minutes leaves the list in the browser,
+  // but its Event stays in the JSON-LD below until the page renders again:
+  // keep it no longer than a few minutes past that (lib/cache/changeMarks.ts).
+  await keepUntil(nextGameExpiry(games, at), "games", at);
   // The listed games' hosts' public profiles, for the JSON-LD organizer url (none while building: the game page's url then).
   const hosts = await hostUsernames(games.slice(0, GAMES_JSON_LD_MAX).map((g) => ({ id: g.creator_id, name: g.host_name })));
   const scope = resolveCityScope(requested, live);

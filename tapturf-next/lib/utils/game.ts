@@ -50,6 +50,31 @@ export function filterNonExpiredGames<T extends Pick<Game, "date" | "start_time"
   return games.filter((g) => !isGameExpired(g, now));
 }
 
+/**
+ * The instant isGameExpired turns true for this game (epoch ms): 30
+ * minutes after kickoff, or India's midnight after its day when that comes
+ * first or it has no start time; null with no date (it never expires).
+ * Cached pages that list a game use it to be rendered again once it drops
+ * off (lib/queries/changeMark.ts).
+ */
+export function gameExpiresAt(game: Pick<Game, "date" | "start_time">): number | null {
+  const day = dayOf(game.date);
+  if (Number.isNaN(day)) return null;
+  const start = minutesOf(game.start_time);
+  const midnight = istInstant(day + 1, 0);
+  return Number.isNaN(start) ? midnight : Math.min(istInstant(day, start) + 30 * 60_000, midnight);
+}
+
+/** The soonest of `games` to expire after `now` (epoch ms), or null when none will. */
+export function nextGameExpiry(games: readonly Pick<Game, "date" | "start_time">[], now: number = Date.now()): number | null {
+  let next: number | null = null;
+  for (const g of games) {
+    const at = gameExpiresAt(g);
+    if (at != null && at > now && (next == null || at < next)) next = at;
+  }
+  return next;
+}
+
 export function sortGamesByDateTime<T extends Pick<Game, "date" | "start_time">>(games: T[]): T[] {
   return [...games].sort((a, b) => {
     const dateA = new Date(a.date).getTime();

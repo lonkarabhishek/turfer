@@ -19,13 +19,17 @@ async function readTurfFacts(): Promise<TurfFacts> {
  * the city and city+sport snippets and the turf titles. One paged read
  * of every active turf; only ids and keys are kept, never a number.
  *
- * Cached for a week and untagged, like getFooterCities: no page gains a
- * tag or a shorter revalidate (turf pages keep their week), and a snippet
- * a day behind a new phone number is fine. A regeneration skips the
- * data cache, so a warm instance also keeps it in memory for an hour,
- * and concurrent renders share one read. A failed read gives the last
- * copy (they are ids and flags, no price or hour, so a day-old copy is
- * fine). With none at all the page throws Unavailable (needForPage): its
+ * Cached for a week (a day until 10 Nov) and untagged, like
+ * getFooterCities: an unstable_cache entry lowers the revalidate of every
+ * page that reads it to its own, so a day here would hold the week-long
+ * turf pages to a day. Only a first render reads the entry (a page
+ * prerendered at a deploy has the build-data step's facts, and a
+ * regeneration skips the data cache), so a title or snippet can be up to
+ * the week behind a new phone number or a second turf of the same name
+ * only there; the page it lands on is itself kept that week. Ids and
+ * flags, never a price or an hour. A regeneration skips the data cache,
+ * so a warm instance also keeps it in memory for an hour, and concurrent
+ * renders share one read. A failed read gives the last copy. With none at all the page throws Unavailable (needForPage): its
  * title and description would promise less than the page that is cached
  * (no "Call or WhatsApp", no shared-name city), so a regeneration keeps
  * the last good page and a first render answers 503 with Retry-After.

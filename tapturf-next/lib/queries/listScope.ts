@@ -1,7 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
-import { GAMES_TAG, isListScope, listTag } from "@/lib/cache/listTags";
+import { GAMES_TAG, INDIA, isListScope, listTag } from "@/lib/cache/listTags";
+import { firstLife } from "@/lib/queries/firstLife";
+import type { CityScope } from "@/lib/city";
 
 /**
  * Which list pages this render is (lib/cache/listTags.ts): a city's own
@@ -89,12 +91,36 @@ export function tagGamesRender(): Promise<void> {
 }
 
 /**
+ * A page for the city `requested` that shows another list instead
+ * (lib/city.ts resolveCityScope: a curated city with no live turfs shows
+ * the nearest live city's turfs, or all of India's) takes that list's tag
+ * too, so that list's posts mark it stale (TurfsView, HomeView). The
+ * page's own tag stays: its city getting a turf changes the page too.
+ */
+export async function tagShownList(requested: string | null, shown: CityScope): Promise<void> {
+  if (!requested) return;
+  const id = shown.kind === "city" ? shown.id : INDIA;
+  if (id === requested || !isListScope(id)) return;
+  await tagRender(listTag(id));
+}
+
+const isBuilding = () => process.env.NEXT_PHASE === "phase-production-build";
+
+/**
  * A shared read for this render: in a scoped render the page's scope tag
  * and `fresh()` (React-cached by the caller), else the cached entry.
+ *
+ * A scoped page prerendered while building is kept 15 to 30 minutes first
+ * (firstLife, lib/queries/firstLife.ts), as turf pages are: its rows were
+ * read minutes before go-live, and a list post sent in between reached only
+ * the old deployment's pages (nothing sends it again: flush_lists marks it
+ * posted). Then its day (or hour) from its first refresh. That refresh is
+ * one render per prerendered list page visited after it, per deploy.
  */
 export async function scopedRead<T>(fresh: () => Promise<T>, cached: () => Promise<T>): Promise<T> {
   const scope = listScope();
   if (!scope) return cached();
   await tagRender(listTag(scope));
+  if (isBuilding()) await firstLife(`list:${scope}`);
   return fresh();
 }
