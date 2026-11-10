@@ -147,3 +147,23 @@ test("the compact row gives the same card, price label, area and name match", ()
   assert.equal("has_floodlights" in noCover, false);
   assert.equal("amenities" in noCover, false);
 });
+
+test("cards and the chat card lead with our own copies when Google links come first (DN Parande, 10 Nov)", () => {
+  const t = row(5);
+  const google = Array.from({ length: 6 }, (_, k) => `https://lh3.googleusercontent.com/gps-cs-s/DeadLink${k}=w1200-h900-k-no`);
+  const ours = Array.from({ length: 7 }, (_, k) => `https://hwfsbpzercuoshodmnuf.supabase.co/storage/v1/object/public/turf-photos/${t.id}/${String(k).repeat(24)}.webp`);
+  const turf = { ...t, cover_image: google[0], images: [...google, ...ours] };
+
+  // The card keeps four, ours first, in their stored order.
+  assert.deepEqual(forCard(turf).images, ours.slice(0, 4));
+  // The chat card keeps the one it shows: our first copy, not the dead cover.
+  const ask = toAskTurf(turf);
+  assert.equal("cover_image" in ask, false);
+  assert.deepEqual(ask.images, [ours[0]]);
+
+  // Only Google links: the card keeps the first four as stored, the chat card the cover.
+  const onlyGoogle = { ...t, cover_image: google[0], images: google };
+  assert.deepEqual(forCard(onlyGoogle).images, google.slice(0, 4));
+  assert.equal(toAskTurf(onlyGoogle).cover_image, google[0]);
+  assert.deepEqual(toAskTurf(onlyGoogle).images, []);
+});
