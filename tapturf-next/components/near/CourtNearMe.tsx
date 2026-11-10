@@ -24,6 +24,8 @@ import {
 import { courtNearMeDescription, courtNearMeKeywords, courtNearMeTitle } from "@/lib/seo/listingMeta";
 import { listingReach, reachOf } from "@/lib/seo/turfFacts";
 import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_INDEX, TWITTER_CARD } from "@/lib/seo/defaults";
+import { setListScope } from "@/lib/queries/listScope";
+import { INDIA } from "@/lib/cache/listTags";
 
 // "Badminton courts near me" and its two siblings (pickleball, tennis):
 // the court twin of /turf-near-me for players who search a court sport,
@@ -38,6 +40,8 @@ const LIST =
 
 // Once per render: generateMetadata and the page share it (React cache).
 const load = cache(async (slug: CourtNearMeSlug) => {
+  // All-India lists: every list post marks these pages stale (turf-data:india).
+  setListScope(INDIA);
   const sport = courtNearMeSport(slug);
   if (!sport) throw new Error(`No court near-me page for ${slug}`);
   // The sport page's rows (top rated first), its sport bands for the

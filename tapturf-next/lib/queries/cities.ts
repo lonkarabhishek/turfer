@@ -9,6 +9,7 @@ import { readCityCountRows } from "@/lib/build/reads";
 import { buildData } from "@/lib/build/data";
 import { cityCountsFromRows } from "@/lib/cache/cityCounts";
 import { isUnavailable, Unavailable } from "@/lib/cache/unavailable";
+import { listScope, scopedRead } from "@/lib/queries/listScope";
 
 // Pure, in lib/city.ts so test:city covers them; still imported from here.
 export { HOME_CITIES, pickOtherCities } from "@/lib/city";
@@ -123,10 +124,17 @@ const getLiveCitiesCached = unstable_cache(readLiveCities, ["live-cities"], { re
 let liveFailLoggedAt = -Infinity;
 // The answers served after a failed read (each its own array).
 const keptAnswers = new WeakSet<LiveCity[]>();
+// A scoped list page (lib/queries/listScope.ts) reads the counts fresh,
+// once per render, and takes its scope's tag: through the hourly entry a
+// day-long city page would be kept an hour at most. Its own city's count
+// is then never older than its last purge; another city's count can be
+// up to its day old, as can the page itself (counts, never prices or hours).
+const freshLiveCities = cache(readLiveCities);
 
-export const getLiveCities = cache(async (): Promise<LiveCity[]> => {
+const liveCitiesIn = cache(async (scope: string | null): Promise<LiveCity[]> => {
+  void scope; // the React cache key; scopedRead reads the scope itself
   try {
-    const cities = await getLiveCitiesCached();
+    const cities = await scopedRead(freshLiveCities, getLiveCitiesCached);
     kept.hourly = cities;
     return cities;
   } catch (e) {
@@ -148,6 +156,8 @@ export const getLiveCities = cache(async (): Promise<LiveCity[]> => {
     return answer;
   }
 });
+
+export const getLiveCities = (): Promise<LiveCity[]> => liveCitiesIn(listScope());
 
 /**
  * True when getLiveCities answered with a list kept from before (its read
@@ -171,9 +181,9 @@ export function cityPageIndexable(c: Pick<CityCountRow, "n">): boolean {
 
 /**
  * The same list for the footer, which is on every page: its own copy,
- * cached for a day and untagged. unstable_cache lowers the revalidate of
+ * cached for a week (the turf pages' timer) and untagged. unstable_cache lowers the revalidate of
  * every page that reads it to its own, so the footer reading the hourly
- * copy made the day-long turf pages (2.6k of them, one turf_page call per
+ * copy made the week-long turf pages (2.6k of them, one turf_page call per
  * refresh) refresh every hour. Tagging it "turf-data" would mark every
  * turf page stale on each list purge.
  *
@@ -186,7 +196,7 @@ export function cityPageIndexable(c: Pick<CityCountRow, "n">): boolean {
  * a page that reads none (a turf page, the blog) would load the whole
  * list, the reads that are failing, for its footer, and take its tag.
  */
-const getFooterCitiesCached = unstable_cache(readLiveCities, ["live-cities-footer"], { revalidate: 86400 });
+const getFooterCitiesCached = unstable_cache(readLiveCities, ["live-cities-footer"], { revalidate: 604800 });
 const FOOTER_MEMO_MS = 3_600_000;
 let footerMemo: { at: number; cities: LiveCity[] } | null = null;
 let footerPending: Promise<LiveCity[]> | null = null;

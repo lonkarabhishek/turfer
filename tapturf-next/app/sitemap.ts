@@ -11,14 +11,16 @@ import { isGameExpired } from "@/lib/utils/game";
 import { turfPath } from "@/lib/utils/turfPath";
 import { sitemapPhotos } from "@/lib/utils/images";
 import { activeTurfRows } from "@/lib/queries/turfs";
+import { withListScope } from "@/lib/queries/listScope";
+import { INDIA } from "@/lib/cache/listTags";
 import { PRIVACY_UPDATED } from "@/lib/policy";
 import { SEO_TEMPLATE_DATE } from "@/lib/seo/defaults";
 
-// Sitemap was being served with age ~8.8 days from the Vercel cache
-// even though DB rows changed within the hour. Cap it to an hour so
-// Googlebot always sees fresh lastmod, and let the future revalidate
-// webhook (P0-2) blow it away sooner on writes.
-export const revalidate = 3600;
+// A day (an hour until 10 Nov): every list post marks it stale
+// (turf-data:india, lib/queries/listScope.ts), so a new, renamed or
+// switched-off turf reaches it within the list gap, as do its lastmod
+// dates. A new game with no list post since reaches it within the day.
+export const revalidate = 86400;
 
 const BASE = "https://www.tapturf.in";
 
@@ -37,7 +39,12 @@ function latest(dates: (string | null | undefined)[]): Date {
   return new Date(best);
 }
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+// A route, not a React render: the all-India scope for its reads comes from withListScope.
+export default function sitemap(): Promise<MetadataRoute.Sitemap> {
+  return withListScope(INDIA, buildSitemap);
+}
+
+async function buildSitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = createReadOnlyClient();
 
   // While building: both reads as the build-data step made them (lib/build/data.ts).

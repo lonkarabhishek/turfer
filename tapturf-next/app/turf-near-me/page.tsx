@@ -18,14 +18,18 @@ import { plural } from "@/lib/home/format";
 import { nearMeDescription } from "@/lib/seo/listingMeta";
 import { DEFAULT_OG_IMAGE, OG_BASE, TWITTER_CARD } from "@/lib/seo/defaults";
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
+import { setListScope } from "@/lib/queries/listScope";
+import { INDIA } from "@/lib/cache/listTags";
 
 // "Turf near me": the page for people who don't know a turf's name yet.
 // The location button finds the nearest turfs (NearMeFinder). In the HTML,
 // for crawlers and anyone without location: the biggest cities' top turfs
 // as cards with their areas, then every city's own page (each lists every
 // turf there), plus a FAQ. Until 3 Nov it linked every turf in India by
-// city and area: 3.8 MB of HTML, past the 2 MB Googlebot reads.
-export const revalidate = 3600;
+// city and area: 3.8 MB of HTML, past the 2 MB Googlebot reads. A day (an
+// hour until 10 Nov): every list post marks it stale (turf-data:india,
+// lib/queries/listScope.ts).
+export const revalidate = 86400;
 
 const PAGE_URL = "https://www.tapturf.in/turf-near-me";
 // Keyword first; absolute so the layout template doesn't add a second brand.
@@ -60,6 +64,7 @@ type CityBlock = {
 // Built once per render: generateMetadata and the page share it (React
 // cache), instead of each grouping every city's turfs again.
 const load = cache(async () => {
+  setListScope(INDIA);
   // Every live city, biggest first; one block per city with turfs.
   const cities = await getLiveCities();
   const blocks: CityBlock[] = (

@@ -12,10 +12,13 @@ import {
   formatTimeRange,
   formatTimeSlot,
   gameCity,
+  gameExpiresAt,
   gamePlace,
   gameVenue,
   getGameStatus,
   hostNote,
+  isGameExpired,
+  nextGameExpiry,
   oneGamePerRepeat,
   skillInfo,
   speakTimeRange,
@@ -200,6 +203,39 @@ test("live and ended follow India's clock", () => {
   assert.equal(getGameStatus({ date: "2026-10-29", start_time: "09:00", end_time: "10:30" }, NOW), "live");
   assert.equal(getGameStatus({ date: "2026-10-29", start_time: "07:00", end_time: "08:00" }, NOW), "expired");
   assert.equal(getGameStatus({ date: "2026-10-30", start_time: "10:00", end_time: "12:00" }, NOW), "upcoming");
+});
+
+test("a game expires 30 minutes after kickoff, or at India's midnight, exactly when isGameExpired turns", () => {
+  const IST = 330 * 60_000;
+  const at = (d: string, hm: string) => Date.parse(`${d}T${hm}:00Z`) - IST; // a wall-clock IST time
+  // 19:00 kickoff: 19:30 IST.
+  assert.equal(gameExpiresAt({ date: "2026-10-29", start_time: "19:00" }), at("2026-10-29", "19:30"));
+  assert.equal(gameExpiresAt({ date: "2026-10-29", start_time: "19:00:00" }), at("2026-10-29", "19:30"));
+  // 23:50 kickoff: midnight comes first (the day is over).
+  assert.equal(gameExpiresAt({ date: "2026-10-29", start_time: "23:50" }), at("2026-10-30", "00:00"));
+  // No start time: the end of its day. No date: never.
+  assert.equal(gameExpiresAt({ date: "2026-10-29", start_time: "" }), at("2026-10-30", "00:00"));
+  assert.equal(gameExpiresAt({ date: "", start_time: "19:00" }), null);
+  for (const g of [
+    { date: "2026-10-29", start_time: "19:00" },
+    { date: "2026-10-29", start_time: "23:50" },
+    { date: "2026-10-29", start_time: "" },
+    { date: "2026-10-31", start_time: "06:15" },
+  ]) {
+    const t = gameExpiresAt(g)!;
+    assert.equal(isGameExpired(g, t - 1000), false, `${g.date} ${g.start_time}: not expired just before`);
+    assert.equal(isGameExpired(g, t + 1000), true, `${g.date} ${g.start_time}: expired just after`);
+  }
+  // The soonest still ahead; none when every one has passed or never expires.
+  const games = [
+    { date: "2026-10-29", start_time: "08:00" }, // 08:30 IST, before NOW (09:30 IST)
+    { date: "2026-10-30", start_time: "07:00" },
+    { date: "2026-10-29", start_time: "18:00" },
+    { date: "", start_time: "10:00" },
+  ];
+  assert.equal(nextGameExpiry(games, NOW), at("2026-10-29", "18:30"));
+  assert.equal(nextGameExpiry(games.slice(0, 1), NOW), null);
+  assert.equal(nextGameExpiry([], NOW), null);
 });
 
 test("listings show a repeat once, its soonest game", () => {

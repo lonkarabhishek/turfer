@@ -15,6 +15,7 @@ import { CARD_COLUMNS, readCardRows } from "@/lib/build/reads";
 import { buildData } from "@/lib/build/data";
 import { toGroundSizes } from "@/lib/turfSize/sizes";
 import { parseContactInfo } from "@/lib/utils/contact";
+import { listScope, scopedRead } from "@/lib/queries/listScope";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -498,17 +499,25 @@ async function readLiveRows(): Promise<Row[]> {
 }
 
 /**
- * The version, as one tiny entry in Next's data cache. Every list page
- * that reads the rows gets its "turf-data" tag (so a list purge still marks
- * them all stale) and its 3600 s ceiling, exactly as the 32 row pieces gave
- * them. A regeneration that skips the data cache reads the version fresh,
- * which is the point: it is the one read such a regeneration makes. A
- * missing RPC fails the build, so the migration goes first.
+ * The version, as one tiny entry in Next's data cache, for readers that
+ * name no list scope (route handlers, a page that sets none): each gets its
+ * "turf-data" tag (so any list purge marks it stale) and its 3600 s
+ * ceiling, exactly as the 32 row pieces gave them. A regeneration that
+ * skips the data cache reads the version fresh, which is the point: it is
+ * the one read such a regeneration makes. A missing RPC fails the build,
+ * so the migration goes first.
+ *
+ * A scoped list page (a city's pages, the all-India ones; see
+ * lib/queries/listScope.ts) reads the version fresh instead, once per
+ * render (listMetaFresh), and takes its scope's tag: through this entry it
+ * would carry the old tag and the hour's ceiling, and every city's purge
+ * would mark it stale. On Vercel a regeneration reads it fresh either way.
  */
 const listMeta = unstable_cache(cacheKeyed("turf-list-meta", readListMeta), ["turf-list-meta-v1", process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""], {
   revalidate: 3600,
   tags: ["turf-data"],
 });
+const listMetaFresh = cache(readListMeta);
 
 /**
  * Every active turf row, from one copy per server process, keyed by the
@@ -573,14 +582,17 @@ const rowStore = process.env.NODE_ENV === "development" ? makeRowStore() : (shar
  * (rating, then id); callers copy before they sort. Outside a render
  * (route handlers) this is a plain call.
  *
- * listMeta is always called, even when its read fails: that call is what
- * gives the page the "turf-data" tag, so the next purge still reaches a
- * page rendered from an older copy. Such a page is kept a minute only.
+ * The version read is always made, even when it fails: that call is what
+ * gives the page its tag (its scope's, or "turf-data"), so the next purge
+ * still reaches a page rendered from an older copy. Such a page is kept a
+ * minute only. Once per render and scope: a scoped page sets its scope
+ * before its first read (lib/queries/listScope.ts).
  */
-const activeRead = cache(async (): Promise<RowsRead<Row>> => {
+const activeReadIn = cache(async (scope: string | null): Promise<RowsRead<Row>> => {
+  void scope; // the React cache key; scopedRead reads the scope itself
   let meta: ListMeta | null;
   try {
-    meta = await listMeta();
+    meta = await scopedRead(listMetaFresh, listMeta);
   } catch (e) {
     // The version read failed (a regeneration reads it from the database): this process's copy, or the error.
     const kept = rowStore.orKept(e);
@@ -591,7 +603,8 @@ const activeRead = cache(async (): Promise<RowsRead<Row>> => {
   if (got.stale) await markStaleRender();
   return got;
 });
-const activeRows = cache(async (): Promise<readonly Row[]> => (await activeRead()).rows);
+const activeRead = () => activeReadIn(listScope());
+const activeRows = async (): Promise<readonly Row[]> => (await activeRead()).rows;
 
 /**
  * True when this render's rows are an older copy than the current version

@@ -1,7 +1,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { revalidateSecretOk } from "@/lib/cache/secret";
-import { MAX_KEYS, keysForRow, planPurge } from "@/lib/cache/keys";
+import { MAX_KEYS, keysForRow, planPurge, purgeCalls } from "@/lib/cache/keys";
 import { warmTurfList } from "@/lib/queries/turfs";
 
 /**
@@ -24,30 +24,19 @@ import { warmTurfList } from "@/lib/queries/turfs";
  * pages at once. An expired page rebuilds with the data cache bypassed,
  * so every rebuild read the whole turf table again; with imports and
  * admin batches that load took the database down. Now:
- * - any list:* key in a batch marks the "turf-data" tag stale ('max'),
- *   not expired. Every list page carries that tag (unstable_cache copies
- *   it from the list version, see lib/queries/turfs.ts), so they all keep
- *   serving their copy while they rebuild in the background. The batch
- *   comes from private.flush_lists(), at most once per gap (15 minutes by
- *   default), right after it rebuilt the list snapshot, so the rebuilds
- *   read the new version. No per-city path purges: those were hard
- *   expiries.
- * - before that tag is marked, the new version's parts go into Next's data
- *   cache (warmTurfList: about 9 part reads, once). A regenerating page
- *   cannot read that cache itself, but it asks the part route
- *   (/api/turf-list/..., which can), so the burst of rebuilds after a
- *   purge reads cached parts instead of each process pulling all of them
- *   from the database (27 Oct: 7 to 30 processes at once, reads past the
- *   5 s guard). The reads finish before the purge is queued, but Next
- *   sends a route handler's data cache writes and its tag purge together,
- *   after the response (revalidation-utils executeRevalidates), so the
- *   last part's write can land a moment after the purge. That part is the
- *   one a regeneration asks for last (after its version read and every
- *   part before it, each a route request), so the write is in by then;
- *   a process that still misses reads that one part from the database.
- *   The warm-up starts no read after WARM_MS from the request's start, so
- *   pg_net (15 s) gets its answer; if it fails the purge still goes out
- *   and the pages read the parts as before.
+ * - list:<city> keys mark the tags of the pages that show those cities'
+ *   turfs stale ('max'), not expired (lib/cache/listTags.ts, purgeCalls):
+ *   turf-data:<city> for each city's own pages (/<city>, /<city>/<sport>,
+ *   the /c/<city> twins), turf-data:india for the all-India pages (/,
+ *   /turfs, /sport/*, the near-me pages, the sitemap) and the old
+ *   "turf-data" for any other reader. Another city's pages stay as they
+ *   are, which is what lets the list timers be a day (10 Nov; until then
+ *   every list page carried "turf-data" and any list key marked all of
+ *   them). They keep serving their copy while they rebuild in the
+ *   background. The batch comes from private.flush_lists(), at most once
+ *   per gap (15 minutes by default), right after it rebuilt the list
+ *   snapshot, so the rebuilds read the new version. No per-city path
+ *   purges: those were hard expiries.
  * - turf:<key> purges that one turf page, /turf/<key>. revalidatePath
  *   with no profile is a hard expiry, not 'max': the next visitor waits
  *   for one render (a single turf_page call) and that render skips the
@@ -56,7 +45,11 @@ import { warmTurfList } from "@/lib/queries/turfs";
  *   city_turf_counts. To serve these stale as well, the candidate is
  *   revalidateTag(`_N_T_/turf/${key}`, 'max') (the page's implicit tag);
  *   check it on a preview first.
- * - games is accepted and ignored: game pages run on a timer.
+ * - games marks the "games" tag stale ('max'): /games and its twins, game
+ *   pages and the home and its twins (their open games block) carry it,
+ *   so with their 10 minute and hour timers a new or changed game still
+ *   shows within about a minute of the queue's post (the games trigger,
+ *   and close_past_games through it, queue the key).
  *
  * Auth: shared secret in the x-revalidate-secret header. If
  * REVALIDATE_SECRET is set in Vercel it's matched directly; otherwise
@@ -111,32 +104,34 @@ export async function POST(req: Request) {
   if (plan.rejected.length) console.warn("revalidate: skipped keys", plan.rejected.slice(0, 10));
 
   // Legacy per-row posts never purge the lists (see above): the queue's batch does.
-  const listPurge = plan.cities.length > 0 && !legacy;
-  if (listPurge) {
+  const calls = purgeCalls(plan, legacy);
+  if (calls.warm) {
     // The rows first, the purge second (see above).
     try {
       console.info("turf list warmed", await warmTurfList(started + WARM_MS));
     } catch (e) {
       console.warn("turf list warm-up failed; the pages read the parts themselves", e instanceof Error ? e.message : e);
     }
+  }
+  for (const tag of calls.tags) {
     try {
-      revalidateTag("turf-data", "max");
+      revalidateTag(tag, "max");
     } catch (e) {
-      console.warn("revalidateTag(turf-data) failed", e);
+      console.warn(`revalidateTag(${tag}) failed`, e);
     }
   }
-  for (const key of plan.turfs) {
+  for (const path of calls.paths) {
     try {
-      revalidatePath(`/turf/${key}`);
+      revalidatePath(path);
     } catch (e) {
       // Don't fail the batch over one bad path: the flush would resend
       // all of it.
-      console.warn(`revalidatePath(/turf/${key}) failed`, e);
+      console.warn(`revalidatePath(${path}) failed`, e);
     }
   }
 
-  console.info("revalidate", { lists: plan.cities.length, turfs: plan.turfs.length, games: plan.games, legacy, listPurge });
-  return NextResponse.json({ ok: true, lists: plan.cities, turfs: plan.turfs.length });
+  console.info("revalidate", { lists: plan.cities.length, turfs: plan.turfs.length, games: plan.games, legacy, tags: calls.tags.length });
+  return NextResponse.json({ ok: true, lists: plan.cities, turfs: plan.turfs.length, games: plan.games, tags: calls.tags });
 }
 
 // The webhook also fires GET as a health check from Supabase's UI.

@@ -4,7 +4,7 @@ import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { getLiveCities } from "@/lib/queries/cities";
 import { readTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { loadOpenGames } from "@/lib/ai/games";
-import { gameVenue, sortGamesByDateTime } from "@/lib/utils/game";
+import { filterNonExpiredGames, gameVenue, nextGameExpiry, sortGamesByDateTime } from "@/lib/utils/game";
 import { CITIES, cityInfo, guessCityFromAddress, isCity } from "@/lib/city";
 import { SPORT_PAGES, sportPageForLabel, turfPlaysSport } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
@@ -17,8 +17,13 @@ import type { Turf } from "@/types/turf";
 import type { Game } from "@/types/game";
 import type { HomeCityRow, HomeData, HomeGame, HomeHeroProps, HomePost, HomeStrip, HomeTile, HeroCity } from "./types";
 import { formatTime12, plural } from "./format";
+import { GAMES_TAG } from "@/lib/cache/listTags";
+import { listScope, scopedRead, tagGamesRender } from "@/lib/queries/listScope";
+import { keepUntil } from "@/lib/queries/changeMark";
 
-export const HOME_REVALIDATE = 600;
+// An hour (10 minutes until 10 Nov): the home and its /c/<city> twins show
+// open games, so the games key purges them too (tagGamesRender below).
+export const HOME_REVALIDATE = 3600;
 export { plural, formatTime12 };
 
 /** Cities ranked above this ship six photo tiles; the rest ship three. */
@@ -111,8 +116,9 @@ function modeOf(values: (string | null)[]): string | null {
  * one shared copy for the home window. Kept apart from the turf rows so
  * this entry never wraps another unstable_cache (see getHomeData), and
  * so each home render (one variant per city plus all-India) does not query
- * them again. Tagged "turf-data": a trending change or a pick's window
- * opening or closing purges it through the cache queue.
+ * them again. Tagged "turf-data" and "games": a trending change or a
+ * pick's window opening or closing purges it through the cache queue, and
+ * so does a game.
  *
  * Both reads throw on failure, so a failure is never stored: with the
  * database breaker open both used to return empty, and every home
@@ -121,21 +127,48 @@ function modeOf(values: (string | null)[]): string | null {
  * (unstable_cache returns the stale value), and a first read that fails
  * fails the render, so ISR keeps the last good page.
  */
-const getHomeExtras = unstable_cache(
-  async () => {
-    const [picks, games] = await Promise.all([readTrendingPicks(), loadOpenGames({ strict: true })]);
-    return { picks, games };
-  },
-  ["home-extras-v1"],
-  { revalidate: HOME_REVALIDATE, tags: ["turf-data"] },
-);
+const readHomeExtras = async () => {
+  const [picks, games] = await Promise.all([readTrendingPicks(), loadOpenGames({ strict: true })]);
+  return { picks, games };
+};
+const getHomeExtrasCached = unstable_cache(readHomeExtras, ["home-extras-v1"], { revalidate: HOME_REVALIDATE, tags: ["turf-data", GAMES_TAG] });
+const homeExtrasFresh = cache(readHomeExtras);
+
+/**
+ * The home pages (/ and its /c/<city> twins, a scoped render, see
+ * lib/queries/listScope.ts) read them fresh, once per render, and take
+ * their scope's tag and the games tag: through the entry above every city
+ * twin would carry the old tag, which every city's list post marks. When
+ * the fresh read fails, the entry's last copy (and with it the old tag and
+ * the hour: a purge too many, never one too few), else the render fails
+ * and the last good page stays.
+ */
+async function getHomeExtras() {
+  if (!listScope()) return getHomeExtrasCached();
+  await tagGamesRender();
+  try {
+    return await scopedRead(homeExtrasFresh, getHomeExtrasCached);
+  } catch {
+    return getHomeExtrasCached();
+  }
+}
 
 async function buildHomeData(): Promise<HomeData> {
-  const [turfs, live, { picks, games }] = await Promise.all([
+  const [turfs, live, extras] = await Promise.all([
     getAllActiveTurfs(),
     getLiveCities().catch(() => []),
     getHomeExtras(),
   ]);
+  const { picks } = extras;
+  // Open games as of now (the shared entry's copy can be up to its hour
+  // old), and the page is kept no longer than until the next of them
+  // passes kickoff + 30 minutes: nothing writes to the database then, so
+  // no games key comes, and the block is server markup (OpenGames) with
+  // no filter in the browser. At most 10 minutes late, as with the old
+  // 10 minute timer, and never more often (lib/cache/changeMarks.ts).
+  const now = Date.now();
+  const games = filterNonExpiredGames(extras.games, now);
+  await keepUntil(nextGameExpiry(games, now), "home", now);
 
   // One pass: group by city. Rows come back in compareTopRated order,
   // so every per-city list is already ranked.

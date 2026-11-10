@@ -92,6 +92,21 @@ const TURF_IDS: ReadonlyMap<string, string> = new Map(Object.entries(TURF_ID_SLU
  *   headers, so the dozens of /turf/[id] card prefetches on a listing
  *   never invoke the proxy, while a visitor who lands on /turf/x from
  *   Google still gets the cookie.
+ * - ...and only for browsers (10 Nov): with an Accept-Language header
+ *   (every real browser sends one; isCrawler already treats its absence
+ *   as a crawler) and a user agent that does not name a bot. For a
+ *   crawler on those paths decide() did nothing (no detection, no cookie,
+ *   no rewrite) but the proxy still ran as a function before the cache,
+ *   about 28k invocations a day. The bot pattern is the generic words of
+ *   BOT_RE (lib/cityRouting.ts), case by case and with no look-behind (the
+ *   matcher runs in Vercel's router too). CUBOT phones (capitals) still
+ *   count as browsers, as in BOT_RE; a browser whose user agent has "bot"
+ *   in lower case (a phone written "Cubot") skips the proxy here, losing
+ *   only its IP-guess cookie on these pages. A crawler that slips past
+ *   both checks still reaches decide(), which leaves it alone as before.
+ * - The two old-link 308s still run for every document load, crawlers
+ *   first: /turf/<uuid> (TURF_IDS above) and /sport/<label> (decide()).
+ *   lib/proxyMatcher.test.ts walks the matchers with Next's own matching.
  * - Excluded entirely: /api (including auth/callback, geo, city,
  *   cities), /admin, /_next, any path with a file extension (images,
  *   icons, the Google verification html), robots.txt, sitemap.xml and
@@ -153,12 +168,30 @@ export const config = {
     "/turfs",
     "/games",
     "/c/:path*",
+    // Old links, for every document load (crawlers included): their 308s.
     {
-      source:
-        "/((?!api(?:/|$)|admin(?:/|$)|_next/|c/|favicon\\.ico|images/|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest|.*\\.[a-zA-Z0-9]+$).*)",
+      source: "/turf/:id([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
       missing: [
         { type: "header", key: "rsc" },
         { type: "header", key: "next-router-prefetch" },
+      ],
+    },
+    {
+      source: "/sport/:label",
+      missing: [
+        { type: "header", key: "rsc" },
+        { type: "header", key: "next-router-prefetch" },
+      ],
+    },
+    // Every other page: browsers' document loads only (see above).
+    {
+      source:
+        "/((?!api(?:/|$)|admin(?:/|$)|_next/|c/|favicon\\.ico|images/|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest|.*\\.[a-zA-Z0-9]+$).*)",
+      has: [{ type: "header", key: "accept-language" }],
+      missing: [
+        { type: "header", key: "rsc" },
+        { type: "header", key: "next-router-prefetch" },
+        { type: "header", key: "user-agent", value: ".*([Bb]ot|[Cc]rawl|[Ss]pider|[Ss]lurp|[Pp]review|Lighthouse|HeadlessChrome).*" },
       ],
     },
   ],

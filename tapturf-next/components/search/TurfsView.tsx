@@ -15,6 +15,7 @@ import { plural } from "@/lib/home/format";
 import { DEFAULT_FILTERS, FIRST_PAGE, availableSports, pageOf } from "@/lib/turfList/query";
 import { LIST_PREPAINT_JS } from "@/lib/turfList/client";
 import { cityBounds, mapHref } from "@/lib/map/view";
+import { tagShownList } from "@/lib/queries/listScope";
 
 const PILL =
   "h-11 px-4 inline-flex items-center gap-1.5 rounded-full bg-primary-100 hover:bg-primary-200 text-[14px] font-medium text-primary-900 press-tight focus-neon";
@@ -37,6 +38,8 @@ export async function TurfsView({ requested }: { requested: string | null }) {
   const live = await getLiveCities();
   const scope = resolveCityScope(requested, live);
   const cityId = scope.kind === "city" ? scope.id : null;
+  // A city with no live turfs shows a nearby city's (or India's): its posts purge this page too.
+  await tagShownList(requested, scope);
   const [cards, picks] = await Promise.all([getCardTurfs(cityId), getTrendingPicks()]);
   const turfs = cards.turfs;
 

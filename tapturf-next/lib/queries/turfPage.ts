@@ -1,8 +1,8 @@
 import { cache } from "react";
-import { unstable_cache } from "next/cache";
 import { createReadOnlyClient } from "@/lib/supabase/server";
 import { transformTurf } from "@/lib/queries/turfs";
-import { buildData, FIRST_LIFE_S, firstLifeOf, recorded } from "@/lib/build/data";
+import { buildData, recorded } from "@/lib/build/data";
+import { firstLife } from "@/lib/queries/firstLife";
 import {
   shapeGames,
   shapePlayAgain,
@@ -40,36 +40,14 @@ export interface TurfPageData {
   renderedAt: number;
 }
 
-/**
- * A turf page prerendered from the build-data step's files is kept 15, 20,
- * 25 or 30 minutes (by its key, lib/build/data.ts firstLifeOf) instead of a
- * day: its answer was read minutes before go-live, and the turf purges sent
- * meanwhile reached only the old deployment. An unstable_cache entry lowers
- * the page's revalidate to its own (as markStaleRender does), only in that
- * render: the page's refresh reads the database and keeps its day. Each
- * mark has a fixed name, so its key is the same in every bundle.
- */
-const FIRST_LIFE = new Map(
-  FIRST_LIFE_S.map((s) => {
-    const mark = async () => true;
-    mark.toString = () => `turf-page-first-life-${s}`;
-    return [s, unstable_cache(mark, ["turf-page-first-life-v1", String(s)], { revalidate: s })] as const;
-  }),
-);
-
-async function firstLife(key: string): Promise<void> {
-  try {
-    await FIRST_LIFE.get(firstLifeOf(key))?.();
-  } catch {
-    // Only shortens the page's first life; never fails it.
-  }
-}
+// A turf page prerendered from the build-data step's files is kept 15 to
+// 30 minutes instead of a week (firstLife, lib/queries/firstLife.ts).
 
 /**
  * Everything a turf page shows, in one database call (public.turf_page).
  * Until the 20 Oct outage a render made 3 calls in a row (the row by
  * slug, turf_claim_status, trending_turfs) and every view made 4 to 7
- * more from the browser; now the page is cached for a day, purged by the
+ * more from the browser; now the page is cached for a week, purged by the
  * cache queue when anything on it changes, and a view reads nothing.
  *
  * React cache() shares one call between generateMetadata and the page:
@@ -84,7 +62,7 @@ async function firstLife(key: string): Promise<void> {
  *
  * While building, the answer the build-data step recorded for this key
  * (it lists only keys it has a turf for), checked by the same rule, and
- * the page is kept 15 to 30 minutes instead of a day (firstLife).
+ * the page is kept 15 to 30 minutes instead of a week (firstLife).
  */
 export const loadTurfPage = cache(async (key: string): Promise<TurfPageData | null> => {
   const built = recorded(buildData("turf-pages")?.pages, key);

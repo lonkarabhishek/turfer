@@ -15,6 +15,7 @@ import { FinalBand } from "./FinalBand";
 import { ClosingLine } from "./ClosingLine";
 import { plural } from "@/lib/home/format";
 import { jsonLdHtml } from "@/lib/seo/jsonLd";
+import { tagShownList } from "@/lib/queries/listScope";
 
 /**
  * The home, for one city or all of India. `requested` is the city from
@@ -30,6 +31,8 @@ import { jsonLdHtml } from "@/lib/seo/jsonLd";
 export async function HomeView({ requested }: { requested: string | null }) {
   const d = await getHomeData();
   const s = scopeHome(d, requested);
+  // A city with no live turfs shows a nearby city's (or India's): its posts purge this page too.
+  await tagShownList(requested, s.scope);
   const line = cityLineFor(s.scope, "#all-cities", "/");
   const india = s.scope.kind === "india";
 

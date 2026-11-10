@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { IGNORE_COLUMNS, LIST_COLUMNS, MAX_KEYS, keysForRow, planPurge } from "./keys";
+import { IGNORE_COLUMNS, LIST_COLUMNS, MAX_KEYS, keysForRow, planPurge, purgeCalls } from "./keys";
+import { GAMES_TAG, INDIA, LIST_TAG, isListScope, listPurgeTags, listTag } from "./listTags";
 
 const sorted = (a: string[]) => [...a].sort();
 
@@ -168,4 +169,72 @@ test("the list snapshot's v_cols is CARD_COLUMNS, in the same order", () => {
 
 test("no column is both ignored and listed", () => {
   assert.deepEqual(IGNORE_COLUMNS.filter((c) => LIST_COLUMNS.includes(c)), []);
+});
+
+// /api/revalidate (app/api/revalidate/route.ts) runs exactly these calls for a batch: purgeCalls.
+test("a list key purges its city's tag, all of India's and the old tag, never another city's", () => {
+  const c = purgeCalls(planPurge(["list:pune"]), false);
+  assert.deepEqual(c.tags, ["turf-data", "turf-data:india", "turf-data:pune"]);
+  assert.equal(c.warm, true, "the new version is read into the data cache first");
+  assert.deepEqual(c.paths, []);
+  for (const other of ["turf-data:nagpur", "turf-data:mumbai", "games"]) assert.ok(!c.tags.includes(other), other);
+});
+
+test("two cities' list keys purge both cities, all of India once, and nothing else", () => {
+  const c = purgeCalls(planPurge(["list:pune", "list:nagpur", "list:pune"]), false);
+  assert.deepEqual(c.tags, ["turf-data", "turf-data:india", "turf-data:nagpur", "turf-data:pune"]);
+});
+
+test("list:all (a turf with no usable city) purges the all-India pages only", () => {
+  const c = purgeCalls(planPurge(["list:all"]), false);
+  assert.deepEqual(c.tags, ["turf-data", "turf-data:india"]);
+  assert.equal(c.warm, true);
+});
+
+test("a turf key hard-expires that one turf page and marks no tag", () => {
+  const c = purgeCalls(planPurge(["turf:turf-up-hinjewadi", "turf:0a1b2c3d-1111-4222-8333-444455556666"]), false);
+  assert.deepEqual(c.tags, []);
+  assert.equal(c.warm, false, "no list read for a turf-only batch");
+  assert.deepEqual(sorted(c.paths), ["/turf/0a1b2c3d-1111-4222-8333-444455556666", "/turf/turf-up-hinjewadi"]);
+});
+
+test("the games key marks the games tag (no list read, no turf page)", () => {
+  const c = purgeCalls(planPurge(["games"]), false);
+  assert.deepEqual(c, { warm: false, tags: [GAMES_TAG], paths: [] });
+  assert.equal(GAMES_TAG, "games");
+});
+
+test("a mixed batch: the lists, games and turf pages together", () => {
+  const c = purgeCalls(planPurge(["games", "list:pune", "turf:turf-up-hinjewadi"]), false);
+  assert.deepEqual(c, { warm: true, tags: ["turf-data", "turf-data:india", "turf-data:pune", "games"], paths: ["/turf/turf-up-hinjewadi"] });
+});
+
+test("a legacy per-row post never purges the lists (only its turf page)", () => {
+  const keys = keysForRow("turfs", "UPDATE", row({ name: "Turf Up 2" }), row());
+  const c = purgeCalls(planPurge(keys), true);
+  assert.deepEqual(c, { warm: false, tags: [], paths: ["/turf/turf-up-hinjewadi"] });
+});
+
+test("rejected keys purge nothing; an empty batch purges nothing", () => {
+  assert.deepEqual(purgeCalls(planPurge(["list:Pune", "page:/", "games:x"]), false), { warm: false, tags: [], paths: [] });
+  assert.deepEqual(purgeCalls(planPurge([]), false), { warm: false, tags: [], paths: [] });
+});
+
+test("scope tags: a city slug or india, never anything a tag could be confused with", () => {
+  assert.equal(listTag("pune"), "turf-data:pune");
+  assert.equal(listTag(INDIA), "turf-data:india");
+  assert.equal(LIST_TAG, "turf-data");
+  for (const bad of ["", "Pune", "pune/x", "_N_T_/pune", "a", `x${"y".repeat(40)}`]) {
+    assert.equal(isListScope(bad), false, bad);
+    assert.throws(() => listTag(bad));
+  }
+  assert.deepEqual(listPurgeTags(["navi-mumbai"]), ["turf-data", "turf-data:india", "turf-data:navi-mumbai"]);
+  assert.deepEqual(listPurgeTags([]), []);
+});
+
+test("a full batch of city keys stays within Next's tag limit (256 characters a tag)", () => {
+  const cities = Array.from({ length: 300 }, (_, i) => `c${String.fromCharCode(97 + (i % 26))}${"x".repeat(i % 25)}-${String.fromCharCode(97 + Math.floor(i / 26))}`);
+  const tags = listPurgeTags(cities);
+  assert.ok(tags.every((t) => t.length <= 256));
+  assert.equal(tags.length, new Set(cities).size + 2);
 });

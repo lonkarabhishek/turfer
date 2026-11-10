@@ -206,6 +206,20 @@ export function prerenderedListCities(live: readonly { id: string; n: number }[]
 }
 
 /**
+ * The cities whose /c/<city> twins (the home, /turfs and /games a visitor
+ * with that city is rewritten to, app/c/[city]/layout.tsx) production
+ * builds render: those with at least `min` active turfs (MIN_TURFS_TO_INDEX),
+ * in `live`'s order, no repeats. Until 10 Nov every curated and live city
+ * (about 670 pages, 425 MB of each deployment); a city below that renders
+ * its twins on its first visitor's request instead. No search effect:
+ * crawlers are never rewritten to a twin, a direct /c URL 308s to the
+ * public one, and the twins carry the public canonicals.
+ */
+export function prerenderedTwinCities(live: readonly { id: string; n: number }[], min: number): string[] {
+  return [...new Set(live.filter((c) => c.n >= min).map((c) => c.id))];
+}
+
+/**
  * The turf pages production builds render, as keys (topTurfKeys): the
  * `limit` most reviewed, then every other turf of the home market in the
  * same order. The build-data step reads exactly these.

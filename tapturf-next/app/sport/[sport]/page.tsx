@@ -18,8 +18,13 @@ import { plural } from "@/lib/home/format";
 import { pricedCount, sportDescription, sportTitle } from "@/lib/seo/listingMeta";
 import { DEFAULT_OG_IMAGE, OG_BASE, ROBOTS_NOINDEX_FOLLOW, TWITTER_CARD } from "@/lib/seo/defaults";
 import { courtNearMeLink } from "@/lib/near/courtNearMe";
+import { setListScope } from "@/lib/queries/listScope";
+import { INDIA } from "@/lib/cache/listTags";
 
-export const revalidate = 3600;
+// A day (an hour until 10 Nov): every list post marks it stale
+// (turf-data:india, lib/queries/listScope.ts), so its venues and counts
+// follow the database within the list gap.
+export const revalidate = 86400;
 
 /**
  * Photo cards at the top: the sport's best rated venues across India, the
@@ -82,6 +87,7 @@ export async function generateMetadata({
 }: {
   params: Promise<{ sport: string }>;
 }): Promise<Metadata> {
+  setListScope(INDIA);
   const { sport } = await params;
   const info = sportBySlug(sport);
   if (!info) return { title: "Sport not found", robots: ROBOTS_NOINDEX_FOLLOW };
@@ -119,6 +125,7 @@ export default async function SportPage({
 }: {
   params: Promise<{ sport: string }>;
 }) {
+  setListScope(INDIA);
   const { sport } = await params;
   const info = sportBySlug(sport);
   if (!info) notFound();

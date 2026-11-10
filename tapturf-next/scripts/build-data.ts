@@ -33,7 +33,7 @@
  *   benchmarks), the same way as the bands, with 2 minutes of their own;
  *   when they fail, turf pages build without benchmarks.
  * - Production only: the turf pages to prerender (the 300 most reviewed
- *   and every turf of the home market, Nashik), 3 at a time, for 4
+ *   and every turf of the home market, Nashik), 8 at a time, for 4
  *   minutes. A key is recorded only with everything its page reads; one
  *   the step could not read renders on its first visit instead. A failed
  *   turf_managers read does not cost the key: the page builds as it
@@ -91,7 +91,11 @@ const BANDS_MS = 2 * 60_000;
 const PEERS_MS = 2 * 60_000;
 /** How long turf pages are read; keys not done by then render on their first visit. */
 const TURF_PAGES_MS = 4 * 60_000;
-const TURF_PAGE_READS = 3;
+// 8 at a time (3 until 10 Nov): the build runs in iad1 and the database is
+// in Singapore, so the reads waited on the round trip (358 pages took 96 s
+// of a 229 s build on 7 Nov, with 0 retries and 0 s waiting). The patience
+// (TURF_PAGES_MS, TURF_PAGE_TRIES) and the health gate stay as they were.
+const TURF_PAGE_READS = 8;
 const TURF_PAGE_TRIES = 4;
 /** List parts of two builds: read again from part 0 at most this often. */
 const LIST_STARTS = 3;
@@ -300,7 +304,7 @@ export async function runBuildData(dir: string, o: StepOptions = {}): Promise<St
     return FAILED;
   });
 
-  // 3. Turf pages (production builds prerender them), 3 at a time, after
+  // 3. Turf pages (production builds prerender them), 8 at a time, after
   // the ground size peers their Ground size cards compare with, on their
   // own clock like the bands (none at all is an answer: no owner gave sizes yet).
   let turfPages: BuildDatasets["turf-pages"] | null = null;
