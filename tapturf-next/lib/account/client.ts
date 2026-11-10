@@ -1,4 +1,5 @@
 import { CITY_SRC_KEY } from "../city";
+import type { EmailPrefsResponse } from "../email/types";
 import { CITY_SRC_HEADER } from "./city";
 import type {
   AccountError,
@@ -194,6 +195,12 @@ export type MePatch = {
 
 export const patchMe = (token: string, patch: MePatch) =>
   call<MeResponse>(token, "/api/account/me", { method: "PATCH", body: JSON.stringify(patch) });
+
+/** The Me tab's Emails block: the caller's own address and switches (lib/email/types.ts). */
+export const getEmailPrefs = (token: string) => call<EmailPrefsResponse>(token, "/api/account/emails");
+
+export const patchEmailPrefs = (token: string, patch: Partial<Pick<EmailPrefsResponse, "requests" | "changes" | "reminders">>) =>
+  call<EmailPrefsResponse>(token, "/api/account/emails", { method: "PATCH", body: JSON.stringify(patch) });
 
 export const checkUsername = (token: string, u: string) =>
   call<UsernameCheckResponse>(token, `/api/account/username?u=${encodeURIComponent(u)}`);

@@ -62,6 +62,10 @@ test("notificationLink: a claim decision goes to myTapturf or the turf's page; g
   assert.equal(notificationLink(CLAIM_APPROVED, { slug: "green-box" }), null);
   assert.deepEqual(notificationLink("game_request", { gameId: "g1" }), { href: "/game/g1", label: null });
   assert.deepEqual(notificationLink("game_request_accepted", { game_id: "g2" }), { href: "/game/g2", label: null });
+  // 20261110_email.sql's three new types open their game too.
+  for (const type of ["game_time_changed", "game_reminder", "game_request_waiting"]) {
+    assert.deepEqual(notificationLink(type, { gameId: "g3", when: "tomorrow", requestId: "r1" }), { href: "/game/g3", label: null }, type);
+  }
   assert.equal(notificationLink("game_request", null), null);
   assert.equal(notificationLink("other", []), null);
 });

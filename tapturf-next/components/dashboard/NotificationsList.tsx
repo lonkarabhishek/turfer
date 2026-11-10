@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Bell, CalendarCheck, CalendarPlus, CalendarX, Check, ChevronRight, Info, MapPin, Store, UserPlus, XCircle } from "lucide-react";
+import { AlarmClock, Bell, CalendarCheck, CalendarClock, CalendarPlus, CalendarX, Check, ChevronRight, Hourglass, Info, MapPin, Store, UserPlus, XCircle } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { quietToken } from "@/lib/account/client";
 import { getUserNotifications, markAsRead, markAllAsRead } from "@/lib/queries/notifications";
@@ -15,6 +15,10 @@ const ICON_MAP: Record<string, typeof Bell> = {
   game_request_declined: XCircle,
   game_venue_changed: MapPin,
   game_cancelled: XCircle,
+  // 20261110_email.sql: a new day or start time, a game's reminder, a join request still waiting for the host.
+  game_time_changed: CalendarClock,
+  game_reminder: AlarmClock,
+  game_request_waiting: Hourglass,
   // A turf claim TapTurf decided (20261106_owner_claims_clarity.sql admin_answer_owner_claim).
   [CLAIM_APPROVED]: Store,
   [CLAIM_REJECTED]: Info,

@@ -25,6 +25,19 @@ export async function ownerDb(): Promise<OwnerDb> {
   return { supabase: await requestServerClient(), token: jar.get(ADMIN_TOKEN_COOKIE)?.value ?? null };
 }
 
+/**
+ * Calls to the owner functions that take the caller as p_token (public._caller_key and public._is_admin_key, as
+ * myTapturf's: admin_turf_slots, admin_email_*), with the request's client (a Google session) and the owner's
+ * Firebase token (a phone sign-in). Never throws on a refusal: the function answers {error: forbidden}.
+ */
+export async function ownerTokenRpc(): Promise<(fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { code?: string; message?: string } | null }>> {
+  const { supabase, token } = await ownerDb();
+  return async (fn, args) => {
+    const { data, error } = await supabase.rpc(fn, { p_token: token, ...args });
+    return { data, error: error ? { code: error.code, message: error.message } : null };
+  };
+}
+
 /** One read through an owner function, settled (pass `signal` on with .abortSignal()). */
 export async function ownerRead<T>(name: string, read: (db: OwnerDb, signal: AbortSignal) => Promise<T>, opts: Omit<SettleOptions, "ctx"> = {}): Promise<Section<T>> {
   let db: OwnerDb, ctx: ReadContext;

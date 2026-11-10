@@ -12,6 +12,7 @@ import { GoogleLinkActions } from "@/components/account/GoogleLinkActions";
 import { PhoneAddForm } from "@/components/account/PhoneAddForm";
 import { VerifiedTick } from "@/components/account/VerifiedTick";
 import { VerifyCard } from "@/components/account/VerifyCard";
+import { EmailPrefs } from "@/components/account/EmailPrefs";
 import { UserAvatar } from "@/components/account/UserAvatar";
 import { pictureKind, type PictureKind } from "@/lib/account/avatar";
 import { PROFILE_PATH, spacedPhone } from "@/lib/account/display";
@@ -360,6 +361,9 @@ export function ProfileSection({ user, onEditPhoto }: { user: AppUser; onEditPho
           {saving ? "Saving..." : saved ? "Saved!" : "Save Changes"}
         </button>
       </div>
+
+      {/* Emails: their own switches, saved as they are tapped (not by Save Changes) */}
+      <EmailPrefs user={user} />
     </div>
   );
 }
