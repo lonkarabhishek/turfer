@@ -25,8 +25,14 @@ set local lock_timeout = '5s';
 --      hours" about 3 hours before the start (its run in a 30 minute
 --      window: a run that missed it sends none). Skipped for anyone who
 --      joined, or made the game, less than an hour before; the second is
---      skipped when the first went less than an hour before. Also an
---      in-app notification (new type game_reminder).
+--      skipped when the first went less than an hour before, and either is
+--      skipped when the day or time changed less than an hour before (the
+--      change email has the new one). "Tomorrow" is once per game day: a
+--      new start time that day does not send it again, a new day does. A
+--      game that starts after midnight and before 5 AM is "tonight, after
+--      midnight" the evening before. One sent late (a retry) is skipped
+--      once its words are no longer true. Also an in-app notification (new
+--      type game_reminder).
 -- Never emailed: booking requests and their answers (the privacy page
 -- promises it), claim decisions (lib/my/claimNotice.ts promises it), a
 -- declined request, anything promotional. Only the types above map to an
@@ -66,7 +72,7 @@ set local lock_timeout = '5s';
 --     read now (the game as it is, the recipient's address and first name,
 --     the host's first name, the venue and its map, the requests still
 --     waiting), and marks the rest skipped with why (answered, cancelled,
---     started, moved, off, suppressed, no_address); email_report records
+--     started, moved, late, off, suppressed, no_address); email_report records
 --     what Resend answered: sent (its id), failed, or retry after 1, 5, 30,
 --     120 minutes, failed after the 5th try.
 --   * The account routes (the verified caller, as the games routes):
@@ -88,10 +94,21 @@ set local lock_timeout = '5s';
 --   private.email_prefs        per account: requests, changes, reminders
 --                              (default on), unsubscribed_all_at.
 --   private.email_suppressions md5 of a bounced or complaining address (lower
---                              case), the account it was then, why, when.
+--                              case), why, when. Not tied to an account.
 --   private.email_flush_state  one row: the last post, the last claim, a hold.
 --   private.game_alerts        each reminder and nudge decided (told or
 --                              skipped), so each is decided once.
+--
+-- Erasing an account: user_id has no foreign key (as private.booking_requests
+-- and the other private per-user tables, so nothing here cascades from
+-- public.users), and the privacy page says the record of each email and the
+-- switches go with the account. On an erasure request, clear the account's
+-- private.email_outbox, private.email_prefs and private.game_alerts rows by
+-- its id, by hand, along with its other rows (email_outbox_user_idx and
+-- game_alerts_user_game_idx find them). private.email_suppressions holds no
+-- account id: a bounced address stays only as its hash. Until then a removed
+-- account's rows break nothing: email_address finds no address, so nothing
+-- is sent to it and its queued rows are skipped (no_address).
 --
 -- Constants (immutable; the route's twins in lib/email/types.ts):
 --   private.email_daily_cap()    6    emails per account in 24 hours
@@ -101,7 +118,7 @@ set local lock_timeout = '5s';
 --   private.email_collapse()     15 minutes
 --
 -- New helpers (private; nobody but their owner may call them):
---   game_clock_text(time), email_launch_at(), email_group(kind),
+--   game_clock_text(time), game_sport_text(sport), email_launch_at(), email_group(kind),
 --   email_kind_of(type), email_uuid(text), email_address(user),
 --   email_hash(address), email_suppressed(address), email_ok(user, kind),
 --   email_queue(user, kind, key, refs, due), email_join(user, kind, game,
@@ -213,12 +230,11 @@ comment on table private.email_prefs is
 
 create table if not exists private.email_suppressions (
   address_hash text primary key check (address_hash ~ '^[0-9a-f]{32}$'),
-  user_id uuid,
   reason text not null check (reason in ('bounce', 'complaint')),
   at timestamptz not null default now()
 );
 comment on table private.email_suppressions is
-  'Emails: addresses never emailed again (md5 of the lower case address): Resend said it bounced or the person marked us as spam. 20261110_email.sql';
+  'Emails: addresses never emailed again (md5 of the lower case address, no account id): Resend said it bounced or the person marked us as spam. 20261110_email.sql';
 
 create table if not exists private.email_flush_state (
   id boolean primary key default true check (id),
@@ -288,6 +304,16 @@ returns text language sql immutable set search_path = '' as $$
   select case when extract(minute from p_time) = 0
               then to_char(date '2000-01-01' + p_time, 'FMHH12 AM')
               else to_char(date '2000-01-01' + p_time, 'FMHH12:MI AM') end
+$$;
+
+-- A game's sport as the app says it (lib/utils/sport.ts sportLabel): "cricket" -> "Cricket", "box  cricket" ->
+-- "Box Cricket", "5V5 football" -> "5v5 Football" (each word capitalised, a word with a digit lower case). Null when empty.
+create or replace function private.game_sport_text(p_sport text)
+returns text language sql immutable set search_path = '' as $$
+  select nullif(left(array_to_string(array(
+           select case when w ~ '[0-9]' then lower(w) else upper(left(w, 1)) || lower(substr(w, 2)) end
+             from unnest(regexp_split_to_array(btrim(regexp_replace(coalesce(p_sport, ''), '\s+', ' ', 'g')), ' ')) with ordinality as t(w, i)
+            order by t.i), ' '), 40), '')
 $$;
 
 -- When this file first ran: Welcome only for accounts made after it.
@@ -440,6 +466,7 @@ revoke all on function private.email_max_attempts() from public, anon, authentic
 revoke all on function private.email_backoff(int) from public, anon, authenticated;
 revoke all on function private.email_collapse() from public, anon, authenticated;
 revoke all on function private.game_clock_text(time) from public, anon, authenticated;
+revoke all on function private.game_sport_text(text) from public, anon, authenticated;
 revoke all on function private.email_launch_at() from public, anon, authenticated;
 revoke all on function private.email_group(text) from public, anon, authenticated;
 revoke all on function private.email_kind_of(text) from public, anon, authenticated;
@@ -570,7 +597,10 @@ begin
 
   -- 1. Reminders: "tomorrow" from 6 PM India time the day before, "in about 3 hours" from 3 hours before the start
   --    (until 2.5 hours before). To the host and every player, each once; skipped for someone in the game less than
-  --    an hour, and when the other reminder went to them less than an hour before.
+  --    an hour, when the other reminder went to them less than an hour before, and when they were told of a new day
+  --    or time less than an hour before (the change email says it). "Tomorrow" once per game day (a new start time
+  --    that day is not a new one), "in about 3 hours" once per start. A game from midnight to 5 AM is "tonight,
+  --    after midnight" the evening before.
   for g in
     select x.id, x.creator_id, x.created_at, x.sport, x.date, x.start_time, x.turf_id, x.venue_name,
            private.game_start_at(x.date, x.start_time) as starts
@@ -585,7 +615,7 @@ begin
                  case when v_starts - interval '3 hours' <= p_now and v_starts - interval '150 minutes' > p_now then 'soon' end], null);
     continue when cardinality(v_kinds) = 0 or v_starts <= p_now;
     v_place := private.email_venue_name((select x from public.games x where x.id = g.id));
-    v_sport := coalesce(nullif(btrim(g.sport), ''), 'Your game');
+    v_sport := coalesce(private.game_sport_text(g.sport), 'Your game');
     foreach v_kind in array v_kinds loop
     for p in
       select y.user_id, min(y.at) as joined_at
@@ -595,13 +625,18 @@ begin
        where y.user_id is not null
        group by y.user_id
     loop
-      v_key := v_kind || ':' || g.id::text || ':' || p.user_id::text || ':' || extract(epoch from v_starts)::bigint::text;
+      v_key := v_kind || ':' || g.id::text || ':' || p.user_id::text || ':'
+               || case when v_kind = 'tomorrow' then g.date::text else extract(epoch from v_starts)::bigint::text end;
       continue when exists (select 1 from private.game_alerts a where a.key = v_key);
       v_outcome := case
                      when coalesce(p.joined_at, '-infinity'::timestamptz) > p_now - interval '1 hour' then 'skipped_new'
                      when exists (select 1 from private.game_alerts a
                                    where a.user_id = p.user_id and a.game_id = g.id and a.kind in ('tomorrow', 'soon')
                                      and a.outcome = 'told' and a.at > p_now - interval '1 hour') then 'skipped_close'
+                     when exists (select 1 from public.notifications n
+                                   where n.user_id = p.user_id and n.type = 'game_time_changed'
+                                     and n.metadata ->> 'gameId' = g.id::text
+                                     and n.created_at > p_now - interval '1 hour' and n.created_at <= p_now) then 'skipped_close'
                      else 'told'
                    end;
       insert into private.game_alerts (key, user_id, game_id, kind, outcome, at)
@@ -615,9 +650,14 @@ begin
         continue;
       end if;
       perform private.game_notify(p.user_id, 'game_reminder',
-        case when v_kind = 'tomorrow' then 'Game tomorrow' else 'Game in about 3 hours' end,
-        v_sport || case when v_kind = 'tomorrow' then ' tomorrow, ' || to_char(g.date, 'Dy FMDD Mon') || ', at ' else ' at ' end
-          || private.game_clock_text(g.start_time) || ' at ' || v_place || '.',
+        case when v_kind <> 'tomorrow' then 'Game in about 3 hours'
+             when g.start_time < time '05:00' then 'Game tonight'
+             else 'Game tomorrow' end,
+        v_sport || case when v_kind <> 'tomorrow' then ' at ' || private.game_clock_text(g.start_time)
+                        when g.start_time < time '05:00' then ' tonight, after midnight: ' || to_char(g.date, 'Dy FMDD Mon') || ', '
+                             || private.game_clock_text(g.start_time)
+                        else ' tomorrow, ' || to_char(g.date, 'Dy FMDD Mon') || ', at ' || private.game_clock_text(g.start_time) end
+          || ' at ' || v_place || '.',
         jsonb_build_object('gameId', g.id, 'when', v_kind, 'startAt', v_starts));
       n_told := n_told + 1;
     end loop;
@@ -648,7 +688,7 @@ begin
     if found then
       perform private.game_notify(r.creator_id, 'game_request_waiting', 'Join request waiting',
         left(coalesce(nullif(btrim(r.requester_name::text), ''), 'A player'), 60) || ' is still waiting to hear from you about '
-          || coalesce(nullif(btrim(r.sport), ''), 'your game') || ' on ' || to_char(r.date, 'Dy FMDD Mon') || '. Accept or decline on the game page.',
+          || coalesce(private.game_sport_text(r.sport), 'your game') || ' on ' || to_char(r.date, 'Dy FMDD Mon') || '. Accept or decline on the game page.',
         jsonb_build_object('gameId', r.game_id, 'requestId', r.request_id));
       n_waiting := n_waiting + 1;
     end if;
@@ -756,7 +796,7 @@ revoke all on function private.email_flush(timestamptz) from public, anon, authe
 -- ── 6. What one email says, read when it is sent ───────────
 
 -- The email for an outbox row, with everything its template needs, or {skip: why} when it should not go:
--- no_address, suppressed, off, gone, closed, started, cancelled, answered, not_in, moved, no_change.
+-- no_address, suppressed, off, gone, closed, started, cancelled, answered, not_in, moved, late, no_change.
 create or replace function private.email_job(p_row private.email_outbox)
 returns jsonb
 language plpgsql
@@ -828,6 +868,12 @@ begin
   elsif p_row.kind = 'reminder' then
     if p_row.refs ? 'start_at' and (p_row.refs ->> 'start_at')::timestamptz is distinct from v_starts then
       return jsonb_build_object('skip', 'moved');
+    end if;
+    -- Sent late (a retry, a hold): "tomorrow" only while the game is tomorrow in India, "in about 3 hours" only
+    -- while it is 90 minutes away or more.
+    if (p_row.refs ->> 'when' = 'tomorrow' and v_game.date is distinct from (now() at time zone 'Asia/Kolkata')::date + 1)
+       or (p_row.refs ->> 'when' = 'soon' and v_starts - now() < interval '90 minutes') then
+      return jsonb_build_object('skip', 'late');
     end if;
   elsif p_row.kind = 'game_changed' then
     -- Only the time, and it is back to what it was: nothing changed.
@@ -1110,10 +1156,9 @@ begin
      or p_address is null or char_length(btrim(p_address)) not between 3 and 254 or position('@' in p_address) = 0 then
     return jsonb_build_object('r', 'bad');
   end if;
-  insert into private.email_suppressions as s (address_hash, user_id, reason)
-  values (private.email_hash(p_address),
-          (select u.id from public.users u where u.email is not null and lower(btrim(u.email::text)) = lower(btrim(p_address)) limit 1),
-          p_reason)
+  -- The address's hash alone, never the account it belongs to.
+  insert into private.email_suppressions as s (address_hash, reason)
+  values (private.email_hash(p_address), p_reason)
   on conflict (address_hash) do update
      set reason = case when excluded.reason = 'complaint' then 'complaint' else s.reason end;
   return jsonb_build_object('r', 'ok');
@@ -1264,7 +1309,7 @@ begin
     )
     insert into public.notifications (user_id, type, title, message, metadata, is_read)
     select t.user_id, 'game_time_changed', 'Game time changed',
-           coalesce(v_host, 'Your host') || ' moved ' || coalesce(nullif(btrim(v_row.sport), ''), 'the game') || ' to '
+           coalesce(v_host, 'Your host') || ' moved ' || coalesce(private.game_sport_text(v_row.sport), 'the game') || ' to '
              || to_char(v_row.date, 'Dy FMDD Mon') || ', ' || private.game_clock_text(v_row.start_time) || '.',
            jsonb_build_object('gameId', p_game_id, 'date', v_row.date, 'startTime', to_char(v_row.start_time, 'HH24:MI'),
                               'fromDate', v_old.date, 'fromStartTime', to_char(v_old.start_time, 'HH24:MI')), false

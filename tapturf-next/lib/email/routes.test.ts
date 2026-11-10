@@ -98,7 +98,9 @@ test("dispatch: claims, writes, sends one by one to each person only, reports", 
       assert.equal(s.body.from, "TapTurf <hello@tapturf.in>");
       assert.equal(s.body.reply_to, "info@tapturf.in");
       const h = s.body.headers as Record<string, string>;
-      assert.match(h["List-Unsubscribe"], /^<https:\/\/www\.tapturf\.in\/email\/off\?t=[A-Za-z0-9_-]{23}\.[A-Za-z0-9_-]{22}>, <mailto:info@tapturf\.in\?subject=Unsubscribe>$/);
+      const lu = /^<https:\/\/www\.tapturf\.in\/email\/off\?t=([A-Za-z0-9_-]{23}\.[A-Za-z0-9_-]{22})>, <mailto:info@tapturf\.in\?subject=Unsubscribe%20([A-Za-z0-9_.-]+)>$/.exec(h["List-Unsubscribe"]);
+      assert.ok(lu, h["List-Unsubscribe"]);
+      assert.equal(lu[2], lu[1], "the mailto's subject carries the link's own token, so it can be acted on by hand");
       assert.equal(h["List-Unsubscribe-Post"], "List-Unsubscribe=One-Click");
     }
     assert.equal(resend.sent[0].body.subject, "You're in: Football on Sat 14 Nov, 7 PM");

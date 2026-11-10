@@ -13,14 +13,17 @@
 // decline, and a notification is always made even when queueing fails); the clock
 // in India time on a fake clock (the "tomorrow" reminder at 6 PM the day before,
 // "in about 3 hours", each once, skipped for someone in the game under an hour or
-// within an hour of the other; the waiting nudge at 2 hours, or 30 minutes when the
+// within an hour of the other or of a new day or time; "tomorrow" once per game day,
+// "tonight, after midnight" for a game before 5 AM, the sport as the app says it;
+// the waiting nudge at 2 hours, or 30 minutes when the
 // game starts within 3 hours, once, never after the start, never for requests from
 // before the file; Welcome once, only for accounts made after it, with a confirmed
 // email); game_update's time change tells the players and the pending requests,
 // never the host; the flush (nothing posted while idle; a post with the secret when
 // one is due; no second post until the route answers or 10 minutes; a hold; leases
 // that ran out, retries 1, 5, 30, 120 minutes then failed; expiry after 24 hours);
-// claim (the address, what each email says, the skips and why); the switches and
+// claim (the address, what each email says, the skips and why, a reminder too late
+// for its words); the switches and
 // the link in an email; suppressions; every public function checks the server key;
 // the tables and helpers are closed to the API roles; the two jobs. Never touches a
 // real database. Made-up people and addresses only.
@@ -195,13 +198,19 @@ for (const role of ["anon", "authenticated"]) {
 const fns = await q(`select n.nspname, p.proname, p.prosecdef, p.proconfig::text cfg,
     has_function_privilege('anon', p.oid, 'execute') anon_x, has_function_privilege('authenticated', p.oid, 'execute') auth_x
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where (p.proname like 'email%' or p.proname in ('game_clock_text')) and p.proname <> 'email_proven' order by 1, 2`);
+  where (p.proname like 'email%' or p.proname in ('game_clock_text', 'game_sport_text')) and p.proname <> 'email_proven' order by 1, 2`);
 eq(fns.filter((f) => f.nspname === "public").map((f) => f.proname),
   ["email_claim", "email_hold", "email_prefs_get", "email_prefs_set", "email_report", "email_suppress", "email_unsubscribe"], "the public functions");
 for (const f of fns) {
   ok(f.cfg?.includes("search_path"), `${f.proname}: its own search_path (${f.cfg})`);
   if (f.nspname === "public") ok(f.prosecdef && f.anon_x && f.auth_x, `${f.proname}: a definer function the server calls with the key`);
   else ok(!f.anon_x && !f.auth_x, `${f.nspname}.${f.proname}: closed to the API roles`);
+}
+
+// The sport as the app says it (lib/utils/sport.ts sportLabel).
+for (const [raw, want] of [["cricket", "Cricket"], ["Football", "Football"], [" box  cricket ", "Box Cricket"], ["BASKETBALL", "Basketball"],
+  ["5V5 football", "5v5 Football"], ["7-a-side football", "7-a-side Football"], ["table tennis", "Table Tennis"], ["", null], ["   ", null], [null, null]]) {
+  eq((await one(`select private.game_sport_text($1) r`, [raw])).r, want, `game_sport_text(${JSON.stringify(raw)})`);
 }
 
 /* ---------------- the server key ---------------- */
@@ -288,8 +297,8 @@ passed++;
 
 // Suppressed and switched off.
 eq(await rpc("email_suppress", [KEY, "  OMAR.standin@Example.com ", "bounce"]), { r: "ok" }, "a bounce is recorded");
-eq(await q(`select address_hash, user_id, reason from private.email_suppressions`), [{ address_hash: md5("omar.standin@example.com"), user_id: OMAR, reason: "bounce" }],
-  "as the md5 of the lower case address, with the account it was");
+eq(await q(`select * from private.email_suppressions`).then((r) => r.map(({ at, ...x }) => (void at, x))), [{ address_hash: md5("omar.standin@example.com"), reason: "bounce" }],
+  "as the md5 of the lower case address alone, no account id");
 eq(await rpc("email_suppress", [KEY, "omar.standin@example.com", "complaint"]), { r: "ok" }, "then a complaint");
 eq((await one(`select reason from private.email_suppressions`)).reason, "complaint", "a complaint wins");
 eq(await rpc("email_suppress", [KEY, "omar.standin@example.com", "bounce"]), { r: "ok" }, "a later bounce");
@@ -418,6 +427,9 @@ await q(`update public.game_participants set joined_at = now() - interval '7 day
 const D6 = ist(6);
 c = await clock(atIst(D6, "21:00"));
 eq((await reminders(G4)).sort(), [[ASHA, "tomorrow"], [RAVI, "tomorrow"]].sort(), "a game at 12:30 AM: 'tomorrow' goes at the evening run");
+const dG4 = new Date(`${ist(7)}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).replace(",", "");
+eq((await notes("game_reminder", G4)).map((n) => [n.title, n.message])[0], ["Game tonight", `Football tonight, after midnight: ${dG4}, 12:30 AM at Kings Turf.`],
+  "worded 'tonight, after midnight', not 'tomorrow' (it is that night)");
 c = await clock(atIst(D6, "21:30"));
 eq([c.reminders, c.skipped], [0, 2], "its 3 hours reminder half an hour later is skipped for both");
 eq((await q(`select outcome from private.game_alerts where game_id = $1 and kind = 'soon'`, [G4])).map((r) => r.outcome), ["skipped_close", "skipped_close"], "as too close to the first");
@@ -433,6 +445,42 @@ await q(`update public.games set created_at = now() - interval '7 days', status 
 await clock(atIst(D, "18:10"));
 eq((await reminders(G6)).length, 0, "a cancelled game: no reminder");
 eq((await q(`select count(*)::int n from private.game_alerts where game_id = $1`, [G6]))[0].n, 0, "(nothing decided for it)");
+// "Tomorrow" once per game day: a new start time that evening sends no second one; "in about 3 hours" follows the new start.
+// The sport as stored ("cricket") is said as the app says it.
+const E = ist(8), E1 = ist(9);
+const GT = await mkGame(ASHA, { date: E1, start_time: "19:00", end_time: "20:00", sport: "cricket" });
+const rqt = (await rpc("game_request_send", [KEY, ZOYA, GT, null])).request.id;
+await rpc("game_request_answer", [KEY, ASHA, rqt, true]);
+await q(`update public.games set created_at = now() - interval '7 days' where id = $1`, [GT]);
+await q(`update public.game_participants set joined_at = now() - interval '7 days' where game_id = $1`, [GT]);
+c = await clock(atIst(E, "18:00"));
+const dE1 = new Date(`${E1}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).replace(",", "");
+eq((await notes("game_reminder", GT)).map((n) => [n.user_id, n.title, n.message]).sort(),
+  [[ASHA, "Game tomorrow", `Cricket tomorrow, ${dE1}, at 7 PM at Kings Turf.`], [ZOYA, "Game tomorrow", `Cricket tomorrow, ${dE1}, at 7 PM at Kings Turf.`]].sort(),
+  "'cricket' as stored reads 'Cricket'");
+up = await rpc("game_update", [KEY, ASHA, GT, JSON.stringify({ start_time: "21:00", end_time: "22:00" }), null]);
+eq(up.r, "ok", "(at 8 PM the host moves it to 9 PM, the same day)");
+eq((await notes("game_time_changed", GT)).map((n) => [n.user_id, n.message]), [[ZOYA, `Asha moved Cricket to ${dE1}, 9 PM.`]], "Zoya is told, the sport said as the app says it");
+await q(`update public.notifications set created_at = $2 where type = 'game_time_changed' and metadata ->> 'gameId' = $1`, [GT, atIst(E, "20:00")]);
+c = await clock(atIst(E, "20:05"));
+eq((await reminders(GT)).length, 2, "no second 'tomorrow' for the new start time that day (the host included)");
+c = await clock(atIst(E1, "18:00"));
+eq((await reminders(GT)).filter((x) => x[1] === "soon").map((x) => x[0]).sort(), [ASHA, ZOYA].sort(), "'in about 3 hours' at 6 PM, 3 hours before the new start");
+// Told of a new day less than an hour before: that reminder is skipped (the change email has it); the host, not told, gets it.
+const F = ist(10), F1 = ist(11);
+const GU = await mkGame(ASHA, { date: ist(12), start_time: "19:00", end_time: "20:00" });
+const rqu = (await rpc("game_request_send", [KEY, ZOYA, GU, null])).request.id;
+await rpc("game_request_answer", [KEY, ASHA, rqu, true]);
+await q(`update public.games set created_at = now() - interval '7 days' where id = $1`, [GU]);
+await q(`update public.game_participants set joined_at = now() - interval '7 days' where game_id = $1`, [GU]);
+up = await rpc("game_update", [KEY, ASHA, GU, JSON.stringify({ date: F1 }), null]);
+eq(up.r, "ok", "(at 6:30 PM the host moves it to tomorrow)");
+await q(`update public.notifications set created_at = $2 where type = 'game_time_changed' and metadata ->> 'gameId' = $1`, [GU, atIst(F, "18:30")]);
+c = await clock(atIst(F, "18:35"));
+eq((await reminders(GU)).map((x) => x[0]), [ASHA], "the host is reminded");
+eq((await q(`select user_id, outcome from private.game_alerts where game_id = $1 and kind = 'tomorrow'`, [GU])).map((r) => [r.user_id, r.outcome]).sort(),
+  [[ASHA, "told"], [ZOYA, "skipped_close"]].sort(), "Zoya, told of the new day 5 minutes before, is not");
+await q(`update private.email_outbox set status = 'skipped' where status = 'queued'`);
 
 /* ---------------- the clock: a join request still waiting ---------------- */
 // (The requests above, answered, so only these wait.)
@@ -603,8 +651,10 @@ await rpc("game_request_send", [KEY, ZOYA, G16, null]);
 await rpc("game_cancel", [KEY, ASHA, G16]);
 await q(`update private.email_outbox set next_attempt_at = now() - interval '1 second' where status = 'queued'`);
 cl = await rpc("email_claim", [KEY, 20]);
-const skips = await q(`select refs ->> 'game_id' g, kind, last_error from private.email_outbox where status = 'skipped' and refs ->> 'game_id' in ($1, $2) order by 1`, [G15, G16]);
-eq(skips.map((s) => [s.g === G15 ? "G15" : "G16", s.kind, s.last_error]), [["G15", "join_request", "answered"], ["G16", "join_request", "cancelled"]].sort((a, b) => (a[0] < b[0] ? -1 : 1)),
+const skips = await q(`select refs ->> 'game_id' g, kind, last_error from private.email_outbox where status = 'skipped' and refs ->> 'game_id' in ($1, $2)`, [G15, G16]);
+// (By label: the game ids are random, so their order is not the labels'.)
+eq(skips.map((s) => [s.g === G15 ? "G15" : "G16", s.kind, s.last_error]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)),
+  [["G15", "join_request", "answered"], ["G16", "join_request", "cancelled"]],
   "skipped: every request withdrawn (answered), the game cancelled");
 eq(cl.jobs.map((j) => [j.kind, j.user_id]), [["game_cancelled", ZOYA]], "the cancel email still goes to the player waiting");
 eq([cl.jobs[0].game.status, cl.jobs[0].game.host_first], ["cancelled", "Asha"], "saying the game is cancelled, by whom");
@@ -627,6 +677,24 @@ eq((await q(`select user_id, kind, last_error from private.email_outbox where re
   [["join_request", "answered"], ["reminder", "moved"], ["reminder", "off"], ["request_accepted", "suppressed"]],
   "skipped: answered meanwhile, moved since, switched off since, bounced since");
 eq(cl.skipped, 4, "(four skipped)");
+// Sent late (a retry, a hold): "tomorrow" once the game is no longer tomorrow in India, "in about 3 hours" under 90 minutes before.
+const SARA = U(30);
+await q(`insert into public.users (id, name, email, created_at) values ($1, 'Sara Late', 'sara.standin@example.com', now() - interval '30 days')`, [SARA]);
+await q(`insert into private.test_proven values ($1)`, [SARA]);
+const indiaIn = (m) => new Date(Date.now() + (m + 330) * 60000);
+const gameIn = (m) => mkGame(ASHA, { date: indiaIn(m).toISOString().slice(0, 10), start_time: indiaIn(m).toISOString().slice(11, 16), end_time: indiaIn(m + 60).toISOString().slice(11, 16) });
+const lateGames = { notTomorrow: await mkGame(ASHA, { date: ist(3), start_time: "16:00", end_time: "17:00" }), in60: await gameIn(60),
+  in165: await gameIn(165), tomorrow: await mkGame(ASHA, { date: ist(1), start_time: "23:00", end_time: "23:30" }) };
+for (const [g, when] of [["notTomorrow", "tomorrow"], ["in60", "soon"], ["in165", "soon"], ["tomorrow", "tomorrow"]]) {
+  await q(`insert into public.notifications (user_id, type, title, message, metadata) values ($1, 'game_reminder', 'x', 'y', $2)`, [SARA, JSON.stringify({ gameId: lateGames[g], when })]);
+}
+await q(`update private.email_outbox set next_attempt_at = now() - interval '1 second' where status = 'queued'`);
+cl = await rpc("email_claim", [KEY, 20]);
+const label = Object.fromEntries(Object.entries(lateGames).map(([k, v]) => [v, k]));
+eq(cl.jobs.map((j) => label[j.game.id]).sort(), ["in165", "tomorrow"], "a 'tomorrow' the day before and an 'in about 3 hours' 2 h 45 before still go");
+eq((await q(`select refs ->> 'game_id' g, last_error from private.email_outbox where user_id = $1 and status = 'skipped'`, [SARA])).map((r) => [label[r.g], r.last_error]).sort(),
+  [["in60", "late"], ["notTomorrow", "late"]], "skipped as late: a 'tomorrow' no longer true, an 'in about 3 hours' an hour before");
+await rpc("email_report", [KEY, JSON.stringify(cl.jobs.map((j) => ({ id: j.id, result: "sent" })))]);
 // The claim limit.
 await q(`insert into private.email_outbox (user_id, kind, dedupe_key, refs) select $1, 'welcome', 'many:' || g, '{}' from generate_series(1, 25) g`, [ASHA]);
 cl = await rpc("email_claim", [KEY, 100]);

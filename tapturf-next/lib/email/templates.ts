@@ -1,4 +1,4 @@
-import { clockText, dayText, escapeHtml, mapsLink, namesText, oneLine, priceText, sportText, venueLine, venueName, whenRange, whenText } from "./format";
+import { afterMidnight, clockText, dayText, escapeHtml, mapsLink, namesText, oneLine, priceText, sportText, venueLine, venueName, whenRange, whenText } from "./format";
 import type { EmailGame, EmailJob, RenderedEmail } from "./types";
 
 /**
@@ -83,7 +83,8 @@ function welcome(job: EmailJob): Content {
       "You can also host a game or join one near you. When you host, we email you when players ask to join, and remind you the day before.",
     ],
     button: { label: "Find a game", path: "/games" },
-    why: "You made a TapTurf account with this Google address.",
+    // Also true for an account made by phone that added Google later (Welcome waits up to 3 days for that).
+    why: "You made a TapTurf account, and Google confirmed this address for it.",
     offLabel: "Turn off all TapTurf emails",
   };
 }
@@ -197,16 +198,22 @@ function gameChanged(job: EmailJob, g: EmailGame): Content {
 function reminder(job: EmailJob, g: EmailGame): Content {
   const sport = sportText(g.sport);
   const tomorrow = job.when !== "soon";
+  // Sent at 6 PM the day before: a game from midnight to 5 AM is that night.
+  const tonight = tomorrow && afterMidnight(g.start_time);
   const clock = clockText(g.start_time);
   const host = oneLine(g.host_first, 40);
   return {
-    subject: tomorrow ? `Tomorrow: ${sport} at ${clock}, ${venueName(g.venue)}` : `In about 3 hours: ${sport} at ${clock}, ${venueName(g.venue)}`,
+    subject: tonight
+      ? `Tonight, after midnight: ${sport} at ${clock}, ${venueName(g.venue)}`
+      : tomorrow
+        ? `Tomorrow: ${sport} at ${clock}, ${venueName(g.venue)}`
+        : `In about 3 hours: ${sport} at ${clock}, ${venueName(g.venue)}`,
     preheader: `${whenText(g.date, g.start_time)} at ${venueLine(g.venue)}.`,
-    title: tomorrow ? "Your game is tomorrow" : "Your game starts in about 3 hours",
+    title: tonight ? "Your game is tonight, after midnight" : tomorrow ? "Your game is tomorrow" : "Your game starts in about 3 hours",
     paragraphs: [
       hello(job.name),
       job.you_host ? `You're hosting ${sport}.` : host ? `${host} is hosting ${sport}.` : `${sport} is on.`,
-      tomorrow ? "Here are the details for tomorrow." : "Time to get ready. Here are the details.",
+      tonight ? "Here are the details for tonight." : tomorrow ? "Here are the details for tomorrow." : "Time to get ready. Here are the details.",
     ],
     facts: gameFacts(g, { host: !job.you_host, players: true }),
     button: { label: "See the game", path: job.path },

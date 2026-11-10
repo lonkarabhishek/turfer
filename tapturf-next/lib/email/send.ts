@@ -67,6 +67,23 @@ export type Message = {
 
 const TIMEOUT_MS = 10_000;
 
+/**
+ * The List-Unsubscribe mailto: an email to info@tapturf.in whose subject
+ * carries the link's own signed token ("Unsubscribe <token>"), so a mail
+ * app that uses it says which account and which emails. It is handled by
+ * hand: open https://www.tapturf.in/email/off?t=<token> and press Turn off.
+ */
+export function mailtoOff(offUrl: string): string {
+  let t: string | null = null;
+  try {
+    t = new URL(offUrl).searchParams.get("t");
+  } catch {
+    /* not a link */
+  }
+  const token = t && /^[A-Za-z0-9_.-]{1,80}$/.test(t) ? t : null;
+  return `mailto:${CONTACT_EMAIL}?subject=Unsubscribe${token ? `%20${token}` : ""}`;
+}
+
 /** The request body Resend gets for one message. */
 export function resendBody(cfg: Extract<EmailConfig, { ok: true }>, m: Message) {
   return {
@@ -77,7 +94,7 @@ export function resendBody(cfg: Extract<EmailConfig, { ok: true }>, m: Message) 
     html: m.email.html,
     text: m.email.text,
     headers: {
-      "List-Unsubscribe": `<${m.offUrl}>, <mailto:${CONTACT_EMAIL}?subject=Unsubscribe>`,
+      "List-Unsubscribe": `<${m.offUrl}>, <${mailtoOff(m.offUrl)}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
     tags: [{ name: "kind", value: m.kind }],

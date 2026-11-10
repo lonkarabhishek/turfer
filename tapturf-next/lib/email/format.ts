@@ -1,4 +1,5 @@
 import { mapsSearchUrl } from "../utils/maps";
+import { sportLabel } from "../utils/sport";
 import type { EmailGame, EmailVenue } from "./types";
 
 /**
@@ -104,7 +105,18 @@ export function namesText(names: string[], max = 3): string {
   return `${clean.slice(0, max - 1).join(", ")} and ${rest} others`;
 }
 
-/** The sport, never empty. */
+/** The sport as the app says it everywhere a game shows ("cricket" -> "Cricket"; lib/utils/sport.ts), never empty. */
 export function sportText(s: string | null | undefined): string {
-  return oneLine(s, 40) || "Your game";
+  const one = oneLine(s, 40);
+  return one ? sportLabel(one) : "Your game";
+}
+
+/**
+ * A game that starts after midnight and before 5 AM: players think of it as
+ * the night before, so its "tomorrow" reminder (6 PM the day before) says
+ * "tonight, after midnight". The same rule as email_clock in
+ * 20261110_email.sql (start_time < 05:00).
+ */
+export function afterMidnight(time: string | null | undefined): boolean {
+  return /^0[0-4]:[0-5]\d/.test(time ?? "");
 }

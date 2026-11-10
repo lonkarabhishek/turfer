@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Loader2, Mail } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -21,6 +21,8 @@ export function EmailPrefs({ user }: { user: AppUser }) {
   const [prefs, setPrefs] = useState<EmailPrefsResponse | null>(null);
   const [busy, setBusy] = useState<EmailGroup | null>(null);
   const [error, setError] = useState("");
+  const ref = useRef<HTMLElement>(null);
+  const scrolled = useRef(false);
   // Read quietly (a failed read never signs anyone out); a change uses getToken.
   const readToken = quietToken(signedInWith);
 
@@ -35,6 +37,15 @@ export function EmailPrefs({ user }: { user: AppUser }) {
   useEffect(() => {
     void load();
   }, [load, user.id, user.email, user.googleEmail]);
+
+  // The email page's "Manage all your emails" link comes here (#emails): the block shows only once read, after the
+  // browser looked for the anchor, so go to it then (once).
+  const ready = !!prefs?.ready;
+  useEffect(() => {
+    if (!ready || scrolled.current || window.location.hash !== "#emails") return;
+    scrolled.current = true;
+    ref.current?.scrollIntoView({ block: "start" });
+  }, [ready]);
 
   if (!prefs?.ready) return null;
 
@@ -60,7 +71,7 @@ export function EmailPrefs({ user }: { user: AppUser }) {
   const byPhone = signedInWith === "phone";
 
   return (
-    <section id="emails" aria-labelledby="emails-h" className="scroll-mt-24 mt-8 pt-6 border-t border-primary-200">
+    <section ref={ref} id="emails" aria-labelledby="emails-h" className="scroll-mt-24 mt-8 pt-6 border-t border-primary-200">
       <h2 id="emails-h" className="flex items-center gap-2 text-[15px] font-semibold text-primary-900">
         <Mail className="w-4 h-4 text-accent-600" aria-hidden />
         Emails

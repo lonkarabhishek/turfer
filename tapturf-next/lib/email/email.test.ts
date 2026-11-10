@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cityText, clockText, dayText, escapeHtml, mapsLink, namesText, oneLine, priceText, venueLine, whenRange, whenText } from "./format";
+import { afterMidnight, cityText, clockText, dayText, escapeHtml, mapsLink, namesText, oneLine, priceText, sportText, venueLine, whenRange, whenText } from "./format";
 import { renderEmail } from "./templates";
 import { offKey, offToken, readOffToken } from "./token";
 import { svixKey, svixSign, svixVerify } from "./svix";
-import { emailConfig, fromOf, resendBody, sendEmail, testApiBase } from "./send";
+import { emailConfig, fromOf, mailtoOff, resendBody, sendEmail, testApiBase } from "./send";
 import { offPage } from "./offPage";
 import type { EmailJob, EmailKind } from "./types";
 
@@ -166,6 +166,45 @@ test("each email says what it should", () => {
   assert.match(r(10).text, /You host this game on TapTurf\./);
 });
 
+test("the sport as the app says it, Welcome's reason, a game after midnight", () => {
+  // Games store the sport as typed: "cricket", "football" (36% of games on 10 Nov 2026).
+  assert.equal(sportText("cricket"), "Cricket");
+  assert.equal(sportText(" box  cricket "), "Box Cricket");
+  assert.equal(sportText("5V5 football"), "5v5 Football");
+  assert.equal(sportText(""), "Your game");
+  const lower = job("request_accepted", { game: game({ sport: "cricket" }) });
+  const e = renderEmail(lower, LINKS)!;
+  assert.equal(e.subject, "You're in: Cricket on Sat 14 Nov, 7 PM");
+  assert.doesNotMatch(`${e.subject} ${e.preheader} ${e.text}`, /\bcricket\b/, "never lower case");
+  const rem = renderEmail(job("reminder", { when: "soon", game: game({ sport: "football", host_first: null }) }), LINKS)!;
+  assert.match(rem.text, /^Football is on\.$/m, "a sentence never starts in lower case");
+
+  // Welcome also goes to an account made by phone that added Google within 3 days.
+  const w = renderEmail(job("welcome", { name: "Farah" }), LINKS)!;
+  assert.match(w.text, /You made a TapTurf account, and Google confirmed this address for it\./);
+  assert.doesNotMatch(w.text, /with this Google address/);
+
+  // A game at 12:30 AM Thu, reminded at 6 PM Wed: "tonight, after midnight", never "tomorrow".
+  for (const t of ["00:00", "00:30", "04:59"]) assert.ok(afterMidnight(t), t);
+  for (const t of ["05:00", "19:00", "12:30", "", null]) assert.ok(!afterMidnight(t), String(t));
+  const late = renderEmail(job("reminder", { when: "tomorrow", game: game({ date: "2026-11-12", start_time: "00:30", end_time: "01:30" }) }), LINKS)!;
+  assert.equal(late.subject, "Tonight, after midnight: Football at 12:30 AM, Kings Turf");
+  assert.match(late.text, /^Your game is tonight, after midnight$/m);
+  assert.match(late.text, /Here are the details for tonight\./);
+  assert.match(late.text, /When: Thu 12 Nov, 12:30 AM to 1:30 AM/);
+  assert.doesNotMatch(`${late.subject} ${late.text}`, /tomorrow/i);
+  const lateSoon = renderEmail(job("reminder", { when: "soon", game: game({ date: "2026-11-12", start_time: "00:30", end_time: "01:30" }) }), LINKS)!;
+  assert.equal(lateSoon.subject, "In about 3 hours: Football at 12:30 AM, Kings Turf");
+});
+
+test("the mailto unsubscribe carries the link's token", () => {
+  const key = offKey("test-account-key");
+  const t = offToken(key, USER, "changes");
+  assert.equal(mailtoOff(`https://www.tapturf.in/email/off?t=${t}`), `mailto:info@tapturf.in?subject=Unsubscribe%20${t}`);
+  assert.equal(mailtoOff("not a link"), "mailto:info@tapturf.in?subject=Unsubscribe");
+  assert.equal(mailtoOff("https://www.tapturf.in/email/off?t=a%20b%3Cx%3E"), "mailto:info@tapturf.in?subject=Unsubscribe", "only a token's characters");
+});
+
 test("every word a person typed is escaped", () => {
   const evil = `<script>alert("x")</script><img src=x onerror=alert(1)>`;
   const e = renderEmail(
@@ -247,7 +286,7 @@ test("one send: one recipient, the outbox id as the Idempotency-Key, the unsubsc
   assert.equal(body.reply_to, "info@tapturf.in");
   assert.ok(!("cc" in body) && !("bcc" in body));
   assert.deepEqual(body.headers, {
-    "List-Unsubscribe": `<${LINKS.off}>, <mailto:info@tapturf.in?subject=Unsubscribe>`,
+    "List-Unsubscribe": `<${LINKS.off}>, <mailto:info@tapturf.in?subject=Unsubscribe%20TOKEN>`,
     "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
   });
   assert.deepEqual(body.tags, [{ name: "kind", value: "request_accepted" }]);
