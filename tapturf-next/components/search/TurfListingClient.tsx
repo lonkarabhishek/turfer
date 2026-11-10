@@ -731,7 +731,7 @@ export function TurfListingClient({
           // "Free hours marked" with none: said plainly, and a line for owners.
           <div className="text-center py-16 px-2">
             <CalendarClock className="mx-auto mb-4 w-12 h-12 text-primary-300" aria-hidden />
-            <p className="text-lg font-semibold text-primary-900">{noFreeTitle(cityLabel, extraCount > 1, noun)}</p>
+            <p className="text-lg font-semibold text-primary-900">{noFreeTitle(cityLabel, extraCount > 1 || !!filters.sport || !!filters.q, noun, sportPage?.name ?? null)}</p>
             <p className="text-sm text-primary-600 mt-2">
               {OWNER_NUDGE.lead}{" "}
               <Link href={OWNER_NUDGE.href} className="font-semibold text-accent-700 underline underline-offset-2 hover:text-accent-800">

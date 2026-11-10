@@ -52,6 +52,14 @@ export type FreeRow = {
   requests: boolean;
   /** Its Booked marks in the window. */
   booked: SlotKey[];
+  /**
+   * The read's horizon (ms): its own clock plus the window it was read for.
+   * Booked marks are known only for hours that start before it, so no hour
+   * at or past it is ever called free (freeCardOf), however much later the
+   * app's clock is than the read (a copy kept a minute, or five after a
+   * failed read).
+   */
+  bookedUntil: number;
   hours: SlotHours;
 };
 
@@ -69,9 +77,14 @@ const str = (v: unknown): string | null => (typeof v === "string" && v ? v : nul
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** public.free_slots_now's answer, checked; null for anything malformed. A turf row that isn't one is left out. */
-export function parseFreeAnswer(json: unknown): FreeAnswer | null {
+/**
+ * public.free_slots_now's answer for a window of `hours` (as asked of it), checked; null for anything malformed. A turf
+ * row that isn't one is left out. Each row's bookedUntil is the read's clock plus that window, held to 1 to 192 hours as
+ * the database holds p_hours: its booked keys stop there.
+ */
+export function parseFreeAnswer(json: unknown, hours: number = FREE_WINDOW_HOURS): FreeAnswer | null {
   if (!isObj(json) || typeof json.now !== "string" || !Number.isFinite(Date.parse(json.now)) || !Array.isArray(json.turfs)) return null;
+  const bookedUntil = Date.parse(json.now) + Math.max(1, Math.min(Math.trunc(hours) || FREE_WINDOW_HOURS, FREE_WINDOW_MAX_HOURS)) * HOUR;
   const rows: FreeRow[] = [];
   for (const t of json.turfs.slice(0, FREE_TURFS_MAX)) {
     if (!isObj(t) || typeof t.id !== "string" || !UUID.test(t.id) || typeof t.name !== "string") continue;
@@ -89,6 +102,7 @@ export function parseFreeAnswer(json: unknown): FreeAnswer | null {
       updatedAt,
       requests: t.requests === true,
       booked: Array.isArray(t.booked) ? t.booked.filter(isSlotKey) : [],
+      bookedUntil,
       hours: {
         opening_hours: isObj(h.opening_hours) ? (h.opening_hours as SlotHours["opening_hours"]) : null,
         start_time: str(h.start_time),
@@ -109,10 +123,18 @@ export function pageHasNumber(raw: { owner_phone?: unknown; contact_info?: unkno
 /**
  * A turf's free start times in [fromMs, untilMs) still to come at nowMs, by business day, at most
  * FREE_KEYS_MAX: the turf page's days (slotDays, freeDays: open days, hours
- * still to come, no Booked mark). Null when the marks are not fresh at
- * nowMs or no hour in the window is free.
+ * still to come, no Booked mark). The window ends at the read's horizon
+ * (row.bookedUntil) at the latest: past it the read has no Booked marks,
+ * and an hour with no mark would read as free. Null when the marks are not
+ * fresh at nowMs or no hour in the window is free.
  */
-export function freeCardOf(row: Pick<FreeRow, "updatedAt" | "requests" | "booked" | "hours">, nowMs: number, untilMs: number, fromMs: number = nowMs): FreeCard | null {
+export function freeCardOf(
+  row: Pick<FreeRow, "updatedAt" | "requests" | "booked" | "bookedUntil" | "hours">,
+  nowMs: number,
+  untilMs: number,
+  fromMs: number = nowMs,
+): FreeCard | null {
+  untilMs = Math.min(untilMs, row.bookedUntil);
   if (!isFresh(row.updatedAt, nowMs) || !(untilMs > nowMs) || !(untilMs > fromMs)) return null;
   const count = Math.max(DAYS_SHOWN, Math.ceil((untilMs - nowMs) / DAY) + 1);
   const booked = new Set(row.booked);
@@ -234,8 +256,14 @@ export function freeHref(turfPath: string): string {
   return `${turfPath}${FREE_SLOTS_HASH}`;
 }
 
-/** The empty list's first line: "No turf in Pune has marked free hours yet." noun: "turf", or "court" on a court sport's page. */
-export function noFreeTitle(cityLabel: string | null, otherFilters: boolean, noun: string = "turf"): string {
+/**
+ * The empty list's first line: "No turf in Pune has marked free hours yet."
+ * otherFilters: anything else narrows the list (the sheet's other filters,
+ * a sport chip, a search). noun: "turf", or "court" on a court sport's
+ * page; sport: a city+sport page's sport ("No football turf in Pune ...").
+ */
+export function noFreeTitle(cityLabel: string | null, otherFilters: boolean, noun: string = "turf", sport: string | null = null): string {
+  const what = `${sport ? `${sport.toLowerCase()} ` : ""}${noun}`;
   const where = cityLabel ? ` in ${cityLabel}` : "";
-  return otherFilters ? `No ${noun}${where} with these filters has marked free hours yet.` : `No ${noun}${where} has marked free hours yet.`;
+  return otherFilters ? `No ${what}${where} with these filters has marked free hours yet.` : `No ${what}${where} has marked free hours yet.`;
 }

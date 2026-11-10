@@ -77,6 +77,14 @@ test("free hours: times only on cards shown and marked by an owner; the reply ho
   assert.match(FACTS.free_cards_marked({ ...found, turfs: [] }), /not among the cards/);
   const none = { reply: "No turf in Pune has marked free hours for tonight on TapTurf yet. Call or WhatsApp a turf to ask. Here are the best rated in Pune.", turfs: [{ id: "x", name: "X" }], followups: [] };
   assert.equal(FACTS.free_reply_honest(none), null);
+  // A venue we don't list: said first, then the place's answer.
+  assert.equal(FACTS.free_reply_honest({ ...none, reply: `I couldn't find Kage Arena on TapTurf. ${none.reply}` }), null);
+  assert.match(FACTS.free_reply_honest({ ...none, reply: "Great news, these turfs are free for sure tonight." }), /no free cards/);
+  // Facilities and players stay as asked; a budget holds on every card.
+  assert.equal(FACTS.not_free_hours({ reply: "Here are turfs with parking.", memo: { intent: "find_turf" } }), null);
+  assert.match(FACTS.not_free_hours({ reply: "Dribble Den has hours marked free by its owner.", memo: { free_hours: true } }), /answered as free hours/);
+  assert.equal(FACTS.cards_price_max({ turfs: [{ name: "A", morning_price: 900, evening_price: 1400 }] }, "1000"), null);
+  assert.match(FACTS.cards_price_max({ turfs: [{ name: "A", morning_price: 1800 }, { name: "B" }] }, "1000"), /2 card\(s\) over ₹1000/);
   assert.equal(FACTS.free_cards_marked(none, undefined, {}, { free: [] }), null);
   assert.match(FACTS.free_reply_honest({ ...none, reply: "Here are turfs free tonight in Pune." }), /no free cards/);
   assert.match(FACTS.free_reply_honest({ ...found, reply: "Here are turfs in Bangalore." }), /free cards, but/);

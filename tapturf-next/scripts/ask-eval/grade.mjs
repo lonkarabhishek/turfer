@@ -23,6 +23,8 @@ import { fileURLToPath } from "node:url";
 const BOOKING_CLAIM = /\bbook(?:ed|ing)?\s+(?:it\s+)?(?:on|through|via|with)\s+tapturf\b|\bbook\s+(?:now|online|instantly)\b|\binstant\s+booking\b/gi;
 const BOOKING_APP = /\bplayo\b|\bhudle\b|\bkhelomore\b|\bplayspots\b|\bturf\s*town\b|\bkixar\b|\bbookmyshow\b|\bturfwala\b|\bsporloc\b/i;
 const NEGATION = /\b(?:no|not|nothing|never|nobody|cannot|can't|cant|don't|dont|doesn't|isn't|aren't|won't)\b/i;
+// A card's listed rates (lib/utils/prices.ts PRICE_FIELDS).
+const PRICE_FIELDS = ["morning_price", "afternoon_price", "evening_price", "weekend_morning_price", "weekend_afternoon_price", "weekend_evening_price"];
 // Free hours (lib/ask/freeHours.ts SURE_COPY): never sure, never instant.
 const SURE_COPY = /\b(?:guarantee[ds]?|for sure|definitely (?:free|available)|book (?:now|instantly|online)|instant(?:ly)?|confirmed (?:free|slot)|100%)\b/i;
 
@@ -191,12 +193,21 @@ export const FACTS = {
     const bad = free.filter((id) => !set.has(id));
     return bad.length ? `${bad.length} card(s) said free that no owner marked: ${bad.join(", ")}` : null;
   },
-  // With free times, the reply says the owner marked them; with none, it says so plainly (never "Here are free turfs").
+  // With free times, the reply says the owner marked them; with none, it says so plainly (never "Here are free turfs"),
+  // after "I couldn't find <venue> on TapTurf." for a venue we don't list.
   free_reply_honest: (j) => {
     const any = Object.keys(j.freeSlots ?? {}).length > 0;
     const r = j.reply ?? "";
     if (any) return /\bmarked free\b/i.test(r) ? null : `free cards, but the reply reads "${r}"`;
-    return /^No\b|hasn't marked|couldn't check/i.test(r) ? null : `no free cards, but the reply reads "${r}"`;
+    return /(?:^|\. )No\b|hasn't marked|couldn't check/i.test(r) ? null : `no free cards, but the reply reads "${r}"`;
+  },
+  // Not a free hours question (a facility, a price, players): answered as asked, never from the marked hours.
+  not_free_hours: (j) => (j.memo?.free_hours === true || Object.keys(j.freeSlots ?? {}).length ? `answered as free hours: "${j.reply}"` : null),
+  // Every card within the budget asked: its lowest listed rate (a card with none is not within it).
+  cards_price_max: (j, max) => {
+    const low = (t) => Math.min(...PRICE_FIELDS.map((k) => t[k]).filter((p) => typeof p === "number" && p > 0));
+    const bad = cards(j).filter((t) => !(low(t) <= Number(max)));
+    return bad.length && !j.rows?.length ? `${bad.length} card(s) over ₹${max}: ${bad.map((t) => t.name).join(", ")}` : null;
   },
   answer_truth_claimed: (j, name, _q, truth) => {
     if (!truth) return "skip";

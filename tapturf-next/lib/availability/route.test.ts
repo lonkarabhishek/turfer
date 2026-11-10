@@ -132,7 +132,7 @@ import type { FreeAnswer } from "./free";
 const FREE_NOW = Date.parse("2026-11-10T11:00:00Z");
 const freeRow = (i: number, city: string) => ({
   id: `dddddddd-0000-4000-8000-${String(i).padStart(12, "0")}`, slug: `t${i}`, name: `Turf ${i}`, area: "Made-up Layout", city, lat: 12.9, lng: 77.6,
-  updatedAt: new Date(FREE_NOW - 3_600_000).toISOString(), requests: i === 1, booked: [],
+  updatedAt: new Date(FREE_NOW - 3_600_000).toISOString(), requests: i === 1, booked: [], bookedUntil: FREE_NOW + 36 * 3_600_000,
   hours: { opening_hours: null, start_time: "06:00:00", end_time: "23:00:00", is_24x7: false, closed_days: null },
 });
 const freeRead = (rows = [freeRow(1, "bangalore"), freeRow(2, "pune")]) => {

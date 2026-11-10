@@ -51,9 +51,11 @@ import { freeCards } from "@/lib/availability/free";
  * cached reader (lib/queries/freeSlots.ts: all of India, a minute at a
  * time per instance); no other batch reads it. A free list's items carry
  * their next free times, worked out now, and the CDN keeps it a minute
- * (FREE_HEADERS), as the turf page's own free slots. When the free hours
- * can't be read, a free list is 503 (never "none marked" when we could
- * not tell), and the counts leave its number out.
+ * (FREE_HEADERS), as the turf page's own free slots; so does a counts
+ * batch, so the sheet's "Free hours marked" count is no older than the
+ * list it opens (a counts batch runs only while the sheet is open). When
+ * the free hours can't be read, a free list is 503 (never "none marked"
+ * when we could not tell), and the counts leave its number out.
  */
 
 const HEADERS = {
@@ -65,7 +67,7 @@ const STALE_HEADERS = { "Cache-Control": "public, max-age=0, s-maxage=60", "X-Ro
 const BAD_HEADERS = { "Cache-Control": "public, max-age=300, s-maxage=3600", "X-Robots-Tag": "noindex" };
 // Older than the client's cards, or ranked with other picks: for this request only.
 const BEHIND_HEADERS = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" };
-// "Free hours marked" on: a minute, and a minute more stale (the availability routes' timers).
+// "Free hours marked" on, or the sheet's counts (one is its count): a minute, and a minute more stale (the availability routes' timers).
 const FREE_HEADERS = { "Cache-Control": "public, max-age=0, s-maxage=60, stale-while-revalidate=60", "X-Robots-Tag": "noindex" };
 
 export async function GET(req: Request) {
@@ -95,7 +97,7 @@ export async function GET(req: Request) {
     const free = freeRead ? freeCards(freeRead.rows, now) : null;
     const page = pageOf(rows, query, trending, offset, limit, v, facts, { counts, free, freeAt: new Date(now).toISOString() });
     const behind = (seen.v != null && page.v < seen.v) || (seen.t != null && page.t !== seen.t);
-    return NextResponse.json(page, { headers: behind ? BEHIND_HEADERS : stale || ownTime ? STALE_HEADERS : freeList ? FREE_HEADERS : HEADERS });
+    return NextResponse.json(page, { headers: behind ? BEHIND_HEADERS : stale || ownTime ? STALE_HEADERS : freeLoad ? FREE_HEADERS : HEADERS });
   } catch (e) {
     console.error("turfs/list: no rows to answer with", e instanceof Error ? e.message : e);
     return NextResponse.json({ error: "unavailable" }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "10" } });

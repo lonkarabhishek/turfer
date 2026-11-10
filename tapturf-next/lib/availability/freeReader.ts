@@ -38,7 +38,7 @@ export async function readFreeOnce(read: ReadFree, readNumbers: ReadNumbers, cit
     if (error.code && MISSING.has(error.code)) return { now: new Date().toISOString(), rows: [] };
     throw new Error(`free_slots_now: ${error.code ?? ""} ${error.message ?? ""}`.trim());
   }
-  const answer = parseFreeAnswer(data);
+  const answer = parseFreeAnswer(data, hours);
   if (!answer) throw new Error("free_slots_now sent something else");
   if (!answer.rows.length) return answer;
   const nums = await readNumbers(answer.rows.map((r) => r.id));

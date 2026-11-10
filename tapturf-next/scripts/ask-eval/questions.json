@@ -73,6 +73,15 @@
     { "id": "free-hinglish", "q": "aaj raat koi turf khali hai kya", "city": "bangalore", "expect": { "intent": "find_turf", "free_hours": true }, "facts": ["free_reply_honest", "free_cards_marked", "no_booking_claim", "no_sure_copy", "count_honest"] },
     { "id": "free-football-slots", "q": "football slots tomorrow evening in bangalore", "city": "bangalore", "expect": { "intent": "find_turf", "city": "bangalore", "sport": "football", "free_hours": true }, "facts": ["free_reply_honest", "free_cards_marked", "no_booking_claim", "no_sure_copy", "count_honest", "cards_sport:Football"] },
     { "id": "free-venue", "q": "is Dribble Den free tonight", "city": "bangalore", "expect": { "intent": "find_turf", "free_hours": true }, "facts": ["free_reply_honest", "free_cards_marked", "no_booking_claim", "no_sure_copy"] },
-    { "id": "free-parking-not-hours", "q": "turfs with free parking in pune", "city": "pune", "expect": { "intent": "find_turf", "city": "pune" }, "facts": ["no_booking_claim", "reply_not:marked free"] }
+    { "id": "free-parking-not-hours", "q": "turfs with free parking in pune", "city": "pune", "expect": { "intent": "find_turf", "city": "pune" }, "facts": ["no_booking_claim", "reply_not:marked free"] },
+
+    { "id": "free-near-me-city-page", "q": "which turf is available near me", "city": "pune", "lat": 12.97, "lng": 77.59, "ctx": { "city": "pune" }, "expect": { "intent": "find_turf", "free_hours": true }, "facts": ["free_reply_honest", "free_cards_marked", "no_booking_claim", "no_sure_copy", "count_honest", "cards_within_km:25"] },
+    { "id": "free-venue-slots", "q": "Dribble Den slots tomorrow", "city": "pune", "expect": { "intent": "find_turf", "free_hours": true }, "facts": ["free_reply_honest", "free_cards_marked", "no_booking_claim", "no_sure_copy"] },
+    { "id": "free-venue-not-listed", "q": "is Zqxv Arena free tonight", "city": "bangalore", "expect": { "intent": "find_turf", "free_hours": true }, "facts": ["free_reply_honest", "free_cards_marked", "no_booking_claim", "no_sure_copy", "reply_matches:^I couldn't find"] },
+    { "id": "free-under-budget", "q": "turf under 1500 free tonight in bangalore", "city": "bangalore", "expect": { "intent": "find_turf", "city": "bangalore", "max_price_per_hour": 1500, "free_hours": true }, "facts": ["free_reply_honest", "free_cards_marked", "no_booking_claim", "no_sure_copy", "count_honest", "cards_city:bangalore", "cards_price_max:1500"] },
+    { "id": "free-parking-available-not-hours", "q": "is parking available at Dribble Den", "city": "bangalore", "expect": { "intent": "question" }, "facts": ["no_booking_claim", "not_free_hours"] },
+    { "id": "free-washroom-available-not-hours", "q": "box cricket turf with washroom available in bangalore", "city": "bangalore", "expect": { "intent": "find_turf", "city": "bangalore" }, "facts": ["no_booking_claim", "not_free_hours"] },
+    { "id": "free-players-not-hours", "q": "players available tonight in pune", "city": "pune", "facts": ["no_booking_claim", "not_free_hours"] },
+    { "id": "free-sport-offered-not-hours", "q": "is Dribble Den available for box cricket", "city": "bangalore", "expect": { "intent": "question" }, "facts": ["no_booking_claim", "not_free_hours"] }
   ]
 }

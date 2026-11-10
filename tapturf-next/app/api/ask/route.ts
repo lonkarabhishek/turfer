@@ -89,19 +89,25 @@ import { answerLive } from "@/lib/ai/liveAnswer";
 import { verifyLiveCode } from "@/lib/live/codes";
 import { getLive, liveWriteKey } from "@/lib/live/server";
 import { getFreeSlots } from "@/lib/queries/freeSlots";
-import { freeCardOf, type FreeCard, type FreeRow } from "@/lib/availability/free";
+import type { FreeAnswer, FreeCard } from "@/lib/availability/free";
 import {
   FREE_UNREAD_LINE,
   FREE_WHERE_LINE,
-  asksFreeHours,
+  freeAsk,
   freeFollowups,
+  freeNamedCity,
   freeNoneReply,
-  freeVenueReply,
-  freeWindow,
+  freeNotFoundLine,
+  mayAskFreeHours,
+  nameAsTyped,
   planFree,
+  planFreeVenue,
   readerHours,
+  type FreeMode,
   type FreePickTurf,
+  type FreeWindow,
 } from "@/lib/ask/freeHours";
+import { freeFiltersAsked, freeKeep } from "@/lib/ask/freeFilters";
 import { turfPlaysSport } from "@/lib/sports";
 
 // GET /api/ask?q=...&city=pune&lat=..&lng=..
@@ -581,81 +587,154 @@ export async function GET(req: Request) {
   // TapTurf, said from those rows (lib/ask/freeHours.ts), never by the model,
   // with the usual cards carrying their free times. A turf with no hours
   // marked is never said to be free. Asked of a list ("list"), or of one venue
-  // ("venue"); a follow-up that only names a time ("and tomorrow?") after
-  // such an answer asks the same.
+  // ("venue": a question about one, the page's own, or a search the reading
+  // gave a venue name); a follow-up that only names a time ("and
+  // tomorrow?") after such an answer asks the same. The venue's name is out
+  // of the words before they are read ("Night Owl Turf" is no night).
   const freeNow = Date.now();
-  const freeWin = freeWindow(q, freeNow);
   const lastTurn = history[history.length - 1];
-  const carriesFree = lastTurn?.filters.free_hours === true && freeWin != null && filters.intent === "find_turf";
-  const freeMode: "list" | "venue" | null =
-    filters.intent === "question" && asksFreeHours(q, freeNow)
-      ? "venue"
-      : ((filters.intent === "find_turf" || filters.intent === "other" || filters.intent === "find_game") && asksFreeHours(q, freeNow)) || carriesFree
-        ? "list"
-        : null;
+  const carriesFree = lastTurn?.filters.free_hours === true;
+  let freeMode: FreeMode = null;
+  let freeWin: FreeWindow | null = null;
+  // The venue a free hours question names (as typed), and its row when we list it.
+  let freeTyped: string | null = null;
+  let freeVenue: Turf | null = null;
+  if (mayAskFreeHours(q) || carriesFree) {
+    const names = filters.turf_names.length ? filters.turf_names.slice(0, 1) : filters.intent === "question" && ctx.turf ? [ctx.turf] : [];
+    freeTyped = names[0] ?? null;
+    freeVenue = names.length ? (resolveWithPage(turfs, names, prefer, page)[0]?.turf ?? null) : null;
+    ({ mode: freeMode, window: freeWin } = freeAsk({
+      q,
+      nowMs: freeNow,
+      intent: filters.intent,
+      names: [freeTyped, freeVenue?.name, freeVenue ? cleanVenueName(freeVenue.name) : null],
+      venue: names.length > 0,
+      carries: carriesFree,
+    }));
+  }
   let freeLog: Record<string, unknown> | null = null;
+
+  /**
+   * A free hours answer to a list ("any turf free tonight"): the turfs with
+   * hours marked free in the place (near the shared location for near me,
+   * unless the words name a city), the sport and the window asked, that
+   * meet the reading's other filters (a budget, facilities, 24 hours,
+   * lib/ask/freeFilters.ts); else none marked, said plainly, over the usual
+   * cards for the place to call or WhatsApp. lead: said first (a venue
+   * asked about that we don't list).
+   */
+  const freeListAnswer = async (read: FreeAnswer | null, lead: string | null): Promise<Record<string, unknown>> => {
+    const byId = new Map<string, Turf>(turfs.map((t) => [t.id, t]));
+    const pickTurfs = new Map<string, FreePickTurf>();
+    for (const r of read?.rows ?? []) {
+      const t = byId.get(r.id);
+      if (t) pickTurfs.set(r.id, { id: t.id, city: t.city ?? null, sports: t.sports ?? [], lat: t.lat ?? null, lng: t.lng ?? null, area: areaFor(t) });
+    }
+    const sportPage = filters.sport ? sportBySlug(filters.sport) : undefined;
+    // A budget with a sport reads the sport's price, as a turf search does (cached read).
+    const bands = freeFiltersAsked(filters) && filters.sport && filters.max_price_per_hour != null ? await getSportBands() : null;
+    const kept = freeKeep([...pickTurfs.keys()].map((id) => byId.get(id)!), filters, { bands });
+    const plan = planFree({
+      rows: read?.rows ?? null,
+      turfs: pickTurfs,
+      names: (id) => place(byId.get(id)!).name,
+      cityLabel: (id) => label(id),
+      window: freeWin,
+      nowMs: freeNow,
+      // Near the shared location unless the words name a city (the page's city gives way for near me); else that city, the page's, the visitor's.
+      named: freeNamedCity({ askedCity, readingCity: filters.city, wantsNearby: filters.wants_nearby, hasLoc: !!loc }),
+      fallbackCity: ctx.city ?? prefCity ?? null,
+      loc,
+      plays: sportPage ? (sp) => turfPlaysSport(sp, sportPage) : null,
+      keep: kept ? (id) => kept.has(id) : null,
+      areas: filters.areas,
+      wantsNearby: filters.wants_nearby,
+    });
+    const { near, city } = plan;
+    const said = (reply: string) => (lead ? `${lead} ${reply}` : reply);
+    // The "Free hours marked" chip only over cards that have them; router v10's filters a free answer doesn't apply, off.
+    const freeFilters = {
+      ...(base.filters as Record<string, unknown>),
+      city,
+      freeHours: plan.picks.length > 0,
+      ...(version === 10 ? { ownerPrices: false, playerReviews: false, openAt: null, freeToJoin: false, turfBooked: false } : {}),
+    };
+    const freeMemo = { ...(base.memo as Record<string, unknown>), intent: "find_turf", city, free_hours: true };
+    freeLog = { mode: "list", kind: plan.kind, shown: plan.picks.length, near, city, filtered: plan.filtered, window: plan.when || null, ...(lead ? { venue: "not_found" } : {}) };
+    if (plan.picks.length) {
+      return {
+        ...base,
+        intent: "find_turf",
+        reply: said(plan.reply!),
+        followups: freeFollowups(plan.when, true),
+        // No area chip over the place's cards when none in the area has hours marked.
+        filters: plan.areaMissed ? { ...freeFilters, areas: [] } : freeFilters,
+        memo: freeMemo,
+        relaxed: [],
+        total: plan.picks.length,
+        turfs: plan.picks.map((p) => card(p.km != null ? { ...byId.get(p.id)!, distanceKm: p.km } : byId.get(p.id)!)),
+        freeSlots: Object.fromEntries(plan.picks.map((p) => [p.id, p.card])) satisfies Record<string, FreeCard>,
+      };
+    }
+    // None marked (or the read failed): said plainly, and the usual cards for the place (with the
+    // reading's budget and facilities), to call or WhatsApp. Nothing on them says free; no distance
+    // on a city's cards, as on its free ones.
+    const asked = {
+      ...filters,
+      intent: "find_turf" as const,
+      free_text: null,
+      turf_names: [],
+      time: null,
+      when: null,
+      sort: near ? ("nearby" as const) : ("rating" as const),
+      wants_nearby: near,
+      city: city && isCity(city) ? city : null,
+      ...(version === 10 ? { ...NO_EXTRAS, with_photos: filters.with_photos === true } : {}),
+    };
+    const r = near || city ? applyAskFilters(turfs, asked, { prefCity, loc: near ? loc : null, limit: 6, askedCity }) : null;
+    const shownCity = r?.city ?? city;
+    const cards = r?.turfs ?? [];
+    const reply =
+      plan.kind === "unread"
+        ? FREE_UNREAD_LINE
+        : !near && !city
+          ? `${freeNoneReply({ where: "", when: plan.when, cards: null, city: null, filtered: plan.filtered })} ${filters.wants_nearby ? FREE_WHERE_LINE : ""}`.trim()
+          : freeNoneReply({ where: plan.where, when: plan.when, cards: cards.length ? (near ? "nearest" : "rated") : null, city: label(shownCity), filtered: plan.filtered });
+    // total: the cards shown, so nothing reads as "400 matches" under "none marked"; no "Under ₹500" chip over cards
+    // the search had to drop the budget for, as a turf search says.
+    const shownFilters = { ...freeFilters, city: shownCity, ...(r?.relaxed.includes("price") ? { maxPrice: null } : {}) };
+    return { ...base, intent: "find_turf", reply: said(reply), followups: freeFollowups(plan.when, false), filters: shownFilters, memo: freeMemo, relaxed: [], total: cards.length, turfs: cards.map(card) };
+  };
 
   const handlerStart = performance.now();
   try {
-    if (freeMode === "list") {
+    if (freeMode) {
       const read = await getFreeSlots(null, readerHours(freeWin, freeNow)).catch((e) => {
         console.error("ask: free hours read failed", e instanceof Error ? e.message : e);
         return null;
       });
-      const byId = new Map<string, Turf>(turfs.map((t) => [t.id, t]));
-      const pickTurfs = new Map<string, FreePickTurf>();
-      for (const r of read?.rows ?? []) {
-        const t = byId.get(r.id);
-        if (t) pickTurfs.set(r.id, { id: t.id, city: t.city ?? null, sports: t.sports ?? [], lat: t.lat ?? null, lng: t.lng ?? null, area: areaFor(t) });
-      }
-      const sportPage = filters.sport ? sportBySlug(filters.sport) : undefined;
-      const plan = planFree({
-        rows: read?.rows ?? null,
-        turfs: pickTurfs,
-        names: (id) => place(byId.get(id)!).name,
-        cityLabel: (id) => label(id),
-        window: freeWin,
-        nowMs: freeNow,
-        // Near the shared location unless a city is named; else the city named, the page's, the visitor's.
-        named: askedCity ?? filters.city,
-        fallbackCity: ctx.city ?? prefCity ?? null,
-        loc,
-        plays: sportPage ? (sp) => turfPlaysSport(sp, sportPage) : null,
-        areas: filters.areas,
-      });
-      const { near, city } = plan;
-      // The "Free hours marked" chip only over cards that have them.
-      const freeFilters = { ...(base.filters as Record<string, unknown>), city, freeHours: plan.picks.length > 0 };
-      const freeMemo = { ...(base.memo as Record<string, unknown>), intent: "find_turf", city, free_hours: true };
-      if (plan.picks.length) {
+      if (freeMode === "venue" && freeVenue) {
+        // "Is Dribble Den free tonight": its owner's marked hours, from the rows, never the model's guess.
+        const venue = freeVenue;
+        const v = planFreeVenue({ row: read?.rows.find((r) => r.id === venue.id), read: !!read, name: place(venue).name, window: freeWin, nowMs: freeNow });
         body = {
           ...base,
           intent: "find_turf",
-          reply: plan.reply,
-          followups: freeFollowups(plan.when, true),
-          filters: freeFilters,
-          memo: freeMemo,
+          reply: v.reply,
+          followups: freeFollowups(v.when, !!v.card),
+          filters: { ...(base.filters as Record<string, unknown>), freeHours: !!v.card },
+          memo: { ...(base.memo as Record<string, unknown>), intent: "find_turf", free_hours: true, free_text: venue.name, turf_names: [venue.name] },
           relaxed: [],
-          total: plan.picks.length,
-          turfs: plan.picks.map((p) => card(p.km != null ? { ...byId.get(p.id)!, distanceKm: p.km } : byId.get(p.id)!)),
-          freeSlots: Object.fromEntries(plan.picks.map((p) => [p.id, p.card])) satisfies Record<string, FreeCard>,
+          total: 1,
+          turfs: [card(venue)],
+          ...(v.card ? { freeSlots: { [venue.id]: v.card } } : {}),
         };
+        freeLog = { mode: "venue", read: !!read, shown: v.card ? 1 : 0, window: v.when || null };
       } else {
-        // None marked (or the read failed): said plainly, and the usual cards for the place, to call or WhatsApp. Nothing on them says free.
-        const asked = { ...filters, intent: "find_turf" as const, free_text: null, turf_names: [], time: null, when: null, open_24x7: false, sort: near ? ("nearby" as const) : ("rating" as const), wants_nearby: near, city: city && isCity(city) ? city : null, ...(version === 10 ? NO_EXTRAS : {}) };
-        const r = near || city ? applyAskFilters(turfs, asked, { prefCity, loc, limit: 6, askedCity }) : null;
-        const shownCity = r?.city ?? city;
-        const cards = r?.turfs ?? [];
-        const reply =
-          plan.kind === "unread"
-            ? FREE_UNREAD_LINE
-            : !near && !city
-              ? `${freeNoneReply({ where: "", when: plan.when, cards: null, city: null })} ${filters.wants_nearby ? FREE_WHERE_LINE : ""}`.trim()
-              : freeNoneReply({ where: plan.where, when: plan.when, cards: cards.length ? (near ? "nearest" : "rated") : null, city: label(shownCity) });
-        // total: the cards shown, so nothing reads as "400 matches" under "none marked".
-        body = { ...base, intent: "find_turf", reply, followups: freeFollowups(plan.when, false), filters: { ...freeFilters, city: shownCity }, memo: freeMemo, relaxed: [], total: cards.length, turfs: cards.map(card) };
+        // A list; or a venue we don't list ("is Kage Arena free tonight"): said so, never the model's
+        // words, then the free hours where the player is.
+        body = await freeListAnswer(read, freeMode === "venue" && freeTyped ? freeNotFoundLine(nameAsTyped(q, freeTyped)) : null);
       }
-      freeLog = { mode: "list", kind: plan.kind, shown: plan.picks.length, near, city, window: plan.when || null };
     } else
     switch (filters.intent) {
       case "find_game": {
@@ -736,35 +815,6 @@ export async function GET(req: Request) {
         const [hit] = resolveWithPage(turfs, names.slice(0, 1), prefer, page);
         if (!hit?.turf) {
           body = { ...base, relaxed: [], total: 0, missing: filters.turf_names, answer: null };
-          break;
-        }
-        // "Is Dribble Den free tonight": its owner's marked hours, from the rows, never the model's guess.
-        if (freeMode === "venue") {
-          const read = await getFreeSlots(null, readerHours(freeWin, freeNow)).catch(() => null);
-          const venue = hit.turf;
-          const row: FreeRow | undefined = read?.rows.find((r) => r.id === venue.id);
-          const span = freeWin ?? { fromMs: freeNow, toMs: freeNow + 36 * 3_600_000, words: "" };
-          const exact = row ? freeCardOf(row, freeNow, span.toMs, span.fromMs) : null;
-          // Not at the time asked: its other free hours that day, said as such.
-          const other = !exact && row && freeWin?.wide ? freeCardOf(row, freeNow, freeWin.wide.toMs, freeWin.wide.fromMs) : null;
-          const freeCard = exact ?? other;
-          const name = place(venue).name;
-          const reply = !read
-            ? FREE_UNREAD_LINE
-            : freeVenueReply({ name, found: !!freeCard, when: span.words, requests: !!freeCard?.requests, otherDay: other ? freeWin!.wide!.words : null });
-          body = {
-            ...base,
-            intent: "find_turf",
-            reply,
-            followups: freeFollowups(span.words, !!freeCard),
-            filters: { ...(base.filters as Record<string, unknown>), freeHours: !!freeCard },
-            memo: { ...(base.memo as Record<string, unknown>), intent: "find_turf", free_hours: true, free_text: venue.name },
-            relaxed: [],
-            total: 1,
-            turfs: [card(venue)],
-            ...(freeCard ? { freeSlots: { [venue.id]: freeCard } } : {}),
-          };
-          freeLog = { mode: "venue", read: !!read, shown: freeCard ? 1 : 0, window: span.words || null };
           break;
         }
         // A venue typed that isn't in the player's city (the one asked

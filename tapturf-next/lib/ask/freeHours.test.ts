@@ -6,19 +6,29 @@ import {
   FREE_WHERE_LINE,
   SURE_COPY,
   asksFreeHours,
+  freeAsk,
   freeFollowups,
   freeFoundReply,
+  freeNamedCity,
   freeNoneReply,
+  freeNotFoundLine,
   freeVenueReply,
   freeWidenedReply,
   freeWindow,
+  mayAskFreeHours,
+  nameAsTyped,
   pickFree,
   planFree,
+  planFreeVenue,
   readerHours,
+  withoutNames,
   type FreePickTurf,
 } from "./freeHours";
-import { freeLine, type FreeRow } from "../availability/free";
+import { freeFiltersAsked, freeKeep } from "./freeFilters";
+import { freeCardOf, freeLine, type FreeRow } from "../availability/free";
 import type { SlotHours } from "../availability/slots";
+import type { AskReading } from "../ai/ask";
+import type { Turf } from "../../types/turf";
 
 /** An India wall-clock time as an instant. */
 const ist = (s: string) => Date.parse(`${s.replace(" ", "T")}:00+05:30`);
@@ -31,7 +41,7 @@ const ID = (i: number) => `dddddddd-0000-4000-8000-${String(i).padStart(12, "0")
 
 // ── The fixture: Bangalore has turfs with free hours marked; Pune has none. ──
 const row = (i: number, o: Partial<FreeRow>): FreeRow => ({
-  id: ID(i), slug: `t${i}`, name: `Turf ${i}`, area: null, city: "bangalore", lat: 12.97, lng: 77.59, updatedAt: iso(NOW - 2 * HOUR), requests: false, booked: [],
+  id: ID(i), slug: `t${i}`, name: `Turf ${i}`, area: null, city: "bangalore", lat: 12.97, lng: 77.59, updatedAt: iso(NOW - 2 * HOUR), requests: false, booked: [], bookedUntil: NOW + 192 * HOUR,
   hours: H({ start_time: "06:00:00", end_time: "23:00:00" }), ...o,
 });
 const ROWS: FreeRow[] = [
@@ -171,8 +181,14 @@ test("tonight, a time, a time that is booked (the day instead), a sport, near me
   assert.equal(near.reply, `2 turfs near you have hours marked free by their owners. Some take requests on TapTurf; the turf confirms. ${BOOKINGS_LINE}`);
   // Far from both: none near you.
   assert.deepEqual(plan({ loc: { lat: 18.52, lng: 73.86 } }).picks, []);
-  // A named area leads.
-  assert.deepEqual(plan({ fallbackCity: "bangalore", areas: ["Made-up Nagar"] }).picks.map((x) => x.id), [ID(2), ID(1)]);
+  // A named area: only the turfs in it; none there, the city's, said so.
+  const nagar = plan({ fallbackCity: "bangalore", areas: ["Made-up Nagar"] });
+  assert.deepEqual([nagar.picks.map((x) => x.id), nagar.areaMissed], [[ID(2)], false]);
+  assert.equal(nagar.reply, "Request Arena Standin in Bangalore has hours marked free by its owner. You can request a free hour on its page; the turf confirms.");
+  const kora = plan({ fallbackCity: "bangalore", areas: ["Koramangala"], q: "free turf in koramangala tonight" });
+  assert.deepEqual([kora.kind, kora.picks.map((x) => x.id), kora.areaMissed], ["found", [ID(1), ID(2)], true]);
+  assert.equal(kora.reply, `No turf in Koramangala has marked free hours for tonight. 2 turfs in Bangalore have hours marked free tonight by their owners. Some take requests on TapTurf; the turf confirms. ${BOOKINGS_LINE}`);
+  assert.doesNotMatch(kora.reply!, SURE_COPY);
   // The read failed: said, never "none marked".
   assert.equal(plan({ rows: null, fallbackCity: "bangalore" }).kind, "unread");
 });
@@ -221,4 +237,186 @@ test("the replies: plain, never sure, never a booking promise; the site owner's 
   assert.match("available for sure", SURE_COPY);
   assert.deepEqual(freeFollowups("tomorrow", true), ["Any turf free tonight", "Any games tonight"]);
   assert.deepEqual(freeFollowups("", false), ["Any turf free tomorrow", "Turfs open 24 hours", "Any games tonight"]);
+});
+
+test("facilities, prices and people said available or free are no free hour; available alone needs a turf, a time or near me", () => {
+  for (const q of [
+    "is parking available at Dribble Den",
+    "are washrooms available at Dribble Den",
+    "turfs with parking available in pune",
+    "box cricket turf with washroom available in bangalore",
+    "is coaching available at dribble den",
+    "which turf has equipment available",
+    "what sports are available at dribble den",
+    "any turf with empty parking",
+    "is drinking water available",
+    "does dribble den have floodlights available",
+    "players available tonight in pune",
+    "need 2 players tonight free",
+    "looking for a team tonight",
+    "is entry free at dribble den",
+    "is the turf free of cost",
+    "free wifi turf",
+    "free trial coaching in pune",
+    "are you free tonight",
+    "anything available?",
+  ])
+    assert.equal(asksFreeHours(q, NOW), false, q);
+  for (const q of ["turfs available in pune", "any turf empty tonight", "available tonight?", "box cricket turf available near me", "turf under 500 available in bangalore", "free turf with parking tonight"])
+    assert.equal(asksFreeHours(q, NOW), true, q);
+  // "Parking free" is free parking, whatever follows.
+  assert.equal(asksFreeHours("turf with parking free tonight", NOW), false);
+  // One venue, its name already out of the words: "available" or "empty" is enough; what it offers is no hour.
+  for (const q of ["is available tonight", "is available", "is empty", "free slots tomorrow", "is free at 7 pm", "is available for football tonight", "can i book it tonight"])
+    assert.equal(asksFreeHours(q, NOW, true), true, q);
+  for (const q of ["is available for box cricket", "is parking available at", "does it have floodlights available", "is free for kids", "is open tonight", "what are the timings", "free games here tonight"])
+    assert.equal(asksFreeHours(q, NOW, true), false, q);
+  // The route reads no further without one of these words.
+  assert.equal(mayAskFreeHours("football turfs in Baner"), false);
+  assert.equal(mayAskFreeHours("Is parking available?"), true);
+});
+
+test("freeAsk: of a list, of one venue (its name out of the words), or not at all; never a game search", () => {
+  const ask = (q: string, o: Partial<Parameters<typeof freeAsk>[0]> = {}) => freeAsk({ q, nowMs: NOW, intent: "find_turf", names: [], venue: false, carries: false, ...o });
+  assert.equal(ask("any turf free tonight").mode, "list");
+  assert.equal(ask("any turf free tonight", { intent: "other" }).mode, "list");
+  assert.equal(ask("any turf free tonight", { intent: "find_game" }).mode, null, "a game search stays one");
+  assert.equal(ask("players available tonight in pune").mode, null);
+  assert.equal(ask("is any turf free tonight", { intent: "question" }).mode, "list", "a question naming no venue: the place's turfs");
+  // A venue's name is no time and no free hour ("Night Owl", "Free Kick").
+  assert.equal(freeWindow("is Night Owl Turf 1350 available tomorrow", NOW)?.words, "tomorrow night", "read whole, the name is a night");
+  assert.equal(withoutNames("Is Night Owl Turf 1350 available tomorrow?", ["Night Owl Turf 1350"]), " is available tomorrow ");
+  const owl = ask("is Night Owl Turf 1350 available tomorrow", { intent: "question", names: ["Night Owl Turf 1350"], venue: true });
+  assert.deepEqual([owl.mode, owl.window?.words], ["venue", "tomorrow"]);
+  assert.equal(ask("is Night Owl Turf 1350 open late", { intent: "question", names: ["Night Owl Turf 1350"], venue: true }).mode, null);
+  assert.equal(ask("Free Kick Arena timings", { names: ["Free Kick Arena"], venue: true }).mode, null);
+  // A search the reading gave a venue name ("Dribble Standin slots tomorrow"): that venue's hours.
+  assert.equal(ask("Dribble Standin slots tomorrow", { names: ["Dribble Standin"], venue: true }).mode, "venue");
+  assert.equal(ask("Dribble Standin availability", { names: ["Dribble Standin"], venue: true }).mode, "venue");
+  // Facilities and what a venue offers stay the question they are.
+  assert.equal(ask("is parking available at Dribble Standin", { intent: "question", names: ["Dribble Standin"], venue: true }).mode, null);
+  assert.equal(ask("are washrooms available at Dribble Standin", { intent: "question", names: ["Dribble Standin"], venue: true }).mode, null);
+  assert.equal(ask("is Dribble Standin available for box cricket", { intent: "question", names: ["Dribble Standin"], venue: true }).mode, null);
+  // A follow-up naming only a time after a free hours answer asks the same; anything else is a new search.
+  assert.equal(ask("and tomorrow evening?", { carries: true }).mode, "list");
+  assert.equal(ask("and tomorrow evening?", { carries: true, names: ["Dribble Standin"], venue: true }).mode, "venue");
+  assert.equal(ask("and tomorrow evening?").mode, null);
+  assert.equal(ask("cheaper ones", { carries: true }).mode, null);
+});
+
+test("near me with a location: the page's city gives way, a city the words name holds", () => {
+  assert.equal(freeNamedCity({ askedCity: null, readingCity: "pune", wantsNearby: true, hasLoc: true }), null);
+  assert.equal(freeNamedCity({ askedCity: "pune", readingCity: "pune", wantsNearby: true, hasLoc: true }), "pune");
+  assert.equal(freeNamedCity({ askedCity: null, readingCity: "pune", wantsNearby: true, hasLoc: false }), "pune", "no location: the city");
+  assert.equal(freeNamedCity({ askedCity: null, readingCity: "pune", wantsNearby: false, hasLoc: true }), "pune", "no near me: the city read");
+  // On the Pune page, "which turf is available near me" from beside the Bangalore turfs: those, near you.
+  const near = plan({ named: freeNamedCity({ askedCity: null, readingCity: "pune", wantsNearby: true, hasLoc: true }), fallbackCity: "pune", loc: { lat: 12.98, lng: 77.6 }, wantsNearby: true });
+  assert.deepEqual([near.kind, near.near, near.where, near.picks.length], ["found", true, "near you", 2]);
+  // Near me with no location and no city: the cards' own city said, and asked for a place.
+  const nowhere = plan({ wantsNearby: true });
+  assert.equal(nowhere.where, "in Bangalore");
+  assert.equal(nowhere.reply, `2 turfs in Bangalore have hours marked free by their owners. Some take requests on TapTurf; the turf confirms. ${BOOKINGS_LINE} ${FREE_WHERE_LINE}`);
+  assert.equal(plan({}).reply, `2 turfs in Bangalore have hours marked free by their owners. Some take requests on TapTurf; the turf confirms. ${BOOKINGS_LINE}`, "no near me: no question back");
+});
+
+test("the reading's other filters: only free turfs that meet them; none that does, said so", () => {
+  const one = plan({ fallbackCity: "bangalore", keep: (id) => id === ID(2) });
+  assert.deepEqual([one.kind, one.filtered, one.picks.map((p) => p.id)], ["found", true, [ID(2)]]);
+  const none = plan({ fallbackCity: "bangalore", keep: () => false, q: "any turf free tonight" });
+  assert.deepEqual([none.kind, none.filtered, none.picks], ["none", true, []]);
+  assert.equal(
+    freeNoneReply({ where: none.where, when: none.when, cards: "rated", city: "Bangalore", filtered: none.filtered }),
+    "No turf in Bangalore that matches what you asked has marked free hours for tonight on TapTurf yet. Call or WhatsApp a turf to ask. Here are the best rated in Bangalore.",
+  );
+  assert.equal(plan({ fallbackCity: "bangalore" }).filtered, false);
+  // Pune has none marked at all: said plainly, not "that matches".
+  assert.deepEqual([plan({ fallbackCity: "pune", keep: () => false }).kind, plan({ fallbackCity: "pune", keep: () => false }).filtered], ["none", false]);
+  // As a turf search reads them (applyAskFilters), nothing dropped: a budget, facilities, 24 hours, a rating.
+  const turf = (id: string, o: Partial<Turf>) => ({ id, slug: id, name: id, city: "bangalore", area: null, address: "", sports: ["Football", "Box Cricket"], amenities: [], images: [], rating: 4.2, total_reviews: 10, ...o }) as unknown as Turf;
+  const TURF_ROWS = [turf(ID(1), { morning_price: 1800, evening_price: 2200, parking_available: true }), turf(ID(2), { morning_price: 900, evening_price: 1200, is_24x7: true, rating: 4.7 })];
+  const reading = (o: Partial<AskReading>): AskReading => ({
+    intent: "find_turf", tool: null, city: "bangalore", sport: null, areas: [], turf_names: [], question: null, max_price_per_hour: null, min_rating: null, time: "evening", when: "today",
+    skill: null, open_24x7: false, wants_nearby: false, players: null, needs: [], sort: "rating", free_text: null, summary: "", reply: "", followups: [], ...o,
+  });
+  const ids = (o: Partial<AskReading>) => {
+    const k = freeKeep(TURF_ROWS, reading(o));
+    return k ? [...k].sort() : null;
+  };
+  assert.equal(ids({}), null, "nothing else asked: no filter");
+  assert.equal(freeFiltersAsked(reading({})), false);
+  assert.deepEqual(ids({ max_price_per_hour: 1000 }), [ID(2)]);
+  assert.deepEqual(ids({ max_price_per_hour: 500 }), [], "none under 500: none, never the budget dropped");
+  assert.deepEqual(ids({ needs: ["parking"] }), [ID(1)]);
+  assert.deepEqual(ids({ needs: ["parking"], max_price_per_hour: 1000 }), [], "no turf has both");
+  assert.deepEqual(ids({ open_24x7: true }), [ID(2)]);
+  assert.deepEqual(ids({ min_rating: 4.5 }), [ID(2)]);
+  assert.deepEqual(ids({ needs: ["covered"] }), []);
+  assert.deepEqual(ids({ with_photos: true }), [], "router v10's photos");
+  assert.deepEqual(ids({ max_price_per_hour: 1000, city: "pune", areas: ["Made-up Nagar"], time: "late_night" }), [ID(2)], "the place and the time are the free answer's own");
+});
+
+test("one venue: its hours in the window, its other hours that day, or none marked; a venue we don't list", () => {
+  const v = (q: string | null, r: FreeRow | null = ROWS[0], read = true) => planFreeVenue({ row: r, read, name: "Dribble Standin", window: q == null ? null : freeWindow(q, NOW), nowMs: NOW });
+  const tonight = v("is it free tonight");
+  assert.equal(tonight.reply, "Dribble Standin has hours marked free tonight by its owner. For bookings, contact the turf directly.");
+  assert.equal(freeLine(tonight.card, NOW)!.text, "Free today: 7 PM, 9 PM, 10 PM, 11 PM +2");
+  const six = v("free at 6 pm");
+  assert.equal(six.reply, "Dribble Standin hasn't marked 6 PM today free. It has other hours marked free today by its owner. For bookings, contact the turf directly.");
+  assert.equal(v(null).card?.days[0].keys[0], "2026-11-10T17:00", "no time named: the next 36 hours");
+  assert.equal(v("tonight", null).reply, "Dribble Standin hasn't marked free hours for tonight on TapTurf. Call or WhatsApp the turf to ask.");
+  assert.equal(v("tonight", ROWS[2]).card, null, "stale marks: none");
+  assert.deepEqual([v("tonight", ROWS[0], false).reply, v("tonight", ROWS[0], false).card], [FREE_UNREAD_LINE, null]);
+  assert.equal(freeNotFoundLine("Kage Arena"), "I couldn't find Kage Arena on TapTurf.");
+  assert.equal(nameAsTyped("is Kage Arena free tonight", "kage arena"), "Kage Arena", "as the player typed it");
+  assert.equal(nameAsTyped("is kage arena free tonight", "kage arena"), "Kage arena");
+  assert.equal(nameAsTyped("free tonight?", "Kage Arena"), "Kage Arena");
+});
+
+test("around midnight in India time: the reply's day is the cards' day (11:30 PM and 12:30 AM)", () => {
+  const LATE = ist("2026-11-10 23:30"); // Tuesday 11:30 PM
+  const SMALL = ist("2026-11-11 00:30"); // Wednesday 12:30 AM
+  const w = (q: string, now: number) => {
+    const x = freeWindow(q, now)!;
+    return [at(x.fromMs), at(x.toMs), x.words, x.wide ? `${at(x.wide.fromMs)} to ${at(x.wide.toMs)} ${x.wide.words}` : null];
+  };
+  // 11:30 PM: 12 AM and 1 AM are tonight's, as the cards say them.
+  assert.deepEqual(w("free turf at 12 am", LATE), ["2026-11-10 23:30", "2026-11-11 00:31", "at 12 AM tonight", "2026-11-10 23:30 to 2026-11-11 04:00 today"]);
+  assert.deepEqual(w("free turf at 1 am", LATE).slice(0, 3), ["2026-11-11 00:30", "2026-11-11 01:31", "at 1 AM tonight"]);
+  assert.deepEqual(w("any turf free tonight", LATE).slice(0, 3), ["2026-11-10 23:30", "2026-11-11 04:00", "tonight"]);
+  assert.deepEqual(w("free turf tomorrow 1 am", LATE).slice(0, 3), ["2026-11-11 00:30", "2026-11-11 01:31", "at 1 AM tonight"], "the hour itself: in two hours");
+  // 12:30 AM: tonight and late night are the rest of this night (the cards' "Free tonight: 1 AM"), the day after is today's.
+  assert.deepEqual(w("any turf free tonight", SMALL), ["2026-11-11 00:30", "2026-11-11 04:00", "tonight", "2026-11-11 04:00 to 2026-11-12 04:00 today"]);
+  assert.deepEqual(w("late night turf free", SMALL).slice(0, 3), ["2026-11-11 00:30", "2026-11-11 04:00", "late tonight"]);
+  assert.deepEqual(w("free turf at 1 am", SMALL).slice(0, 3), ["2026-11-11 00:30", "2026-11-11 01:31", "at 1 AM tonight"]);
+  assert.deepEqual(w("free turf 1 am tonight", SMALL).slice(0, 3), ["2026-11-11 00:30", "2026-11-11 01:31", "at 1 AM tonight"]);
+  assert.deepEqual(w("free turf at 12 am", SMALL).slice(0, 3), ["2026-11-11 23:30", "2026-11-12 00:31", "at 12 AM tomorrow"], "tonight's 12 AM has gone: the next");
+  assert.deepEqual(w("turf free this evening", SMALL).slice(0, 3), ["2026-11-11 17:00", "2026-11-11 22:00", "this evening"]);
+  assert.deepEqual(w("any turf free tomorrow", SMALL).slice(0, 3), ["2026-11-12 04:00", "2026-11-13 04:00", "tomorrow"]);
+  assert.deepEqual(w("aaj raat 9 baje koi turf khali hai", SMALL).slice(2, 3), ["at 9 PM tonight"]);
+  // The reply and the card agree: a turf open to 2 AM with its owner's marks an hour old.
+  const dribble = (now: number): FreeRow => ({ ...ROWS[0], booked: [], updatedAt: iso(now - HOUR), bookedUntil: now + 36 * HOUR });
+  for (const [now, q, said, line] of [
+    [LATE, "free turf at 12 am", "Dribble Standin in Bangalore has hours marked free at 12 AM tonight by its owner.", "Free tonight: 12 AM"],
+    [LATE, "free turf at 1 am", "Dribble Standin in Bangalore has hours marked free at 1 AM tonight by its owner.", "Free tonight: 1 AM"],
+    [SMALL, "any turf free tonight", "Dribble Standin in Bangalore has hours marked free tonight by its owner.", "Free tonight: 1 AM"],
+    [SMALL, "free turf late night", "Dribble Standin in Bangalore has hours marked free late tonight by its owner.", "Free tonight: 1 AM"],
+  ] as const) {
+    const p = planFree({ rows: [dribble(now)], turfs: TURFS, names: () => "Dribble Standin", cityLabel: (id) => LABELS[id] ?? null, window: freeWindow(q, now), nowMs: now, named: null, fallbackCity: "bangalore", loc: null });
+    assert.equal(p.kind, "found", q);
+    assert.ok(p.reply!.startsWith(said), `${q}: ${p.reply}`);
+    assert.equal(freeLine(p.picks[0].card, now)!.text, line, q);
+  }
+  // The list's card at 12:30 AM (the next 36 hours) leads with tonight's 1 AM, which "tonight" now finds.
+  assert.equal(freeLine(freeCardOf(dribble(SMALL), SMALL, SMALL + 36 * HOUR), SMALL)!.text, "Free tonight: 1 AM");
+});
+
+test("the new replies: plain, never sure, never a booking promise", () => {
+  for (const r of [
+    freeNoneReply({ where: "in Bangalore", when: "tonight", cards: "rated", city: "Bangalore", filtered: true }),
+    freeNotFoundLine("Kage Arena"),
+    planFree({ rows: ROWS, turfs: TURFS, names: (id) => TURFS.get(id)!.name, cityLabel: (id) => LABELS[id] ?? null, window: null, nowMs: NOW, named: null, fallbackCity: null, loc: null, wantsNearby: true }).reply!,
+  ]) {
+    assert.doesNotMatch(r, SURE_COPY, r);
+    assert.doesNotMatch(r, /\bavailable\b|\bbook (?:it|now|here)\b/i, r);
+  }
 });

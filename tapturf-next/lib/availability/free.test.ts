@@ -42,6 +42,7 @@ const row = (o: Partial<FreeRow> = {}): FreeRow => ({
   updatedAt: iso(NOW - 2 * HOUR),
   requests: false,
   booked: [],
+  bookedUntil: NOW + FREE_WINDOW_HOURS * HOUR,
   hours: H({ start_time: "06:00:00", end_time: "02:00:00" }),
   ...o,
 });
@@ -56,6 +57,10 @@ test("the words: the filter, its hint, the request line, the owners' nudge, the 
   assert.equal(noFreeTitle(null, false), "No turf has marked free hours yet.");
   assert.equal(noFreeTitle("Pune", true), "No turf in Pune with these filters has marked free hours yet.");
   assert.equal(noFreeTitle("Bangalore", false, "court"), "No court in Bangalore has marked free hours yet.");
+  // A city+sport page names its sport; a sport chip or a search is one more filter.
+  assert.equal(noFreeTitle("Bangalore", false, "turf", "Football"), "No football turf in Bangalore has marked free hours yet.");
+  assert.equal(noFreeTitle("Bangalore", false, "court", "Badminton"), "No badminton court in Bangalore has marked free hours yet.");
+  assert.equal(noFreeTitle("Bangalore", true, "turf", "Box Cricket"), "No box cricket turf in Bangalore with these filters has marked free hours yet.");
   assert.equal(freeHref("/turf/dribble-standin-bangalore"), "/turf/dribble-standin-bangalore#free-slots");
   assert.equal(FREE_SLOTS_HASH, "#free-slots");
   for (const s of [FREE_FILTER_LABEL, FREE_FILTER_HINT, FREE_REQUEST, OWNER_NUDGE.lead, OWNER_NUDGE.link, noFreeTitle("Pune", true), markedLine(iso(NOW - HOUR), NOW)])
@@ -169,6 +174,29 @@ test("the database's answer, checked: bad rows left out, booked keys kept only w
     updatedAt: iso(NOW), requests: false, days: [{ date: "2026-11-10", keys: ["2026-11-10T19:00"] }],
   });
   assert.equal(parseFreeCard(null), null);
+});
+
+test("the read's horizon: no hour past it is called free, however much later the app's clock is (a copy kept a minute)", () => {
+  // Read at 4:59:30 PM for 36 hours: its Booked marks stop at 4:59:30 AM on the 12th. A 24-hour turf with every
+  // hour to then Booked.
+  const readAt = ist("2026-11-10 16:59") + 30_000;
+  const keys: string[] = [];
+  for (let ms = ist("2026-11-10 17:00"); ms < readAt + FREE_WINDOW_HOURS * HOUR; ms += HOUR) keys.push(new Date(ms + 330 * 60_000).toISOString().slice(0, 16));
+  assert.equal(keys.at(-1), "2026-11-12T04:00");
+  const t = { id: ID(1), slug: "s", name: "Dribble Standin", area: null, city: "bangalore", lat: null, lng: null, updated_at: iso(readAt - HOUR), requests: false, booked: keys, hours: { is_24x7: true } };
+  const a = parseFreeAnswer({ now: iso(readAt), turfs: [t] }, FREE_WINDOW_HOURS)!;
+  assert.equal(a.rows[0].bookedUntil, readAt + FREE_WINDOW_HOURS * HOUR);
+  // 10 s later: nothing free. 45 s later the window reaches 5 AM on the 12th, which the read has no mark for: still nothing.
+  for (const later of [10_000, 45_000, 59_000]) {
+    assert.equal(freeCardOf(a.rows[0], readAt + later, readAt + later + FREE_WINDOW_HOURS * HOUR), null, `${later / 1000} s later`);
+    assert.equal(freeCards(a.rows, readAt + later).size, 0, `${later / 1000} s later`);
+  }
+  // Without the horizon (a read that knew every mark), 5 AM would be the one free hour: the clip is what stops it.
+  assert.deepEqual(freeCardOf({ ...a.rows[0], bookedUntil: Infinity }, readAt + 45_000, readAt + 45_000 + FREE_WINDOW_HOURS * HOUR)?.days, [{ date: "2026-11-12", keys: ["2026-11-12T05:00"] }]);
+  // The window asked of the database, held to 1 to 192 hours as it holds p_hours.
+  assert.equal(parseFreeAnswer({ now: iso(readAt), turfs: [t] }, 192)!.rows[0].bookedUntil, readAt + 192 * HOUR);
+  assert.equal(parseFreeAnswer({ now: iso(readAt), turfs: [t] }, 900)!.rows[0].bookedUntil, readAt + 192 * HOUR);
+  assert.equal(parseFreeAnswer({ now: iso(readAt), turfs: [t] })!.rows[0].bookedUntil, readAt + 36 * HOUR, "the lists' 36 hours by default");
 });
 
 test("a page with a number: the turf page's own rule (Call or WhatsApp)", () => {
