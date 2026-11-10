@@ -1,4 +1,5 @@
 import { compareTopRated } from "../utils/ranking";
+import { turfPhotos } from "../utils/images";
 import type { Turf } from "../../types/turf";
 
 // The cut-down turf rows Ask TapTurf keeps in memory and in Next's data
@@ -15,6 +16,7 @@ import type { Turf } from "../../types/turf";
  */
 export function toAskTurf(t: Turf): Turf {
   const yes = (v: boolean | null | undefined) => (v === true ? true : null);
+  const best = turfPhotos(t)[0] ?? null;
   const out: Record<string, unknown> = {
     id: t.id,
     slug: t.slug,
@@ -26,9 +28,11 @@ export function toAskTurf(t: Turf): Turf {
     lng: t.lng,
     rating: t.rating,
     total_reviews: t.total_reviews,
-    cover_image: t.cover_image,
-    // The chat card shows the cover, or the first photo when there is none.
-    images: t.cover_image ? [] : t.images.slice(0, 1),
+    // The chat card shows one photo, the one cards lead with (turfPhotos:
+    // our own copies before Google links, which expire): the cover when
+    // that is it, else that photo alone.
+    cover_image: best !== null && best === t.cover_image ? t.cover_image : null,
+    images: best === null || best === t.cover_image ? [] : [best],
     sports: t.sports,
     amenities: t.amenities?.length ? t.amenities : null,
     morning_price: t.morning_price,

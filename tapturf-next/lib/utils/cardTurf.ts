@@ -1,4 +1,5 @@
 import type { Turf } from "@/types/turf";
+import { orderPhotos } from "./images";
 
 /**
  * Only what TurfCard, the listing filters and distance sorting read.
@@ -19,7 +20,10 @@ export function forCard(t: Turf): Turf {
     rating: t.rating,
     total_reviews: t.total_reviews,
     cover_image: t.cover_image,
-    images: t.images.slice(0, 4),
+    // The four a card can try, ours first (orderPhotos): Google photo links
+    // expire, and on 10 Nov 20 turfs whose own copies came after four such
+    // links showed no photo at all (DN Parande, Dhanori, among them).
+    images: orderPhotos(t.images).slice(0, 4),
     sports: t.sports,
     has_floodlights: t.has_floodlights,
     is_covered: t.is_covered,
