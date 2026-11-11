@@ -236,6 +236,64 @@ export function isAllDaySpan(span: HourSpan): boolean {
   return o === "00:00" && (c === "23:59" || c === "00:00" || c === "24:00");
 }
 
+/** A closing time that means midnight: 00:00, or 23:59 / 24:00 used for it. */
+function closesAtMidnight(span: HourSpan): boolean {
+  const c = span.closes.slice(0, 5);
+  return c === "00:00" || c === "23:59" || c === "24:00";
+}
+
+/**
+ * The rows the visible hours table shows (nothing else reads this: the
+ * JSON-LD, the one-line summary, open-now and the Ask and list facts keep
+ * the stored spans).
+ *
+ * Marks closed_days, then joins a night that Google splits at midnight.
+ * Google lists the hours past midnight under the next day, first:
+ * Monday "7 am–12 am", Tuesday "12–2 am 7 am–12 am" is one Monday
+ * session, 7 AM to 2 AM. Shown as stored, Tuesday reads as if the turf
+ * opens at midnight (11 active turfs, 11 Nov). So for a day whose first
+ * span opens at 00:00, when the day before ends its last span at
+ * midnight, that last span is shown running to the first span's close
+ * and the first span is dropped from the day.
+ *
+ * Left exactly as stored when: either day is closed or was not parsed
+ * (raw text, a week schedule), the day before is missing, either span is
+ * an all-day span, the day would be left with no hours, the first span
+ * runs to noon or later, or the joined span would not be shorter than a
+ * day ("7:00 AM – 7:00 AM" says nothing).
+ */
+export function hoursForDisplay(rows: DayHours[], closedDays?: string | null): DayHours[] {
+  const marked = rows.map((r) => ({ ...r, closed: r.closed || isClosedDay(closedDays, r.day) }));
+  const byDay = new Map(marked.map((r) => [r.day, r] as const));
+  // Decide every join from the stored spans, then apply them together.
+  const joins = new Map<DayName, string>(); // the day before -> its night's real close
+  const dropFirst = new Set<DayName>();
+  for (const d of marked) {
+    if (d.closed || d.spans.length < 2) continue;
+    const tail = d.spans[0];
+    if (tail.opens.slice(0, 5) !== "00:00" || isAllDaySpan(tail)) continue;
+    const p = byDay.get(DAYS[(DAYS.indexOf(d.day) + 6) % 7]);
+    if (!p || p.closed || !p.spans.length) continue;
+    const last = p.spans[p.spans.length - 1];
+    if (!closesAtMidnight(last) || isAllDaySpan(last)) continue;
+    // Both are "HH:MM", so they compare as text. The close has to be a
+    // morning time: "6:00 PM – 12:00 PM" (2 turfs store a first span
+    // that runs to noon or later) reads as a slip for 12:00 AM.
+    const close = tail.closes.slice(0, 5);
+    if (close >= "12:00" || close >= last.opens.slice(0, 5)) continue;
+    joins.set(p.day, tail.closes);
+    dropFirst.add(d.day);
+  }
+  if (!joins.size) return marked;
+  return marked.map((r) => {
+    let spans = r.spans;
+    const closes = joins.get(r.day);
+    if (closes) spans = [...spans.slice(0, -1), { opens: spans[spans.length - 1].opens, closes }];
+    if (dropFirst.has(r.day)) spans = spans.slice(1);
+    return { ...r, spans };
+  });
+}
+
 /** "6:00 AM – 11:00 PM", or "Open 24 hours" for an all-day span. */
 export function formatSpan(span: HourSpan): string {
   if (isAllDaySpan(span)) return "Open 24 hours";

@@ -3,14 +3,14 @@ import {
   Ruler,
   Layers,
   Landmark,
-  Square,
+  LandPlot,
   Users,
   Globe,
   Instagram,
   ExternalLink,
 } from "lucide-react";
 import type { Turf } from "@/types/turf";
-import { normaliseOpeningHours, formatSpan, isClosedDay } from "@/lib/utils/hours";
+import { normaliseOpeningHours, formatSpan, hoursForDisplay } from "@/lib/utils/hours";
 import { HoursList } from "@/components/turf/HoursList";
 import { formatLabel } from "@/lib/utils/formats";
 import { scrubBookingApps } from "@/lib/utils/bookingApps";
@@ -28,7 +28,7 @@ export function TurfDetails({ turf, hasContact = true }: { turf: Turf; hasContac
 
   if (turf.surface_type) {
     details.push({
-      icon: <Square className="w-5 h-5 text-primary-400" />,
+      icon: <LandPlot className="w-5 h-5 text-primary-400" />,
       label: "Surface",
       value: titleCase(turf.surface_type),
     });
@@ -189,14 +189,12 @@ export function TurfDetails({ turf, hasContact = true }: { turf: Turf; hasContac
             )}
           </div>
           <HoursList
-            rows={hoursRows.map((row) => {
-              const closed = row.closed || isClosedDay(closedDays, row.day);
-              return {
-                day: row.day,
-                closed,
-                text: closed ? "Closed" : row.spans.length ? row.spans.map(formatSpan).join(", ") : row.raw,
-              };
-            })}
+            rows={hoursForDisplay(hoursRows, closedDays).map((row) => ({
+              day: row.day,
+              closed: row.closed,
+              spans: row.closed ? [] : row.spans.map(formatSpan),
+              text: row.closed ? "Closed" : row.raw,
+            }))}
           />
         </div>
       )}
