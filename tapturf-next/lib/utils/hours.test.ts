@@ -255,3 +255,24 @@ test("23:59 and 24:00 count as midnight, and only the last range of the day befo
     [["6:00 AM – 10:00 AM", "4:00 PM – 1:30 AM"], ["6:00 AM – 2:00 AM"], ["8:00 AM – 10:00 PM"]],
   );
 });
+
+test("a {daily} value split at midnight joins on all seven days, and stops at a closed day", () => {
+  const all = shown({ daily: "12–6 am 7 am–12 am" } as OpeningHours);
+  for (const d of DAY_NAMES) assert.equal(all[d], "7:00 AM – 6:00 AM", d);
+  // Closed Mondays: Sunday night has no Monday to run into, and Tuesday
+  // keeps its early range as stored (nothing ran on from Monday).
+  const oh = { daily: "12–2 am 7 am–12 am" } as OpeningHours;
+  const closed = shown(oh, "Closed Mondays");
+  assert.equal(closed.Sunday, "7:00 AM – 12:00 AM");
+  assert.equal(closed.Monday, "Closed");
+  assert.equal(closed.Tuesday, "12:00 AM – 2:00 AM | 7:00 AM – 2:00 AM");
+  assert.equal(closed.Wednesday, "7:00 AM – 2:00 AM");
+  // The readers that keep the stored spans see the split form as before.
+  assert.equal(dailyHoursSummary(oh), "Open 12:00 AM – 2:00 AM, 7:00 AM – 12:00 AM daily");
+});
+
+test("a day with three ranges gives up only its first, the night before's tail", () => {
+  const got = shown(perDay(["12–1 am 6–10 am 4–11 pm", null, null, null, null, null, "6 am–12 am"]));
+  assert.equal(got.Sunday, "6:00 AM – 1:00 AM");
+  assert.equal(got.Monday, "6:00 AM – 10:00 AM | 4:00 PM – 11:00 PM");
+});

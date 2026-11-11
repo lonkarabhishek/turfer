@@ -34,27 +34,36 @@ export function HoursList({ rows }: { rows: HoursRow[] }) {
     };
   }, []);
 
-  // Two columns, the day one a fixed width, so every row's hours start
-  // at the same place whatever the day's name or the "Today" line.
+  // Two columns shared by every row (the rows are subgrids of the list),
+  // so every row's hours start at the same place whatever the day's name
+  // or the "Today" line, and the day column is as wide as the longest
+  // day name at the reader's own text size. A browser without subgrid
+  // gets a fixed 84px day column.
   return (
-    <ul className="rounded-2xl border border-cream-300 divide-y divide-cream-200 overflow-hidden">
+    <ul className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 rounded-2xl border border-cream-300 divide-y divide-cream-200 overflow-hidden">
       {rows.map((row) => {
         const isToday = row.day === today;
+        // One line of hours: the day name moves up a little so the name
+        // and "Today" sit in the middle of the row, beside the hours.
+        const oneLine = row.spans.length === 1 || (!row.spans.length && row.text.length <= 16);
         return (
           <li
             key={row.day}
-            className={`grid grid-cols-[5.25rem_minmax(0,1fr)] items-baseline gap-x-3 px-4 py-2.5 text-sm ${
+            aria-current={isToday ? "date" : undefined}
+            className={`col-span-2 grid grid-cols-[5.25rem_minmax(0,1fr)] supports-[grid-template-columns:subgrid]:grid-cols-subgrid items-baseline gap-x-3 px-4 py-2.5 text-sm ${
               isToday ? "bg-accent-50/60" : "bg-white"
             }`}
           >
             <span
-              className={`font-medium ${
-                isToday ? "text-accent-700" : "text-primary-700"
+              className={`relative whitespace-nowrap font-medium ${
+                isToday ? `text-accent-700 ${oneLine ? "-translate-y-1.5" : ""}` : "text-primary-700"
               }`}
             >
               {row.day}
+              {/* Out of the flow, so marking today (after the page loads)
+                  never changes a row's height. */}
               {isToday && (
-                <span className="block text-[10px] leading-tight text-accent-600">
+                <span className="absolute left-0 top-full -mt-0.5 text-[0.6875rem] leading-3 text-accent-600">
                   Today
                 </span>
               )}
@@ -62,7 +71,9 @@ export function HoursList({ rows }: { rows: HoursRow[] }) {
             {row.spans.length ? (
               <span className="tabular-nums text-primary-800">
                 {row.spans.map((span, i) => (
-                  <span key={i} className="block">
+                  // A range that has to break after its dash continues
+                  // indented, so it is not read as the next range.
+                  <span key={i} className="block pl-2 -indent-2">
                     <SpanText span={span} />
                   </span>
                 ))}
@@ -70,7 +81,7 @@ export function HoursList({ rows }: { rows: HoursRow[] }) {
             ) : (
               <span
                 className={`tabular-nums [overflow-wrap:anywhere] ${
-                  row.closed ? "text-primary-400 italic" : "text-primary-800"
+                  row.closed ? "text-primary-500 italic" : "text-primary-800"
                 }`}
               >
                 {row.text}
