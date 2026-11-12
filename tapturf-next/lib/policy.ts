@@ -5,11 +5,11 @@
  * id, named for that change's date, or nobody who dismissed the last one
  * is told. A later change that needs no notice moves only this date.
  */
-export const PRIVACY_UPDATED = "2026-11-10";
+export const PRIVACY_UPDATED = "2026-11-12";
 
 /** The latest change that needs a notice on the site, as the policy promises. */
 export const PRIVACY_NOTICE = {
-  id: "2026-11-10-emails",
+  id: "2026-11-12-emails",
   text: "If your account has an email Google confirmed, TapTurf now emails you about your games: a welcome, join requests and answers, game changes and reminders. Resend sends them for us. Turn each kind off on the Me tab or with the link in any email. We don't track opens or taps, and we never email about booking requests.",
   anchor: "emails",
   // The notice this one replaced (booking requests), with the ones before it (the map, review photos and

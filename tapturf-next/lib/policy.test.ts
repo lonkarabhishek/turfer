@@ -17,8 +17,8 @@ test("policy notice: emails, and where the policy says it", () => {
     PRIVACY_NOTICE.text,
     "If your account has an email Google confirmed, TapTurf now emails you about your games: a welcome, join requests and answers, game changes and reminders. Resend sends them for us. Turn each kind off on the Me tab or with the link in any email. We don't track opens or taps, and we never email about booking requests.",
   );
-  assert.equal(PRIVACY_NOTICE.id, "2026-11-10-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-10");
+  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_UPDATED, "2026-11-12");
   assert.equal(PRIVACY_NOTICE.anchor, "emails");
   const at = privacyPage.indexOf(`id="${PRIVACY_NOTICE.anchor}"`);
   assert.ok(at >= 0, `the policy has #${PRIVACY_NOTICE.anchor}`);
