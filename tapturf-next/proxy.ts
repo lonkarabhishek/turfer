@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { CITY_COOKIE, CITY_COOKIE_MAX_AGE } from "./lib/city";
 import { decide } from "./lib/cityRouting";
 import { turfIdTarget } from "./lib/turfIds";
-import { oldGameLinkWithQuery, readableGamePath } from "./lib/gameIdLink";
 import TURF_ID_SLUGS from "./lib/turfIds.json";
 
 /**
@@ -68,11 +67,6 @@ const TURF_IDS: ReadonlyMap<string, string> = new Map(Object.entries(TURF_ID_SLU
  *   sport page for that label (sportPagePath).
  * - Old /turf/<uuid> URLs are 308'd to /turf/<slug> (TURF_IDS above), on
  *   document loads; an RSC request for one still gets the page's redirect.
- * - Old /game/<uuid> URLs are 308'd to the readable URL by the game page
- *   itself. Only one that carries a query string, on a browser's document
- *   load (the catch-all matcher), is answered here instead, so the query
- *   is kept (lib/gameIdLink.ts): the one network call this proxy makes, to
- *   this site's own cached page, never Supabase.
  *
  * Caching: one public URL now returns different bodies by cookie and IP,
  * yet keeps Next's s-maxage and has no Vary: Cookie (that would split
@@ -118,17 +112,8 @@ const TURF_IDS: ReadonlyMap<string, string> = new Map(Object.entries(TURF_ID_SLU
  *   icons, the Google verification html), robots.txt, sitemap.xml and
  *   manifest.webmanifest.
  */
-export async function proxy(req: NextRequest) {
+export function proxy(req: NextRequest) {
   try {
-    // An old game id link with a query string: the page's own 308, with the query kept.
-    if ((req.method === "GET" || req.method === "HEAD") && oldGameLinkWithQuery(req.nextUrl.pathname, req.nextUrl.search)) {
-      const to = await readableGamePath(req.nextUrl.origin, req.nextUrl.pathname);
-      if (to) {
-        const url = req.nextUrl.clone();
-        url.pathname = to;
-        return NextResponse.redirect(url, 308);
-      }
-    }
     // An old id link: 308 to the slug URL on this host, query string kept.
     if (req.method === "GET" || req.method === "HEAD") {
       const to = turfIdTarget(req.nextUrl.pathname, TURF_IDS);

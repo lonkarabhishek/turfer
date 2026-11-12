@@ -14,7 +14,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { decide, isCrawler } from "./cityRouting";
 import { turfIdTarget } from "./turfIds";
-import { gameRedirectTarget, oldGameLinkWithQuery, readableGamePath } from "./gameIdLink";
 
 type Matcher = { regexp: string; has?: unknown[]; missing?: unknown[]; originalSource: string };
 type Req = { headers: Record<string, string> };
@@ -166,40 +165,4 @@ test("the bot pattern has no look-behind (Vercel's router runs it too) and is an
   const values = JSON.stringify(cfg.matcher);
   assert.doesNotMatch(values, /\(\?<[=!]/, "no look-behind in the matcher");
   assert.match(src, /key: "user-agent", value: "\.\*\(/, "the pattern starts with .* (Next anchors has/missing values)");
-});
-
-test("an old game id link with a query string: the proxy sends the page's own 308 with the query kept, and nothing else", async () => {
-  const ID = "4b63fb76-1c2d-4e3f-8a9b-0123456789ab";
-  const NOW = "/game/football-dn-parande-dhanori-pune-sat-14-nov-7pm-4b63fb76";
-  const O = "https://www.tapturf.in";
-  // Only an id link, only with a query.
-  assert.equal(oldGameLinkWithQuery(`/game/${ID}`, "?utm_source=chatgpt.com"), true);
-  assert.equal(oldGameLinkWithQuery(`/game/${ID.toUpperCase()}`, "?a=1"), true);
-  assert.equal(oldGameLinkWithQuery(`/game/${ID}`, ""), false, "no query: the page's redirect is whole");
-  assert.equal(oldGameLinkWithQuery(`/game/${ID}`, "?"), false);
-  assert.equal(oldGameLinkWithQuery(NOW, "?utm_source=chatgpt.com"), false, "a readable URL is the page");
-  assert.equal(oldGameLinkWithQuery("/game/create", "?turf=x"), false);
-  assert.equal(oldGameLinkWithQuery(`/turf/${ID}`, "?a=1"), false);
-  assert.equal(oldGameLinkWithQuery(`/game/${ID}/x`, "?a=1"), false);
-  // A browser's document load of one runs the proxy (the catch-all); its own HEAD (no Accept-Language) and RSC fetches do not.
-  assert.equal(runs(`/game/${ID}`, { headers: { "accept-language": "en-IN", "user-agent": "Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile Safari/537.36" } }, { utm_source: "chatgpt.com" }), true);
-  assert.equal(runs(`/game/${ID}`, { headers: { "user-agent": "node" } }, {}), false, "the proxy's own question never comes back to it");
-  // What the page answered: a 308 to a readable game path on this site, nothing else.
-  assert.equal(gameRedirectTarget(308, NOW, O), NOW);
-  assert.equal(gameRedirectTarget(308, `${O}${NOW}`, O), NOW);
-  assert.equal(gameRedirectTarget(308, `/game/football-sat-14-nov-7pm-${ID}`, O), `/game/football-sat-14-nov-7pm-${ID}`, "a shared code's whole-id URL");
-  for (const [status, loc] of [[200, NOW], [307, NOW], [404, null], [308, null], [308, `/game/${ID}`], [308, `https://evil.example${NOW}`], [308, `//evil.example${NOW}`], [308, "/games"], [308, `${NOW}?x=1`], [308, "/game/Football-4b63fb76"], [308, "http://[bad"]] as [number, string | null][]) {
-    assert.equal(gameRedirectTarget(status, loc, O), null, `${status} ${loc}`);
-  }
-  // The question: a HEAD of the same path with no query, redirects not followed; a failure or a slow page gives none.
-  const asked: { url: string; method?: string; redirect?: string }[] = [];
-  const page = (status: number, location?: string) => (async (url: RequestInfo | URL, init?: RequestInit) => {
-    asked.push({ url: String(url), method: init?.method, redirect: init?.redirect });
-    return new Response(null, { status, headers: location ? { location } : {} });
-  }) as typeof fetch;
-  assert.equal(await readableGamePath(O, `/game/${ID}`, page(308, NOW)), NOW);
-  assert.deepEqual(asked, [{ url: `${O}/game/${ID}`, method: "HEAD", redirect: "manual" }]);
-  assert.equal(await readableGamePath(O, `/game/${ID}`, page(200)), null, "no such game: the page answers");
-  assert.equal(await readableGamePath(O, `/game/${ID}`, page(503)), null);
-  assert.equal(await readableGamePath(O, `/game/${ID}`, (async () => { throw new Error("down"); }) as typeof fetch), null);
 });
