@@ -6,7 +6,8 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/admin", "/profile", "/dashboard", "/notifications"],
+        // /report: the owners' lead reports (signed links, noindex; app/report/[token]/route.ts).
+        disallow: ["/admin", "/profile", "/dashboard", "/notifications", "/report/"],
       },
       { userAgent: "GPTBot", allow: "/" },
       { userAgent: "ChatGPT-User", allow: "/" },

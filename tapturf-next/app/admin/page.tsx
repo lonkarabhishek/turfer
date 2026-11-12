@@ -44,6 +44,7 @@ import { OwnerClaims } from "@/components/admin/OwnerClaims";
 import { OwnerPhotos } from "@/components/admin/OwnerPhotos";
 import { ReviewFlags } from "@/components/admin/ReviewFlags";
 import { EmailsCard } from "@/components/admin/EmailsCard";
+import { OwnerOutreach } from "@/components/admin/OwnerOutreach";
 import { MapSection, mapSummary } from "@/components/admin/MapUsage";
 import { TrafficSection, trafficSummary } from "@/components/admin/Traffic";
 
@@ -118,6 +119,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         <p className="text-[13px] text-primary-500 mb-3">Owners whose number is on the listing get in at once; approve the rest here.</p>
         <OwnerClaims />
       </AdminSection>
+
+      {/* Owner outreach (20261113_owner_outreach.sql): a city's turfs by Call and WhatsApp taps, to phone or WhatsApp each owner with their free report (read in the browser, once opened). */}
+      <Fold id="owner-outreach" title="Owner outreach" line="Turfs by Call and WhatsApp taps: call the owner, send their free report">
+        <p className="text-[13px] text-primary-500 mb-3">
+          Call or WhatsApp a turf&rsquo;s owner with the free report of what TapTurf did for their page, and note it here so nobody is contacted twice.
+        </p>
+        <OwnerOutreach />
+      </Fold>
 
       {/* myTapturf owner photos (read in the browser: the panel fills in the line and how many are kept off). */}
       <Fold id="owner-photos" title="Owner photos" line="Photos owners add on myTapturf, checked automatically">
