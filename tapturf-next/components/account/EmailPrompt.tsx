@@ -208,8 +208,8 @@ export function EmailPrompt() {
           </h2>
           <p id="email-prompt-body" className="mt-2 text-[14px] text-primary-600 leading-snug">
             {tick
-              ? "Add your email with Google. Players then see a ✓ next to your name, and Google or this phone number both open this account. We'll email you about your games. We never show your email to other players or turfs."
-              : "Then you can log in with Google or this phone number. Both open this same account. We'll email you about your games. No spam, and we never show your email to other players or turfs."}
+              ? "Add your email with Google. Players then see a ✓ next to your name, and Google or this phone number both open this account. We never show your email to other players or turfs."
+              : "Then you can log in with Google or this phone number. Both open this same account. No spam, and we never show your email to other players or turfs."}
           </p>
 
           <div className="mt-5 flex gap-3">

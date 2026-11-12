@@ -12,49 +12,20 @@ test("policy notice: a new id, so people who dismissed the last one see it", () 
   assert.ok(PRIVACY_NOTICE.id.slice(0, 10) <= PRIVACY_UPDATED, "a change the policy's date already covers");
 });
 
-test("policy notice: emails, and where the policy says it", () => {
+test("policy notice: booking requests, and where the policy says it", () => {
   assert.equal(
     PRIVACY_NOTICE.text,
-    "If your account has an email Google confirmed, TapTurf now emails you about your games: a welcome, join requests and answers, game changes and reminders. Resend sends them for us. Turn each kind off on the Me tab or with the link in any email. We don't track opens or taps, and we never email about booking requests.",
+    "On turfs that take booking requests on TapTurf, you can now ask for a free hour. When you send one, that turf's owner and managers see your name, your number and your note, so they can confirm it and reach you; nobody else does. You pay at the turf; nothing is paid on TapTurf.",
   );
-  assert.equal(PRIVACY_NOTICE.id, "2026-11-10-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-10");
-  assert.equal(PRIVACY_NOTICE.anchor, "emails");
+  assert.equal(PRIVACY_NOTICE.anchor, "booking-requests");
+  assert.match(PRIVACY_NOTICE.id, /-booking-requests$/);
   const at = privacyPage.indexOf(`id="${PRIVACY_NOTICE.anchor}"`);
-  assert.ok(at >= 0, `the policy has #${PRIVACY_NOTICE.anchor}`);
-  const para = privacyPage.slice(at, privacyPage.indexOf("</p>", at)).replace(/\s+/g, " ");
-  assert.match(para, /If your account has an email Google confirmed, we email you about your account and your games/);
-  assert.match(para, /a welcome when you make your account; when someone asks to join a game you host, and when a request is still waiting for your answer; when a host accepts your request; when a game you are in or asked to join is cancelled, or its venue, day or time changes; and a reminder the day before a game and about 3 hours before it starts/, "the six kinds");
-  assert.match(para, /Each email goes only to you, from TapTurf through Resend/);
-  assert.match(para, /Turn off each kind \(Join requests and answers, Game changes, Reminders\) on the Me tab, or with the link in any email/, "how to turn them off");
-  assert.match(para, /never its words/);
-  assert.match(para, /If an email to your address bounces or you mark one as spam, we stop emailing that address/);
-  assert.match(para, /We don&rsquo;t track whether you open an email or tap its links, and we never send ads/);
-  assert.match(para, /We never email about booking requests or turf claims/);
-  const page = privacyPage.replace(/\s+/g, " ");
-  assert.match(page, /<li>Resend, which sends our emails\.<\/li>/, "Resend, in the list of who handles data");
-  assert.match(page, /To email you about your account and your games, if your account has an email Google confirmed/, "a purpose");
-  assert.match(page, /The record of each email we sent you \(its kind and when, never its words\) and your email switches stay with your account/, "how long");
-  const email = page.slice(page.indexOf('id="email"'), page.indexOf("</p>", page.indexOf('id="email"')));
-  assert.match(email, /Once Google has confirmed your email, we email you about your games there/, "the #email paragraph");
-  assert.match(email, /a typed email is never emailed/);
-  assert.match(page, /we email you about your games at that address/, "the Google sign-in paragraph");
-});
-
-test("policy notice: booking requests (the notice before), and where the policy says it", () => {
-  assert.equal(PRIVACY_NOTICE.earlier.id, "2026-11-06-booking-requests", "the booking requests notice's id, so those who dismissed it see only what is new");
-  assert.ok(
-    PRIVACY_NOTICE.earlier.text.startsWith(
-      "On turfs that take booking requests on TapTurf, you can now ask for a free hour. When you send one, that turf's owner and managers see your name, your number and your note, so they can confirm it and reach you; nobody else does. You pay at the turf; nothing is paid on TapTurf.",
-    ),
-  );
-  const at = privacyPage.indexOf(`id="booking-requests"`);
   assert.ok(at >= 0, `the policy has #${PRIVACY_NOTICE.anchor}`);
   const para = privacyPage.slice(at, privacyPage.indexOf("</p>", at)).replace(/\s+/g, " ");
   assert.match(para, /If you send a booking request\./);
   assert.match(para, /your name and the phone number on your account \(you need one confirmed with a one-time code\)/, "what is kept");
   assert.match(para, /waiting, confirmed, declined, cancelled or expired, who changed it, and the turf&rsquo;s reason/, "what became of it");
-  assert.match(para, /we never email or text about it/, "kept: booking requests are never emailed");
+  assert.match(para, /we never email or text about it/);
   assert.match(para, /The turf gets an in-app notification when you send a request or cancel a confirmed booking, and you get one when the turf confirms, declines or cancels it/, "who is told when");
   assert.match(para, /Nothing is paid on TapTurf: you pay at the turf\./);
   assert.match(para, /If you run a turf, we keep whether you turned requests on and each answer you give\./);
@@ -72,6 +43,7 @@ test("policy notice: the map's use (the notice before), and where the policy say
   assert.match(PRIVACY_NOTICE.earlier.text, /When you use the map signed in, we now note which account used it, on which days and when \(the first and last time each day\)/);
   assert.match(PRIVACY_NOTICE.earlier.text, /Only TapTurf's team sees that/, "who sees it");
   assert.match(PRIVACY_NOTICE.earlier.text, /never where you looked on it or your location/, "what is never kept");
+  assert.equal(PRIVACY_NOTICE.earlier.id, "2026-11-02-map", "the map notice's id, so those who dismissed it see only what is new");
   assert.ok(privacyPage.includes(`id="map"`), "the policy has #map");
   const at = privacyPage.indexOf(`id="map"`);
   const map = privacyPage.slice(at, privacyPage.indexOf("</p>", at)).replace(/\s+/g, " ");
