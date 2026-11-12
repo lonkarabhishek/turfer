@@ -73,11 +73,13 @@ const SECTIONS: LegalSection[] = [
           account; you can remove it any time. If you log in with Google, you can add your phone number after
           confirming it with a one-time code; you can then log in with that number too, and remove it any
           time. Emails typed into earlier versions of TapTurf are never used to sign you in; you can remove
-          them in your profile.
+          them in your profile. Once Google has confirmed your email, we email you about your games there (see
+          &ldquo;Emails we send you&rdquo; below); a typed email is never emailed.
         </p>
         <p>
           <strong>When you sign in with Google.</strong> Google shares your name, email address and profile
-          photo with us. We use that photo as your picture only if you choose it (see the next paragraph). We
+          photo with us. We use that photo as your picture only if you choose it (see the next paragraph), and
+          we email you about your games at that address (see &ldquo;Emails we send you&rdquo; below). We
           don&rsquo;t receive your Google password or anything else from your Google account.
         </p>
         <p id="photo" className="scroll-mt-24">
@@ -218,6 +220,20 @@ const SECTIONS: LegalSection[] = [
           encrypted so the service cannot read it. Turn the switch off, or log out on that phone, and we stop
           sending there; if someone else signs in to TapTurf on that phone, it stops for you too.
         </p>
+        <p id="emails" className="scroll-mt-24">
+          <strong>Emails we send you.</strong> If your account has an email Google confirmed, we email you about
+          your account and your games: a welcome when you make your account; when someone asks to join a game
+          you host, and when a request is still waiting for your answer; when a host accepts your request; when a
+          game you are in or asked to join is cancelled, or its venue, day or time changes; and a reminder the
+          day before a game and about 3 hours before it starts. Each email goes only to you, from TapTurf through
+          Resend, and says what it is about: the game, its day, time and venue, the host&rsquo;s first name, and
+          for a host the names of the players who asked to join. Turn off each kind (Join requests and answers,
+          Game changes, Reminders) on the Me tab, or with the link in any email. We keep a record of each email
+          (its kind and when it was sent, never its words) with your account. If an email
+          to your address bounces or you mark one as spam, we stop emailing that address. We don&rsquo;t track
+          whether you open an email or tap its links, and we never send ads. We never email about booking
+          requests or turf claims.
+        </p>
         <p id="tools" className="scroll-mt-24">
           <strong>When you use our free tools.</strong> Each time you start or finish something in a free tool
           (a toss, a match on the Live Cricket Scorer or Live Scoreboard, a scorecard, a tournament, a team
@@ -290,6 +306,11 @@ const SECTIONS: LegalSection[] = [
       <ul>
         <li>To run your account and show your games, requests and notifications.</li>
         <li>To send those notifications to your phone, if you turn that on.</li>
+        <li>
+          To email you about your account and your games, if your account has an email Google confirmed: the
+          six kinds under &ldquo;Emails we send you&rdquo; above. Turn each kind off on the Me tab or with the
+          link in the email.
+        </li>
         <li>To show hosts who wants to join their game, and to show players how to reach the host.</li>
         <li>To publish reviews and venue corrections you submit.</li>
         <li>To show a live score to the people you send its link to, and how many are watching.</li>
@@ -368,6 +389,7 @@ const SECTIONS: LegalSection[] = [
           </li>
           <li>Google Analytics, for usage statistics, only if you accept cookies (section 5).</li>
           <li>Google Maps, for the maps on turf and game pages, only if you accept cookies or tap &ldquo;Show map&rdquo; (section 5).</li>
+          <li>Resend, which sends our emails.</li>
           <li>Hostinger, which hosts our email.</li>
         </ul>
         <p>
@@ -524,6 +546,11 @@ const SECTIONS: LegalSection[] = [
           counts of the map&rsquo;s use name nobody and are kept as totals.
         </li>
         <li>A booking request stays with your account and is deleted with it, or sooner if you ask.</li>
+        <li>
+          The record of each email we sent you (its kind and when, never its words) and your email switches stay
+          with your account and are deleted with it, or sooner if you ask. An address that bounced or was
+          marked as spam is kept only as a one-way hash, so we never email it again.
+        </li>
         <li>The daily counts of visits and pages opened name nobody and are kept as totals.</li>
         <li>
           A live link stops updating after 2 hours without a new score; people with the link then see the last
