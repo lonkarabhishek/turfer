@@ -212,7 +212,7 @@ export function FreeSlotsCard({
   const guard = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (!kind) return;
     // Counted as the page's own Call and WhatsApp taps are; signed out, the tap opens sign-in instead.
-    logContactClick({ turfId, kind, source: "turf_slots", signedIn: !!user, userId: user?.id });
+    logContactClick({ turfId, kind, source: "turf_slots", signedIn: !!user, userId: user?.id, turfName });
     if (user) return;
     e.preventDefault();
     login();

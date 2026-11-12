@@ -54,6 +54,7 @@ export function AskLauncher() {
         type="button"
         onClick={() => openPanel()}
         aria-label="Ask TapTurf"
+        data-bottom-bar=""
         className={`press-tight fixed right-4 bottom-[calc(4.75rem+var(--ask-lift,0px))] md:right-6 md:bottom-6 z-30 items-center gap-2 h-12 pl-3.5 pr-4 rounded-full bg-primary-900 text-white shadow-elevated hover:bg-accent-600 transition-[background-color,bottom] duration-200 cursor-pointer ${
           barPages ? "hidden md:inline-flex" : "inline-flex"
         } ${compact ? "max-md:w-12 max-md:px-0 max-md:justify-center" : ""}`}

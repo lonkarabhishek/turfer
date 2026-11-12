@@ -31,6 +31,7 @@
     "test:toss":"tsc -p tsconfig.test-toss.json && node --test .test-out/toss/lib/tools/tossSim.test.js .test-out/toss/lib/tools/usage.test.js .test-out/toss/lib/tools/users.test.js",
     "test:email": "tsc -p tsconfig.test-email.json && node --test .test-out/email/lib/email/email.test.js .test-out/email/lib/email/routes.test.js .test-out/email/lib/email/admin.test.js",
     "test:outreach": "tsc -p tsconfig.test-outreach.json && node --test .test-out/outreach/lib/report/report.test.js .test-out/outreach/lib/admin/outreach.test.js",
+    "test:outcome": "tsc -p tsconfig.test-outcome.json && node --test .test-out/outcome/lib/outcome/prompt.test.js .test-out/outcome/lib/outcome/outcome.test.js .test-out/outcome/lib/outcome/route.test.js",
     "test:push": "tsc -p tsconfig.test-push.json && node --test .test-out/push/lib/push/payload.test.js .test-out/push/lib/push/routes.test.js .test-out/push/lib/push/sw.test.js",
     "test:ui": "tsc -p tsconfig.test-ui.json && node --test .test-out/ui/lib/ui/viewport.test.js",
     "test:seo": "tsc -p tsconfig.test-seo.json && node --test .test-out/seo/lib/seo/turfMeta.test.js .test-out/seo/lib/seo/listingMeta.test.js .test-out/seo/lib/seo/blogMeta.test.js .test-out/seo/lib/utils/seo.test.js .test-out/seo/lib/near/courtNearMe.test.js .test-out/seo/lib/seo/mapMeta.test.js .test-out/seo/lib/byCity.test.js .test-out/seo/lib/seo/gameJsonLd.test.js .test-out/seo/lib/og/gameCard.test.js",

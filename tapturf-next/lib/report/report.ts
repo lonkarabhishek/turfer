@@ -3,6 +3,7 @@ import { escapeHtml, oneLine } from "../email/format";
 import { claimOwnerUrl } from "../my/claimFlow";
 import { turfPath } from "../utils/turfPath";
 import { REPORT_DAYS, timesText } from "./message";
+import { hourLabel } from "../outcome/outcome";
 
 /**
  * The owner's lead report (/report/<token>): what public.owner_report
@@ -11,7 +12,11 @@ import { REPORT_DAYS, timesText } from "./message";
  * first, inline styles in the house colours, no scripts, no images, no
  * fonts fetched, nothing third-party, noindex. Counts only, shown as they
  * are, and worded as what was counted: the page was opened, a player tapped
- * Call or WhatsApp (never "called you", never a booking). Relative imports
+ * Call or WhatsApp (never "called you", never a booking). When at least
+ * SAID_MIN players answered "Did you get a slot?" in the 30 days
+ * (public.owner_report_said, 20261113_contact_outcomes.sql; lib/outcome/),
+ * one more line says how many of them got a slot and the hours they named
+ * most: "players who told us", never everyone who tapped. Relative imports
  * only (npm run test:outreach).
  */
 
@@ -63,6 +68,38 @@ export function toReport(raw: unknown): OwnerReport | null {
   return { turf: { id: t.id.toLowerCase(), slug, name, area: text(t.area, 80), city }, claimed: o.claimed, days: REPORT_DAYS, since: o.since, today: o.today, now, prev, series };
 }
 
+/** What players told us, once enough did: how many answered, how many got a slot, and the hours named most. */
+export type ReportSaid = { answered: number; gotSlot: number; hours: number[] };
+/** Fewer players than this answered: the report says nothing about it (the database holds the numbers back too). */
+export const SAID_MIN = 3;
+
+/** owner_report_said's {r: ok, ...} as what the page may say; null below SAID_MIN answers or for anything that isn't a whole answer. */
+export function toSaid(raw: unknown): ReportSaid | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  if (o.r !== "ok" || o.days !== REPORT_DAYS || !isCount(o.answered) || o.answered < SAID_MIN || !isCount(o.got_slot) || o.got_slot > o.answered) return null;
+  const hours: number[] = [];
+  for (const h of Array.isArray(o.hours) ? (o.hours as Record<string, unknown>[]) : []) {
+    if (!h || !isCount(h.hour) || h.hour > 23 || !isCount(h.n) || h.n < 1 || hours.includes(h.hour)) continue;
+    hours.push(h.hour);
+  }
+  return { answered: o.answered, gotSlot: o.got_slot, hours: hours.slice(0, 3) };
+}
+
+/** "Of the 6 players who told us how it went, 4 got a slot." Self-reported and few: the words say whose answer it is. */
+export function saidText(s: ReportSaid): string {
+  const got = s.gotSlot === 0 ? "none" : s.gotSlot === s.answered ? "all" : num(s.gotSlot);
+  return `Of the ${num(s.answered)} players who told us how it went, ${got} got a slot.`;
+}
+
+/** "The hours they asked for most: 8 PM, 9 PM and 6 AM." Null when nobody named an hour. */
+export function saidHoursText(s: ReportSaid): string | null {
+  if (!s.hours.length) return null;
+  const h = s.hours.map(hourLabel);
+  const list = h.length === 1 ? h[0] : `${h.slice(0, -1).join(", ")} and ${h[h.length - 1]}`;
+  return `${h.length === 1 ? "The hour they asked for most" : "The hours they asked for most"}: ${list}.`;
+}
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** "2026-11-12" as "12 Nov" (the day as stored, India's; no clock involved). */
 export function dayLabel(day: string): string {
@@ -100,6 +137,8 @@ export const REPORT_COPY = {
   claimedLead: "Its owner or manager can update it and see these numbers any time on myTapturf.",
   claimedButton: "Open myTapturf",
   seePage: "See your page on TapTurf",
+  saidTitle: "What players told us",
+  saidNote: "After a player taps Call or WhatsApp, we sometimes ask if they got a slot. Only some answer, so this is those players' own word, not everyone who tapped.",
   footer: "This report is counts from TapTurf's own pages only. It has no player's name or number. Questions? Write to info@tapturf.in.",
 } as const;
 
@@ -124,6 +163,18 @@ function chart(r: OwnerReport): string {
   return `<div class="bars" role="img" aria-label="${escapeHtml(alt)}">${bars}</div>
 <div class="axis"><span>${escapeHtml(dayLabel(r.since))}</span><span>Most in a day: ${num(max)}</span><span>${escapeHtml(dayLabel(r.today))}</span></div>
 <div class="legend"><span><i class="ca"></i>Call</span><span><i class="wa"></i>WhatsApp</span></div>`;
+}
+
+/** The card about players' answers; nothing at all below SAID_MIN answers. */
+function saidCard(s: ReportSaid | null): string {
+  if (!s || s.answered < SAID_MIN) return "";
+  const hours = saidHoursText(s);
+  return `<div class="card">
+<h2>${escapeHtml(REPORT_COPY.saidTitle)}</h2>
+<p class="text">${escapeHtml(saidText(s))}${hours ? ` ${escapeHtml(hours)}` : ""}</p>
+<p class="note">${escapeHtml(REPORT_COPY.saidNote)}</p>
+</div>
+`;
 }
 
 const stat = (label: string, now: number, prev: number) =>
@@ -172,7 +223,7 @@ footer{margin:16px 4px 0;font-size:13px;line-height:1.5;color:#6E6E73}
 ${body}
 </main></body></html>`;
 
-export type ReportState = { state: "ok"; report: OwnerReport } | { state: "bad" } | { state: "error" };
+export type ReportState = { state: "ok"; report: OwnerReport; said?: ReportSaid | null } | { state: "bad" } | { state: "error" };
 
 /** The page, and the status it answers with: 404 for a link we didn't sign (or a turf that is gone), 503 when the counts can't be read. */
 export function reportPage(s: ReportState): { status: number; html: string } {
@@ -210,7 +261,7 @@ ${stat(C.stats.ask, r.now.ask, r.prev.ask)}
 ${chart(r)}
 <p class="note">${escapeHtml(C.meaning)}</p>
 </div>
-${cta}
+${saidCard(s.said ?? null)}${cta}
 <a class="link" href="${escapeHtml(turfPath(r.turf))}">${escapeHtml(C.seePage)}</a>
 <footer>${escapeHtml(C.footer)}</footer>`;
   return { status: 200, html: shell(`${r.turf.name}: your TapTurf report`, body) };

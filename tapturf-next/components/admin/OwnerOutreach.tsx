@@ -15,6 +15,8 @@ import {
   STATUS_LABEL,
   claimLabel,
   outreachFoldLine,
+  saidLine,
+  wrongNumberLine,
   type OutreachAnswer,
   type OutreachDays,
   type OutreachList,
@@ -33,7 +35,8 @@ import { useFoldReport } from "./Fold";
  * report (/report/<token>) and note who was contacted, so nobody is called
  * twice. The numbers are the turf's own listed ones, the ones its page's
  * buttons use; they are read only once this section is opened, and shown
- * only here.
+ * only here. "Players said" is what players answered when asked whether
+ * they got a slot (lib/outcome/): counts, and a wrong number stands out.
  */
 
 /** The team member's name, kept on this device so each note says who set it. */
@@ -187,6 +190,7 @@ export function OwnerOutreach() {
           <p className="text-[12px] leading-snug text-primary-500">
             {rows.length.toLocaleString("en-IN")} active {rows.length === 1 ? "turf" : "turfs"} in {cityInfo(city).label}, most Call and WhatsApp taps in the last {list!.days} days first.
             The numbers are the ones each turf&rsquo;s page shows. The WhatsApp message and the report always say the last 30 days.
+            &ldquo;Players said&rdquo; is what players answered when we asked if they got a slot, in the same {list!.days} days.
             {loading ? " Refreshing…" : ""}
           </p>
           {rows.length === 0 && <p className="text-sm text-primary-500">No active turfs here.</p>}
@@ -281,6 +285,19 @@ function Row({ t, by, onSaved }: { t: OutreachRow; by: string; onSaved: (p: Part
           </div>
         ))}
       </dl>
+
+      {t.said && (
+        <div className="mt-2.5 space-y-1.5" data-players-said>
+          <p className="text-[13px] leading-snug text-primary-700">
+            <span className="font-semibold text-primary-900">Players said:</span> {saidLine(t.said)}
+          </p>
+          {wrongNumberLine(t.said) && (
+            <p role="note" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-semibold leading-snug text-red-700">
+              {wrongNumberLine(t.said)}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap gap-2">
         {t.call && (

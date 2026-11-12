@@ -19,6 +19,7 @@ import "./globals.css";
 import { VisitTracker } from "@/components/analytics/VisitTracker";
 import { TrafficCounter } from "@/components/analytics/TrafficCounter";
 import { CookieBanner } from "@/components/consent/CookieBanner";
+import { OutcomeCard } from "@/components/outcome/OutcomeCard";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -123,6 +124,8 @@ export default function RootLayout({
               <Footer />
             </div>
             <AskLauncher />
+            {/* "Did you get a slot?", once, when a player is back from a Call or WhatsApp tap (lib/outcome/prompt.ts). */}
+            <OutcomeCard />
             <AskPanel />
             <CityPicker />
           </AskProvider>

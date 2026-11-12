@@ -99,7 +99,10 @@ const SECTIONS: LegalSection[] = [
         <p>
           <strong>Things you do on TapTurf.</strong> Games you host or ask to join, notes you add to a join
           request, reviews you write, corrections you suggest for a turf (and whether you told us you own or
-          play at it), and when you tap Call or WhatsApp on a turf page. We also record the time and method of
+          play at it), and when you tap Call or WhatsApp on a turf page. After you tap Call or WhatsApp, we may
+          ask you once, when you are back on TapTurf, whether you got a slot; your answer (and the time, if you
+          pick one) is stored without your name, number or account: only the turf, what you answered and whether
+          you were signed in. We also record the time and method of
           each sign-in to spot abuse and to see how many people use the site.
         </p>
         <p id="reports" className="scroll-mt-24">
@@ -494,7 +497,7 @@ const SECTIONS: LegalSection[] = [
         your cookie choice (section 5), banners you closed, whether you dismissed the &ldquo;install app&rdquo;
         prompt, whether we already asked you to pick a username, the TapTurf profiles you tagged recently, the
         WhatsApp number you last gave players for a game, the matches and tournaments you score with our
-        free tools, and which live scores and tournaments it opened in the last two days and when it last opened the map (so a reload is not counted as another view). Only if you accept cookies does it also keep Google Analytics&rsquo; cookies, the short
+        free tools, which live scores and tournaments it opened in the last two days and when it last opened the map (so a reload is not counted as another view), and, so we can ask whether you got a slot without asking too often, the turf you last tapped Call or WhatsApp on (until you close the tab; it is sent to us only with your answer, if you give one) and when we last asked or you answered. Only if you accept cookies does it also keep Google Analytics&rsquo; cookies, the short
         visit note described under &ldquo;When you sign up&rdquo; and the random tag described under
         &ldquo;When you use our free tools&rdquo;; choosing Reject deletes them. For a live link or a live tournament it also keeps the key that lets only this browser update
         it; our server stores just a one-way hash of the key. While you are signed in, your browser also runs

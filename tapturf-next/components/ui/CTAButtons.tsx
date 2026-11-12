@@ -76,7 +76,7 @@ export function CTAButtons({
   const source = sourceProp ?? (variant === "fixed-bottom" ? "turf_bar" : "turf_sidebar");
   const guard = (kind: ContactKind) => (e: React.MouseEvent<HTMLAnchorElement>) => {
     // Count every tap; signed_in=false marks the ones that hit login.
-    logContactClick({ turfId, kind, source, signedIn: !!user, userId: user?.id });
+    logContactClick({ turfId, kind, source, signedIn: !!user, userId: user?.id, turfName });
     if (user) return; // signed-in: let the link fire naturally
     e.preventDefault();
     login();
@@ -84,7 +84,7 @@ export function CTAButtons({
 
   if (variant === "fixed-bottom") {
     return (
-      <div className={`fixed bottom-0 left-0 right-0 z-50 material-thick border-t border-primary-200/70 px-4 md:hidden animate-slide-up ${note ? "pt-2.5" : "pt-3"}`}
+      <div data-bottom-bar="" className={`fixed bottom-0 left-0 right-0 z-50 material-thick border-t border-primary-200/70 px-4 md:hidden animate-slide-up ${note ? "pt-2.5" : "pt-3"}`}
         style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
         {/* The same line over the buttons as the no-number bar's (components/turf/TurfSuggestions.tsx NoContactNotice). */}
         {note && <p className="text-[13px] leading-snug text-primary-500">{note}</p>}

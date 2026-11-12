@@ -137,6 +137,17 @@ test("policy: notifications on your phone say what is kept, who carries them and
   assert.match(page, /push address and keys stay with your account, marked off/, "and how long they are kept");
 });
 
+test("policy: asking whether you got a slot after a Call or WhatsApp tap, and what is kept", () => {
+  const page = privacyPage.replace(/\s+/g, " ");
+  const at = page.indexOf("<strong>Things you do on TapTurf.</strong>");
+  const things = page.slice(at, page.indexOf("</p>", at));
+  assert.match(things, /when you tap Call or WhatsApp on a turf page\. After you tap Call or WhatsApp, we may ask you once, when you are back on TapTurf, whether you got a slot; your answer \(and the time, if you pick one\) is stored without your name, number or account: only the turf, what you answered and whether you were signed in\./);
+  assert.match(page, /so we can ask whether you got a slot without asking too often, the turf you last tapped Call or WhatsApp on \(until you close the tab; it is sent to us only with your answer, if you give one\) and when we last asked or you answered/, "the browser's notes, under Stored on your device");
+  // No new site-wide notice for it: the answer names nobody. The date already covers the day it was written.
+  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.ok(PRIVACY_UPDATED >= "2026-11-12");
+});
+
 test("policy notice: the notice it replaced still reaches anyone who never dismissed it", () => {
   assert.equal(privacyNoticeText(PRIVACY_NOTICE.earlier.id), PRIVACY_NOTICE.text, "dismissed the last one: only what is new");
   for (const seen of [null, "2026-10-25-cities", "something else"]) {

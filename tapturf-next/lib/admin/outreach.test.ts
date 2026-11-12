@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { byOf, claimLabel, noteOf, OUTREACH_STATUSES, outreachCity, outreachDays, outreachFoldLine, STATUS_LABEL, toOutreachList, toSaved } from "./outreach";
+import { byOf, claimLabel, noteOf, OUTREACH_STATUSES, outreachCity, outreachDays, outreachFoldLine, saidLine, STATUS_LABEL, toOutreachList, toSaidByTurf, toSaved, wrongNumberLine } from "./outreach";
 import { outreachList, outreachSet, type AdminRpc } from "./outreach.server";
 import { callNumber, contactFieldsOf, contactLinks, whatsAppNumber } from "../utils/contact";
 import { readReportToken, reportKey } from "../report/token";
@@ -98,6 +98,38 @@ test("the note: status, note, who and when", () => {
   assert.deepEqual([byOf(null), byOf("  "), byOf("  Asha   K "), byOf("N".repeat(60))?.length], [null, null, "Asha K", 40]);
 });
 
+/* ── What players said ── */
+
+const saidRow = (n: number, o: Record<string, unknown> = {}) => ({ id: T(n), got_slot: 0, full: 0, price: 0, no_reply: 0, wrong_number: 0, just_asking: 0, no_reason: 0, deciding: 0, dismissed: 0, ...o });
+
+test("players said: the counts by turf, a line of them, and a wrong number said apart", () => {
+  const m = toSaidByTurf({ city: "hyderabad", days: 30, turfs: [saidRow(1, { got_slot: 4, full: 2, no_reply: 1, wrong_number: 1 }), saidRow(2, { deciding: 3, dismissed: 9, no_reason: 2 }), saidRow(3, { price: 1200, just_asking: 1 }), { id: "nope", got_slot: 5 }, null, saidRow(4, { got_slot: "7", wrong_number: -2 })] });
+  assert.deepEqual([...m.keys()], [T(1), T(3)], "only turfs where a player said how it went; closed cards and still deciding say nothing");
+  assert.deepEqual(m.get(T(1)), { gotSlot: 4, full: 2, price: 0, noReply: 1, wrongNumber: 1, justAsking: 0 });
+  assert.equal(saidLine(m.get(T(1))!), "4 got a slot · 2 slot full · 1 no reply · 1 wrong number");
+  assert.equal(saidLine(m.get(T(3))!), "1,200 too pricey · 1 just asking");
+  assert.equal(wrongNumberLine(m.get(T(1))!), "1 player said this is a wrong number. Check the number on its page.");
+  assert.equal(wrongNumberLine({ ...m.get(T(1))!, wrongNumber: 3 }), "3 players said this is a wrong number. Check the number on its page.");
+  assert.equal(wrongNumberLine(m.get(T(3))!), null);
+  assert.equal(wrongNumberLine(null), null);
+  for (const bad of [null, "x", [], {}, { turfs: "x" }, { error: "forbidden" }]) assert.equal(toSaidByTurf(bad).size, 0);
+  // Joined to the list by turf id.
+  const l = toOutreachList(answer([row(1), row(2), row(3)]), link, m)!;
+  assert.deepEqual(l.turfs.map((t) => t.said && saidLine(t.said)), ["4 got a slot · 2 slot full · 1 no reply · 1 wrong number", null, "1,200 too pricey · 1 just asking"]);
+  assert.equal(toOutreachList(answer([row(1)]), link)!.turfs[0].said, null, "without the read, nothing is said");
+});
+
+test("GET: what players said rides on the rows; before 20261113_contact_outcomes.sql, or when that read fails, the list still shows", async () => {
+  const list = answer([row(1), row(2)]);
+  const withSaid = await (await outreachList(fakeRpc({ admin_owner_outreach: list, admin_contact_outcomes: { turfs: [saidRow(2, { got_slot: 3, wrong_number: 1 })] } }).rpc, get(), ENV)).json();
+  assert.deepEqual(withSaid.list.turfs.map((t: { said: unknown }) => t.said), [null, { gotSlot: 3, full: 0, price: 0, noReply: 0, wrongNumber: 1, justAsking: 0 }]);
+  for (const a of [{ __error: { code: "PGRST202" } }, { __error: { code: "57014" } }, new Error("network"), { error: "forbidden" }, "nonsense", undefined]) {
+    const res = await outreachList(fakeRpc({ admin_owner_outreach: list, admin_contact_outcomes: a }).rpc, get(), ENV);
+    const j = await res.json();
+    assert.deepEqual([res.status, j.ok, j.list.turfs.map((t: { said: unknown }) => t.said)], [200, true, [null, null]]);
+  }
+});
+
 /* ── The routes ── */
 
 function fakeRpc(answers: Record<string, unknown>) {
@@ -121,7 +153,7 @@ test("GET: asks for the city and the days, signs each turf's report link, never 
   const res = await outreachList(db.rpc, get("?city=Pune&days=90"), ENV);
   assert.equal(res.status, 200);
   assert.equal(res.headers.get("cache-control"), "private, no-store");
-  assert.deepEqual(db.calls, [{ fn: "admin_owner_outreach", args: { p_city: "pune", p_days: 90 } }]);
+  assert.deepEqual(db.calls, [{ fn: "admin_owner_outreach", args: { p_city: "pune", p_days: 90 } }, { fn: "admin_contact_outcomes", args: { p_city: "pune", p_days: 90 } }], "the list, and what players said, for the same city and days");
   const j = await res.json();
   assert.equal(j.ok, true);
   const t = j.list.turfs[0];
@@ -129,7 +161,8 @@ test("GET: asks for the city and the days, signs each turf's report link, never 
   assert.deepEqual(readReportToken(reportKey("test-account-key"), t.report.split("/").pop()), { turfId: T(1) });
   assert.ok(t.message.includes(t.report));
   // Only what the section shows: no raw column names from the database.
-  assert.deepEqual(Object.keys(t).sort(), ["area", "at", "by", "call", "calls", "claim", "id", "message", "name", "note", "path", "report", "status", "views", "wa", "whatsapp"]);
+  assert.deepEqual(Object.keys(t).sort(), ["area", "at", "by", "call", "calls", "claim", "id", "message", "name", "note", "path", "report", "said", "status", "views", "wa", "whatsapp"]);
+  assert.equal(t.said, null, "nobody answered: nothing said");
   const d = fakeRpc({ admin_owner_outreach: answer([]) });
   await outreachList(d.rpc, get("?city=../x&days=7"), ENV);
   assert.deepEqual(d.calls[0].args, { p_city: "hyderabad", p_days: 30 });

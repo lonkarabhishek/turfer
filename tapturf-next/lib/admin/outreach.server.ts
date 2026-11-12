@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { byOf, isOutreachStatus, noteOf, outreachCity, outreachDays, toOutreachList, toSaved, type OutreachAnswer, type OutreachSetAnswer } from "./outreach";
+import { byOf, isOutreachStatus, noteOf, outreachCity, outreachDays, toOutreachList, toSaidByTurf, toSaved, type OutreachAnswer, type OutreachSetAnswer } from "./outreach";
 import { reportKey, reportUrl } from "../report/token";
 
 /**
@@ -45,11 +45,13 @@ const statusOf = (e: "not_set_up" | "unavailable" | "forbidden") => (e === "forb
 /** GET /api/admin/outreach?city=<slug>&days=30|90: the city's turfs, most taps first, with each one's numbers, report link and note. */
 export async function outreachList(rpc: AdminRpc, req: Request, env: Env = process.env): Promise<NextResponse> {
   const q = new URL(req.url).searchParams;
-  const res = await call(rpc, "admin_owner_outreach", { p_city: outreachCity(q.get("city")), p_days: outreachDays(q.get("days")) });
+  const args = { p_city: outreachCity(q.get("city")), p_days: outreachDays(q.get("days")) };
+  // What players said after tapping (20261113_contact_outcomes.sql), read alongside; before that file, or when it fails, the rows just say nothing about it.
+  const [res, said] = await Promise.all([call(rpc, "admin_owner_outreach", args), call(rpc, "admin_contact_outcomes", args)]);
   if ("error" in res) return json({ ok: false, error: res.error }, statusOf(res.error));
   const ak = env.ACCOUNT_KEY?.trim();
   const key = ak ? reportKey(ak) : null;
-  const list = toOutreachList(res.data, (id) => (key ? reportUrl(key, id) : null));
+  const list = toOutreachList(res.data, (id) => (key ? reportUrl(key, id) : null), toSaidByTurf("data" in said ? said.data : null));
   return list ? json({ ok: true, list }) : json({ ok: false, error: "unavailable" }, 502);
 }
 

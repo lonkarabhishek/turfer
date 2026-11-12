@@ -12,7 +12,11 @@ import { outreachMessage } from "../report/message";
  * with the free report (/report/<token>) and a note of who was contacted.
  * A turf's numbers are picked exactly as its page's Call and WhatsApp
  * buttons pick them (lib/utils/contact.ts: callNumber, whatsAppNumber,
- * contactLinks), so the team rings the number players ring.
+ * contactLinks), so the team rings the number players ring. Each row also
+ * says what players told us after tapping ("Did you get a slot?",
+ * 20261113_contact_outcomes.sql, admin_contact_outcomes; lib/outcome/): a
+ * second read, joined here by turf id, and simply absent before that file
+ * is applied.
  */
 
 export const OUTREACH_STATUSES = ["not_contacted", "contacted", "interested", "not_interested", "wrong_number"] as const;
@@ -59,7 +63,48 @@ export type OutreachRow = {
   note: string | null;
   by: string | null;
   at: string | null;
+  /** What players said after tapping, in the list's window; null when nobody answered. */
+  said: PlayersSaid | null;
 };
+
+/** Players' own answers to "Did you get a slot?" for one turf, as counts (admin_contact_outcomes). */
+export type PlayersSaid = { gotSlot: number; full: number; price: number; noReply: number; wrongNumber: number; justAsking: number };
+
+/** admin_contact_outcomes' answer by turf id; empty for anything that isn't one (the rows then say nothing). Turfs with only closed cards or "still deciding" are left out. */
+export function toSaidByTurf(raw: unknown): Map<string, PlayersSaid> {
+  const out = new Map<string, PlayersSaid>();
+  const turfs = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>).turfs : null;
+  if (!Array.isArray(turfs)) return out;
+  for (const x of turfs as Record<string, unknown>[]) {
+    if (!x || typeof x.id !== "string" || !UUID.test(x.id)) continue;
+    const s: PlayersSaid = { gotSlot: count(x.got_slot), full: count(x.full), price: count(x.price), noReply: count(x.no_reply), wrongNumber: count(x.wrong_number), justAsking: count(x.just_asking) };
+    if (Object.values(s).some((n) => n > 0)) out.set(x.id.toLowerCase(), s);
+  }
+  return out;
+}
+
+/** "4 got a slot · 2 slot full · 1 no reply": what players said, most telling first, zeros left out. Wrong number is said on its own (wrongNumberLine). */
+export function saidLine(s: PlayersSaid): string {
+  return (
+    [
+      [s.gotSlot, "got a slot"],
+      [s.full, "slot full"],
+      [s.noReply, "no reply"],
+      [s.price, "too pricey"],
+      [s.justAsking, "just asking"],
+      [s.wrongNumber, "wrong number"],
+    ] as const
+  )
+    .filter(([n]) => n > 0)
+    .map(([n, w]) => `${n.toLocaleString("en-IN")} ${w}`)
+    .join(" · ");
+}
+
+/** A player said the listed number is wrong: a fix for the data team, said apart from the rest. Null when nobody did. */
+export function wrongNumberLine(s: PlayersSaid | null): string | null {
+  if (!s || s.wrongNumber < 1) return null;
+  return `${s.wrongNumber === 1 ? "1 player" : `${s.wrongNumber.toLocaleString("en-IN")} players`} said this is a wrong number. Check the number on its page.`;
+}
 
 export type OutreachCity = { id: string; label: string; n: number };
 export type OutreachList = { city: string; days: OutreachDays; since: string | null; today: string | null; cities: OutreachCity[]; turfs: OutreachRow[] };
@@ -94,10 +139,10 @@ export function toSaved(raw: unknown): OutreachSaved | null {
 /**
  * admin_owner_outreach's answer as the section's list; null for anything
  * that isn't one. `reportUrl` signs a turf's report link (null when it
- * can't). The order is the function's: most taps, then most views, then
+ * can't); `said` is what players told us, by turf id (toSaidByTurf). The order is the function's: most taps, then most views, then
  * by name; kept here too, so the list is right whatever sent it.
  */
-export function toOutreachList(raw: unknown, reportUrl: (turfId: string) => string | null): OutreachList | null {
+export function toOutreachList(raw: unknown, reportUrl: (turfId: string) => string | null, said: Map<string, PlayersSaid> = new Map()): OutreachList | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
   if (typeof o.city !== "string" || !Array.isArray(o.turfs)) return null;
@@ -129,6 +174,7 @@ export function toOutreachList(raw: unknown, reportUrl: (turfId: string) => stri
       note: saved?.note ?? null,
       by: saved?.by ?? null,
       at: saved?.at ?? null,
+      said: said.get(x.id.toLowerCase()) ?? null,
     });
   }
   turfs.sort((a, b) => b.calls + b.whatsapp - (a.calls + a.whatsapp) || b.views - a.views || a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.id.localeCompare(b.id));

@@ -80,7 +80,7 @@ export function RequestSheet({
     <a
       href={contact.href}
       {...(contact.kind === "whatsapp" ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-      onClick={() => logContactClick({ turfId, kind: contact.kind, source: "turf_slots", signedIn: !!user, userId: user?.id })}
+      onClick={() => logContactClick({ turfId, kind: contact.kind, source: "turf_slots", signedIn: !!user, userId: user?.id, turfName, opens: true })}
       className={LINK}
     >
       {contact.label}
@@ -273,7 +273,7 @@ export function RequestSheet({
               href={buildWhatsAppLink({ phone: whatsapp.digits, text: requestWhatsAppText({ turfName, when: sentWhen ?? when }) })}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => logContactClick({ turfId, kind: "whatsapp", source: "turf_request", signedIn: !!user, userId: user?.id })}
+              onClick={() => logContactClick({ turfId, kind: "whatsapp", source: "turf_request", signedIn: !!user, userId: user?.id, turfName, opens: true })}
               className="mt-5 w-full h-12 rounded-full bg-[#1FAF54] hover:bg-[#189446] text-white font-bold text-[15px] inline-flex items-center justify-center gap-2 touch-manipulation"
             >
               {SHEET_COPY.tellWhatsApp}

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readReportToken, reportKey, reportToken, reportUrl, REPORT_TOKEN_VERSION } from "./token";
 import { outreachMessage, timesText } from "./message";
-import { beforeText, dayLabel, headline, REPORT_COPY, reportPage, toReport } from "./report";
+import { beforeText, dayLabel, headline, REPORT_COPY, reportPage, SAID_MIN, saidHoursText, saidText, toReport, toSaid } from "./report";
 import { getReport, REPORT_HEADERS, reportState } from "./server";
 import { offKey } from "../email/token";
 import { claimCopyProblem } from "../turfPage/claimPrompts";
@@ -213,6 +213,73 @@ test("a link we didn't sign is a 404; a read that fails a 503", () => {
   assert.ok(visible(reportPage({ state: "bad" }).html).includes("This link doesn't work"));
 });
 
+/* ── What players told us ── */
+
+const SAID = { r: "ok", days: 30, since: "2026-10-14", today: "2026-11-12", answered: 6, got_slot: 4, hours: [{ hour: 20, n: 3 }, { hour: 21, n: 2 }, { hour: 6, n: 1 }] };
+
+test("what players told us: read only when at least 3 answered, and only when it is a whole answer", () => {
+  assert.equal(SAID_MIN, 3);
+  assert.deepEqual(toSaid(SAID), { answered: 6, gotSlot: 4, hours: [20, 21, 6] });
+  assert.deepEqual(toSaid({ ...SAID, answered: 3, got_slot: 0, hours: [] }), { answered: 3, gotSlot: 0, hours: [] });
+  for (const few of [0, 1, 2]) assert.equal(toSaid({ ...SAID, answered: few, got_slot: null, hours: [] }), null, `${few} answered: nothing`);
+  assert.equal(toSaid({ ...SAID, answered: 2, got_slot: 2 }), null, "below 3, whatever else it says");
+  for (const bad of [null, "x", [], {}, { r: "not_found" }, { ...SAID, r: "unavailable" }, { ...SAID, days: 90 }, { ...SAID, answered: "6" }, { ...SAID, got_slot: null }, { ...SAID, got_slot: 7 }, { ...SAID, got_slot: -1 }, RAW])
+    assert.equal(toSaid(bad), null, JSON.stringify(bad)?.slice(0, 50));
+  assert.deepEqual(toSaid({ ...SAID, hours: [{ hour: 24, n: 1 }, { hour: 20, n: 0 }, null, { hour: 19, n: 2 }, { hour: 19, n: 1 }, { hour: 7, n: 1 }, { hour: 8, n: 1 }, { hour: 9, n: 1 }] })?.hours, [19, 7, 8], "real hours, each once, three at most");
+  assert.deepEqual(toSaid({ ...SAID, hours: "x" })?.hours, []);
+});
+
+test("what players told us: the words say whose answer it is, never everyone", () => {
+  assert.equal(saidText({ answered: 6, gotSlot: 4, hours: [] }), "Of the 6 players who told us how it went, 4 got a slot.");
+  assert.equal(saidText({ answered: 3, gotSlot: 0, hours: [] }), "Of the 3 players who told us how it went, none got a slot.");
+  assert.equal(saidText({ answered: 5, gotSlot: 5, hours: [] }), "Of the 5 players who told us how it went, all got a slot.");
+  assert.equal(saidText({ answered: 1200, gotSlot: 1000, hours: [] }), "Of the 1,200 players who told us how it went, 1,000 got a slot.");
+  assert.equal(saidHoursText({ answered: 6, gotSlot: 4, hours: [20, 21, 6] }), "The hours they asked for most: 8 PM, 9 PM and 6 AM.");
+  assert.equal(saidHoursText({ answered: 6, gotSlot: 4, hours: [20, 0] }), "The hours they asked for most: 8 PM and 12 AM.");
+  assert.equal(saidHoursText({ answered: 6, gotSlot: 4, hours: [19] }), "The hour they asked for most: 7 PM.");
+  assert.equal(saidHoursText({ answered: 6, gotSlot: 4, hours: [] }), null);
+  assert.match(REPORT_COPY.saidNote, /Only some answer/);
+  assert.match(REPORT_COPY.saidNote, /not everyone who tapped/);
+});
+
+test("the page: a card about players' answers only from 3 answers up; the counts stay as they were", () => {
+  const report = toReport(RAW)!;
+  const plain = reportPage({ state: "ok", report }).html;
+  for (const said of [null, undefined, toSaid({ ...SAID, answered: 2, got_slot: null, hours: [] }), { answered: 2, gotSlot: 2, hours: [20] }]) {
+    const html = reportPage({ state: "ok", report, said }).html;
+    assert.equal(html, plain, "below 3 answers the page is exactly the page without it");
+    assert.doesNotMatch(html, /told us|got a slot|asked for most/);
+  }
+  const html = reportPage({ state: "ok", report, said: toSaid(SAID) }).html;
+  const text = visible(html);
+  assert.ok(text.includes("What players told us"));
+  assert.ok(text.includes("Of the 6 players who told us how it went, 4 got a slot. The hours they asked for most: 8 PM, 9 PM and 6 AM."));
+  assert.ok(text.includes(REPORT_COPY.saidNote.replace(/'/g, "&#39;")) || text.includes(REPORT_COPY.saidNote));
+  assert.doesNotMatch(html, /<script/i, "still no script");
+  // Everything else on the page is unchanged: taking the card out gives the plain page.
+  const start = html.indexOf(`<div class="card">\n<h2>What players told us</h2>`);
+  assert.ok(start > 0);
+  const end = html.indexOf("</div>\n", start) + "</div>\n".length;
+  assert.equal(html.slice(0, start) + html.slice(end), plain);
+  assert.doesNotMatch(text.replace(REPORT_COPY.meaning, ""), /booking|booked|called you|customers/i);
+});
+
+test("the route: what players told us is shown from 3 answers; when that read is missing or fails the report still shows", async () => {
+  const t = reportToken(KEY, TURF);
+  const rpcWith = (said: unknown) => async (fn: string) => (fn === "owner_report" ? { data: RAW } : (said as { data: Record<string, unknown> }));
+  const page = async (said: unknown) => {
+    const res = await getReport(t, { accountKey: "test-account-key", rpc: rpcWith(said) });
+    return [res.status, visible(await res.text()).includes("players who told us")];
+  };
+  assert.deepEqual(await page({ data: SAID }), [200, true]);
+  assert.deepEqual(await page({ data: { ...SAID, answered: 2, got_slot: null, hours: [] } }), [200, false], "2 answers: nothing about it");
+  assert.deepEqual(await page({ missing: true }), [200, false], "before 20261113_contact_outcomes.sql");
+  assert.deepEqual(await page({ unavailable: true }), [200, false]);
+  assert.deepEqual(await page({ data: { r: "not_found" } }), [200, false]);
+  const thrown = await getReport(t, { accountKey: "test-account-key", rpc: async (fn: string) => { if (fn === "owner_report") return { data: RAW }; throw new Error("down"); } });
+  assert.equal(thrown.status, 200, "a read that throws never takes the report down");
+});
+
 /* ── The route ── */
 
 const okRpc = (data: Record<string, unknown>) => {
@@ -224,7 +291,7 @@ test("the route: a good link reads that turf's report and shows it, never cached
   const db = okRpc(RAW);
   const res = await getReport(reportToken(KEY, TURF), { accountKey: "test-account-key", rpc: db.rpc });
   assert.equal(res.status, 200);
-  assert.deepEqual(db.calls, [{ fn: "owner_report", args: { p_turf_id: TURF } }]);
+  assert.deepEqual(db.calls, [{ fn: "owner_report", args: { p_turf_id: TURF } }, { fn: "owner_report_said", args: { p_turf_id: TURF } }], "the counts, and what players told us, for that turf alone");
   assert.equal(res.headers.get("cache-control"), "private, no-store");
   assert.equal(res.headers.get("x-robots-tag"), "noindex, nofollow");
   assert.equal(res.headers.get("referrer-policy"), "no-referrer");

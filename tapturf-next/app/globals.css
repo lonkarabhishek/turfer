@@ -826,3 +826,18 @@ html[data-tt-pills] #tt-pills { min-height: 2.25rem; margin-bottom: .75rem; }
   .level-meter > i { forced-color-adjust: none; background: GrayText; }
   .level-meter > i[data-on] { background: CanvasText; }
 }
+
+/* "Did you get a slot?" (components/outcome/OutcomeCard.tsx): the card rises gently over the bottom bar,
+   each step cross-fades, and it sinks away when done. Reduced motion: opacity only. */
+@keyframes outcomeIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes outcomeOut { to { opacity: 0; transform: translateY(8px); } }
+@keyframes outcomeStep { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.outcome-in { animation: outcomeIn 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.outcome-out { animation: outcomeOut 320ms ease-in forwards; }
+.outcome-step { animation: outcomeStep 220ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  @keyframes outcomeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes outcomeOut { to { opacity: 0; } }
+  @keyframes outcomeStep { from { opacity: 0; } to { opacity: 1; } }
+  .outcome-in, .outcome-out, .outcome-step { animation-duration: 180ms; }
+}

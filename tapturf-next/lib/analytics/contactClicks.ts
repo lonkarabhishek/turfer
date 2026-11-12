@@ -1,5 +1,6 @@
 import { step } from "./visitor";
 import { gaEvent } from "./ga";
+import { rememberContactTap } from "../outcome/device";
 
 /**
  * Record a Call / WhatsApp tap on a turf.
@@ -13,6 +14,12 @@ import { gaEvent } from "./ga";
  * The count is anonymous and stores nothing on the device, so it runs for
  * everyone. The GA4 event and the visit note's funnel step need Accept on
  * the cookie banner (lib/consent.ts; gaEvent and step check it).
+ *
+ * A tap that opens the dialer or WhatsApp (`opens`; by default a signed-in
+ * one, since a signed-out tap opens the sign-in instead) is also noted in
+ * this tab's sessionStorage with the turf's name, so the "Did you get a
+ * slot?" card can ask about it once when the player is back
+ * (lib/outcome/). That note changes nothing about what is counted.
  */
 export type ContactKind = "call" | "whatsapp";
 
@@ -23,8 +30,15 @@ export function logContactClick(opts: {
   source: string;
   signedIn: boolean;
   userId?: string | null;
+  /** The turf's name, for the "Did you get a slot?" card; without it the tap is never asked about. */
+  turfName?: string;
+  /** Whether this tap opens the dialer or WhatsApp. Default: signedIn. */
+  opens?: boolean;
 }) {
   if (typeof window === "undefined") return;
+  if (opts.turfName && (opts.opens ?? opts.signedIn)) {
+    rememberContactTap({ turfId: opts.turfId, turfName: opts.turfName, kind: opts.kind, source: opts.source, signedIn: opts.signedIn });
+  }
   step("contact_click");
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

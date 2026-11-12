@@ -161,6 +161,7 @@ export function NoContactNotice({ variant = "card", links }: { variant?: "card" 
   if (variant === "fixed-bottom") {
     return (
       <div
+        data-bottom-bar=""
         className="fixed bottom-0 left-0 right-0 z-50 material-thick border-t border-primary-200/70 px-4 pt-2.5 md:hidden animate-slide-up"
         style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
       >
@@ -351,7 +352,7 @@ export function TurfSuggestions({
   // Same rule as the main Call / WhatsApp buttons: quick login first.
   // Counted like the main buttons, tagged as a player-suggested number.
   const guard = (kind: ContactKind) => (e: React.MouseEvent) => {
-    logContactClick({ turfId, kind, source: "suggested_number", signedIn: !!user, userId: user?.id });
+    logContactClick({ turfId, kind, source: "suggested_number", signedIn: !!user, userId: user?.id, turfName });
     if (user) return;
     e.preventDefault();
     login();
