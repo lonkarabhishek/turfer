@@ -148,7 +148,8 @@ export function livePicks(rows: readonly TrendingRow[], now: Date): TrendingRow[
   return out;
 }
 
-export const GAME_TURF_COLUMNS = 'id, slug, name, address, city, lat, lng, "Gmap Embed link"';
+/** area: a game's readable URL names it (lib/utils/gamePath.ts), so the home's and Ask's links are the page's own URL. */
+export const GAME_TURF_COLUMNS = 'id, slug, name, address, area, city, lat, lng, "Gmap Embed link"';
 /** /games' cards also show the turf's area and photos. */
 export const GAME_CARD_TURF_COLUMNS = 'id, slug, name, address, area, city, lat, lng, "Gmap Embed link", cover_image, images, image_review';
 

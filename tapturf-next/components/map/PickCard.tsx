@@ -18,6 +18,7 @@ import { sportFamily, sportLabel } from "@/lib/utils/sport";
 import { isCity, labelFor } from "@/lib/city";
 import { PhotoImg } from "@/components/ui/PhotoImg";
 import { GamePhoto } from "@/components/game/detail/GamePhoto";
+import { gamePath } from "@/lib/utils/gamePath";
 
 /**
  * The card a tapped pin opens over the map: photo, name, where, sport,
@@ -142,7 +143,7 @@ function GameRow({ game, km }: { game: MapGame; km: number | null }) {
   const price = formatPrice(game.price_per_player);
   const place = gamePlace(game.turfs);
   return (
-    <Link href={`/game/${game.id}`} className="flex gap-3 p-3 pr-11 hover:bg-primary-50 focus-neon rounded-2xl">
+    <Link href={gamePath(game)} className="flex gap-3 p-3 pr-11 hover:bg-primary-50 focus-neon rounded-2xl">
       <GamePhoto photos={game.turfs.photos} family={sportFamily(game.sport)} className="relative shrink-0 w-[92px] h-[92px] rounded-xl overflow-hidden" />
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-semibold text-accent-800 leading-snug">

@@ -1,5 +1,6 @@
 import { afterMidnight, clockText, dayText, escapeHtml, mapsLink, namesText, oneLine, priceText, sportText, venueLine, venueName, whenRange, whenText } from "./format";
 import type { EmailGame, EmailJob, RenderedEmail } from "./types";
+import { gamePath } from "../utils/gamePath";
 
 /**
  * The six emails (20261110_email.sql), as pure functions: an email_claim
@@ -45,6 +46,25 @@ const PANEL = "#F9FAFB";
 /** An https link on TapTurf for a path the database sent (a leading slash, no scheme, no other host). */
 function siteLink(site: string, path: string): string {
   return /^\/(?![/\\])[A-Za-z0-9\-._~!$&'()*+,;=:@/?%]*$/.test(path) ? `${site}${path}` : `${site}/`;
+}
+
+/**
+ * The page a game's email opens. The database sends /game/<uuid>
+ * (email_claim); the link in the email is that game's readable URL
+ * (lib/utils/gamePath.ts), from the job's own game. Any other path, or a
+ * game with no venue to name, as the database sent it (the page 308s an
+ * id link to its readable URL).
+ */
+export function pagePath(job: Pick<EmailJob, "path" | "game">): string {
+  const g = job.game;
+  if (!g || job.path !== `/game/${g.id}` || !g.venue?.name) return job.path;
+  return gamePath({
+    id: g.id,
+    sport: g.sport,
+    date: g.date,
+    start_time: g.start_time,
+    turfs: { name: g.venue.name, area: g.venue.area, city: g.venue.city, address: g.venue.address },
+  });
 }
 
 /** The game's facts: when, where (with its map), the price, the host, who is in. */
@@ -106,7 +126,7 @@ function joinRequest(job: EmailJob, g: EmailGame): Content {
     ],
     list: many ? names.map((x) => oneLine(x, 60)).filter(Boolean) : undefined,
     facts: gameFacts(g, { host: false, players: true }),
-    button: { label: many ? "Answer the requests" : "Accept or decline", path: job.path },
+    button: { label: many ? "Answer the requests" : "Accept or decline", path: pagePath(job) },
     why: "You host this game on TapTurf.",
     offLabel: "Turn off join request emails",
   };
@@ -125,7 +145,7 @@ function requestWaiting(job: EmailJob, g: EmailGame): Content {
       `${namesText(names)} asked to join your ${sport} game and ${many ? "are" : "is"} still waiting. A quick yes or no helps them plan.`,
     ],
     facts: gameFacts(g, { host: false, players: true }),
-    button: { label: many ? "Answer the requests" : "Answer the request", path: job.path },
+    button: { label: many ? "Answer the requests" : "Answer the request", path: pagePath(job) },
     why: "You host this game on TapTurf.",
     offLabel: "Turn off join request emails",
   };
@@ -140,7 +160,7 @@ function requestAccepted(job: EmailJob, g: EmailGame): Content {
     title: "You're in",
     paragraphs: [hello(job.name), `${host} accepted your request to join ${sport}. Here are the details.`],
     facts: gameFacts(g, { players: true }),
-    button: { label: "See the game", path: job.path },
+    button: { label: "See the game", path: pagePath(job) },
     why: "You asked to join this game on TapTurf.",
     offLabel: "Turn off join request emails",
   };
@@ -189,7 +209,7 @@ function gameChanged(job: EmailJob, g: EmailGame): Content {
     title,
     paragraphs: [hello(job.name), ...said, "Here is the game as it is now."],
     facts: gameFacts(g),
-    button: { label: "See the game", path: job.path },
+    button: { label: "See the game", path: pagePath(job) },
     why: "You are in this game, or asked to join it, on TapTurf.",
     offLabel: "Turn off game change emails",
   };
@@ -216,7 +236,7 @@ function reminder(job: EmailJob, g: EmailGame): Content {
       tonight ? "Here are the details for tonight." : tomorrow ? "Here are the details for tomorrow." : "Time to get ready. Here are the details.",
     ],
     facts: gameFacts(g, { host: !job.you_host, players: true }),
-    button: { label: "See the game", path: job.path },
+    button: { label: "See the game", path: pagePath(job) },
     why: job.you_host ? "You host this game on TapTurf." : "You are in this game on TapTurf.",
     offLabel: "Turn off reminder emails",
   };

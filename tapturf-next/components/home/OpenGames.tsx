@@ -55,7 +55,7 @@ export function OpenGames({
             return (
               <li key={g.id}>
                 <Link
-                  href={`/game/${g.id}`}
+                  href={g.path}
                   className="card-lift press-tight relative overflow-hidden flex items-center gap-3 rounded-2xl border border-primary-200 bg-white p-3.5 pl-4 hover:border-accent-500 hover:shadow-card-hover min-h-[64px]"
                 >
                   <span aria-hidden className={`absolute left-0 inset-y-0 w-1 ${bar}`} />

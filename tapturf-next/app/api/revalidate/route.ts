@@ -50,6 +50,9 @@ import { warmTurfList } from "@/lib/queries/turfs";
  *   so with their 10 minute and hour timers a new or changed game still
  *   shows within about a minute of the queue's post (the games trigger,
  *   and close_past_games through it, queue the key).
+ *   The game pages themselves are also hard expired (revalidatePath of
+ *   their route, lib/cache/keys.ts GAME_PAGES): an old link's redirect
+ *   there is only whole when a waiting request rebuilds it.
  *
  * Auth: shared secret in the x-revalidate-secret header. If
  * REVALIDATE_SECRET is set in Vercel it's matched directly; otherwise
@@ -127,6 +130,14 @@ export async function POST(req: Request) {
       // Don't fail the batch over one bad path: the flush would resend
       // all of it.
       console.warn(`revalidatePath(${path}) failed`, e);
+    }
+  }
+  // Every game page, hard expired (lib/cache/keys.ts GAME_PAGES: its redirects must be rebuilt by a waiting request).
+  for (const route of calls.pages) {
+    try {
+      revalidatePath(route, "page");
+    } catch (e) {
+      console.warn(`revalidatePath(${route}, page) failed`, e);
     }
   }
 

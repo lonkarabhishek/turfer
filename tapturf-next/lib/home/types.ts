@@ -51,6 +51,8 @@ export type HomeCityRow = {
 
 export type HomeGame = {
   id: string;
+  /** Its page: the readable URL (lib/utils/gamePath.ts). */
+  path: string;
   sport: string;
   /** "Sat 25 Oct", built from the date string alone. */
   when: string;

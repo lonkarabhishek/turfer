@@ -23,6 +23,7 @@ import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
 import { liftCookieBanner } from "@/components/consent/liftCookieBanner";
 import type { GamePrefill } from "@/lib/ai/gameDraft";
 import type { CreateGameData, Game, TypedVenue } from "@/types/game";
+import { gamePath } from "@/lib/utils/gamePath";
 
 const SPORT_OPTIONS = [
   { name: "Cricket",      icon: <Target className="w-6 h-6" />,    defaultMax: 22 },
@@ -425,7 +426,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
 
   const handleCopyLink = async () => {
     if (!createdGameId) return;
-    await navigator.clipboard.writeText(`${window.location.origin}/game/${createdGameId}`);
+    await navigator.clipboard.writeText(`${window.location.origin}${createdPath}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -447,7 +448,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
         turfs: { name: placeName, ...turfPlace },
         listed: !venue,
       },
-      { host: true, url: `${window.location.origin}/game/${createdGameId}`, repeat: seriesGames && repeat ? repeatLabel(repeat.rule) : null },
+      { host: true, url: `${window.location.origin}${createdPath}`, repeat: seriesGames && repeat ? repeatLabel(repeat.rule) : null },
     );
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   };
@@ -455,6 +456,10 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
   const step2Valid = date && startTime && endTime && (turfId || venue) && !repeatBad;
   // The game's place in words: the turf's name, or the typed venue's (with its area and city).
   const placeName = venue?.name ?? turfName;
+  // The new game's readable URL (lib/utils/gamePath.ts), from what was just posted; the page finds it by its code whatever the words.
+  const createdPath = createdGameId
+    ? gamePath({ id: createdGameId, sport, date: seriesGames?.[0]?.date ?? date, start_time: startTime, turfs: { name: placeName, ...turfPlace } })
+    : "/games";
   const venueWhere = venue ? gamePlace({ area: venue.area, city: venue.city, address: venue.address }) : "";
   const what = venue ? "venue" : "turf";
   const typedOn = venuesOn !== false;
@@ -574,7 +579,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
               {copied ? "Copied ✓" : "Copy link"}
             </button>
             <button
-              onClick={() => router.push(`/game/${createdGameId}`)}
+              onClick={() => router.push(createdPath)}
               className="w-full flex items-center justify-center gap-2.5 bg-primary-800 hover:bg-primary-900 text-white py-4 min-h-[56px] rounded-full font-bold text-base transition-colors shadow-elevated focus-neon"
             >
               <Trophy className="w-5 h-5" aria-hidden="true" />

@@ -40,20 +40,37 @@ export type PurgeCalls = {
   tags: string[];
   /** revalidatePath(path) each: one turf page, hard expired. */
   paths: string[];
+  /** revalidatePath(route, "page") each: every page of that route, hard expired (GAME_PAGES). */
+  pages: string[];
 };
+
+/**
+ * The game page's route. With the games key every /game/<...> entry is
+ * hard expired as well as marked stale: an entry there may be a redirect
+ * (the old id link, words the game no longer has: lib/utils/gamePath.ts),
+ * and a redirect rebuilt in the background behind a stale answer does not
+ * get its new Location where the rebuild shares the stale answer's
+ * response (`next start`: a page that became a redirect answers 308 with
+ * no Location, a redirect keeps its old target). Expired, the next
+ * request waits for one render (the game and its turf, two reads; nothing
+ * of the page is in the data cache) and its redirect is whole. The other
+ * pages with the games tag are never redirects and stay stale-while-rebuilt.
+ */
+export const GAME_PAGES = "/game/[id]";
 
 /**
  * The purges for a batch (lib/cache/listTags.ts has the tags):
  * list:<city> marks that city's pages, the all-India pages and the old
  * "turf-data" readers stale, never another city's pages; games marks
- * every page that shows open games; turf:<key> expires /turf/<key>.
+ * every page that shows open games and expires the game pages
+ * (GAME_PAGES); turf:<key> expires /turf/<key>.
  * A legacy per-row post (no keys array) never purges the lists (see the
  * route), and never carries games.
  */
 export function purgeCalls(plan: Purge, legacy: boolean): PurgeCalls {
   const lists = legacy ? [] : listPurgeTags(plan.cities);
   const tags = plan.games ? [...lists, GAMES_TAG] : lists;
-  return { warm: lists.length > 0, tags, paths: plan.turfs.map((k) => `/turf/${k}`) };
+  return { warm: lists.length > 0, tags, paths: plan.turfs.map((k) => `/turf/${k}`), pages: plan.games ? [GAME_PAGES] : [] };
 }
 
 /** Sort valid keys into what to purge. Duplicates collapse. */

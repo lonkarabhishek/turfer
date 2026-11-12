@@ -8,6 +8,7 @@ import { askedAgo, formatDate, formatTimeSlot } from "@/lib/utils/game";
 import { Avatar } from "@/components/game/detail/Avatar";
 import { VerifiedTickFor } from "@/components/account/VerifiedTick";
 import type { Game, GameRequest } from "@/types/game";
+import { gamePath } from "@/lib/utils/gamePath";
 
 /**
  * Requests on the Me tab: first the players waiting for this person's
@@ -106,7 +107,7 @@ export function MyRequests({
                       </p>
                     </div>
                     <Link
-                      href={`/game/${req.game_id}`}
+                      href={gamePath(g ?? { id: req.game_id })}
                       className="shrink-0 inline-flex items-center gap-1 min-h-[44px] px-4 rounded-full bg-accent-500 hover:bg-accent-600 text-white text-[13px] font-bold transition-colors focus-neon"
                       aria-label={`Review ${name}'s request`}
                     >
@@ -159,7 +160,7 @@ function SentRow({ req, game, onCancel }: { req: GameRequest; game: GameLine | u
   return (
     <li className={`rounded-2xl border bg-white p-3.5 ${open ? "border-amber-200" : "border-primary-200"}`}>
       <div className="flex items-start justify-between gap-3">
-        <Link href={`/game/${req.game_id}`} className="group min-w-0 flex-1 rounded-lg focus-neon">
+        <Link href={gamePath({ id: req.game_id })} className="group min-w-0 flex-1 rounded-lg focus-neon">
           <span className="flex items-center gap-1 text-[15px] font-semibold text-primary-900 group-hover:text-accent-700 transition-colors">
             <span className="truncate">{game ? `${game.sport}${game.venue ? ` at ${game.venue}` : ""}` : "View game"}</span>
             <ChevronRight className="w-3.5 h-3.5 shrink-0" aria-hidden />

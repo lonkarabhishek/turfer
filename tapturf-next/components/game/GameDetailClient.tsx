@@ -60,6 +60,7 @@ import { GameVenueField } from "./detail/GameVenueField";
 import { GameAside } from "./detail/GameAside";
 import type { CtaModel } from "./detail/GameCta";
 import { GameSkeleton } from "./detail/GameSkeleton";
+import { gamePath, gameUrl } from "@/lib/utils/gamePath";
 import { GameRepeat } from "./detail/GameRepeat";
 import { GameScore } from "./detail/GameScore";
 import { SeriesStopSheet } from "./SeriesStopSheet";
@@ -248,7 +249,9 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
 
   const handleShare = async () => {
     if (!game) return;
-    const url = window.location.href;
+    // Its readable URL with the words it has now (lib/utils/gamePath.ts): after an edit the address bar still has the old
+    // ones. A game at its whole-id URL (its code is shared) keeps the address as it is.
+    const url = window.location.pathname.endsWith(game.id) ? window.location.href : `${window.location.origin}${gamePath(game)}`;
     // Which game, where and when (lib/utils/gameShare.ts), the link last and inside the text: a share
     // sheet's Copy (and some apps) takes only the text, so a separate url would be lost.
     const closed = game.status === "cancelled" ? "cancelled" : status === "expired" || game.status === "completed" ? "ended" : undefined;
@@ -550,7 +553,7 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
             {!isHost && (
               <p className="text-center text-[12px] text-primary-500">
                 <a
-                  href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(`Report game ${gameId}`)}&body=${encodeURIComponent(`Game: https://www.tapturf.in/game/${gameId}\n\nWhat's wrong with it?\n`)}`}
+                  href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(`Report game ${gameId}`)}&body=${encodeURIComponent(`Game: ${game ? gameUrl(game) : `https://www.tapturf.in/game/${gameId}`}\n\nWhat's wrong with it?\n`)}`}
                   className="inline-flex min-h-11 items-center underline underline-offset-2 hover:text-primary-800"
                 >
                   Report this game

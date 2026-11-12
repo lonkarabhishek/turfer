@@ -2,6 +2,7 @@ import type { Game } from "../../types/game";
 import { guessCityFromAddress, isCity, labelFor, stateFor } from "../city";
 import { gameShareImages } from "../og/gameCard";
 import { gameVenue, type GameVenue } from "../utils/game";
+import { gameUrl } from "../utils/gamePath";
 import { SITE_URL } from "./defaults";
 import { gameDates } from "./gameDates";
 
@@ -32,7 +33,8 @@ export type HostProfiles = ReadonlyMap<string, string>;
 
 const USERNAME = /^[a-z][a-z0-9_]{2,19}$/;
 
-export const gamePageUrl = (id: string) => `${SITE_URL}/game/${id}`;
+/** A game page's URL: the readable one (lib/utils/gamePath.ts), never /game/<uuid>. */
+export const gamePageUrl = (g: Game) => gameUrl(g);
 
 /** The host as organizer (with url) and performer (by name). */
 export function gameHost(g: Pick<Game, "host_name">, pageUrl: string, username: string | null | undefined) {
@@ -71,20 +73,22 @@ function typedPlace(place: GameVenue, cityLabel: string | null) {
 }
 
 export type GameJsonLdOptions = {
-  /** The id in the page's URL (its canonical). */
+  /** The game's id (its share card's). */
   id: string;
+  /** The page's own path (its canonical), as the page worked it out; else the game's readable path. */
+  path?: string | null;
   /** The host's shown username, when lib/games/hostProfile.ts found one. */
   hostUsername?: string | null;
   now?: number;
 };
 
 /** The game page's SportsEvent. */
-export function gameEventJsonLd(game: Game, { id, hostUsername = null, now = Date.now() }: GameJsonLdOptions) {
+export function gameEventJsonLd(game: Game, { id, path = null, hostUsername = null, now = Date.now() }: GameJsonLdOptions) {
   // A TapTurf turf, or the venue its host typed: a Place with its own address either way.
   const place = gameVenue(game);
   const gCityLabel = gameCityLabel(game, place);
   const venueName = place?.name ?? "a local turf";
-  const url = gamePageUrl(id);
+  const url = path ? `${SITE_URL}${path}` : gamePageUrl(game);
   const { organizer, performer } = gameHost(game, url, hostUsername);
   return {
     "@context": "https://schema.org",
@@ -132,7 +136,7 @@ export function gameEventJsonLd(game: Game, { id, hostUsername = null, now = Dat
 function gameListEvent(g: Game, hosts: HostProfiles, now: number) {
   const place = gameVenue(g);
   const venueName = place?.name ?? "a local turf";
-  const url = gamePageUrl(g.id);
+  const url = gamePageUrl(g);
   const { organizer, performer } = gameHost(g, url, hosts.get(g.creator_id));
   return {
     "@type": "SportsEvent",

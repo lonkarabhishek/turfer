@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sportBySlug } from "../sports";
+// The game URL's tests (lib/utils/gamePath.ts) run with this file: npm run test:game lists its files in package.json.
+import "./gamePath.test";
 import {
   NEARBY_MAX_KM,
   gameSportPage,

@@ -54,6 +54,7 @@ import { SectionError } from "@/components/admin/SectionStatus";
 import { reasonText, type Reason } from "@/lib/admin/section";
 import { getAdminTournaments } from "@/lib/queries/adminTournaments";
 import { groundTitle, sizeLine } from "@/lib/turfSize/sizes";
+import { gamePath } from "@/lib/utils/gamePath";
 
 const TOURNAMENT_FILTERS = { all: "All", live: "Live now", on: "On", removed: "Taken down" } as const;
 
@@ -582,7 +583,7 @@ async function renderView(v: View, filter: string, city: string | null = null): 
                   <td className="px-4 py-3"><Badge className={STATE_STYLE[g.state]}>{g.state}</Badge></td>
                   <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(g.created_at)}</td>
                   <td className="px-4 py-3">
-                    <Link href={`/game/${g.id}`} className="text-primary-400 hover:text-accent-600" aria-label="Open game">
+                    <Link href={gamePath({ id: g.id })} className="text-primary-400 hover:text-accent-600" aria-label="Open game">
                       <ExternalLink className="w-4 h-4" />
                     </Link>
                   </td>
@@ -694,7 +695,7 @@ async function renderView(v: View, filter: string, city: string | null = null): 
                 <td className="px-4 py-3 text-primary-500 whitespace-nowrap">{fmtDateTime(r.created_at)}</td>
                 <td className="px-4 py-3">
                   {r.game && (
-                    <Link href={`/game/${r.game_id}`} className="text-primary-400 hover:text-accent-600" aria-label="Open game">
+                    <Link href={gamePath({ id: r.game_id })} className="text-primary-400 hover:text-accent-600" aria-label="Open game">
                       <ExternalLink className="w-4 h-4" />
                     </Link>
                   )}

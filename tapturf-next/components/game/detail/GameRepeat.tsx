@@ -3,6 +3,7 @@ import { Repeat as RepeatIcon } from "lucide-react";
 import { endsLabel, repeatLabel } from "@/lib/games/repeat";
 import type { SeriesInfo } from "@/lib/games/types";
 import { formatGameDay } from "@/lib/utils/game";
+import { gamePath } from "@/lib/utils/gamePath";
 
 /** "Every Tue and Thu" as the middle of a sentence. */
 const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
@@ -51,7 +52,7 @@ export function GameRepeat({
             {others.slice(0, 4).map((g) => (
               <li key={g.id}>
                 <Link
-                  href={`/game/${g.id}`}
+                  href={gamePath(g)}
                   className="inline-flex items-center h-9 px-3 rounded-full border border-primary-200 bg-primary-50 hover:border-accent-500 text-[13px] font-semibold text-primary-800 whitespace-nowrap focus-neon"
                 >
                   {formatGameDay(g.date).short}

@@ -9,6 +9,8 @@ import { readSitemapGames, readSitemapTurfs } from "@/lib/build/reads";
 import { buildData } from "@/lib/build/data";
 import { isGameExpired } from "@/lib/utils/game";
 import { turfPath } from "@/lib/utils/turfPath";
+import { gamePath } from "@/lib/utils/gamePath";
+import { openGamePaths } from "@/lib/queries/games.server";
 import { sitemapPhotos } from "@/lib/utils/images";
 import { activeTurfRows } from "@/lib/queries/turfs";
 import { withListScope } from "@/lib/queries/listScope";
@@ -189,11 +191,13 @@ async function buildSitemap(): Promise<MetadataRoute.Sitemap> {
     };
   });
 
-  // Only games still to come (India time); past ones are noindex.
-  const gamePages: MetadataRoute.Sitemap = (games ?? [])
-    .filter((g) => !!g.date && !!g.start_time && !isGameExpired({ date: g.date, start_time: g.start_time }))
+  // Only games still to come (India time); past ones are noindex. Each at
+  // its readable URL (lib/utils/gamePath.ts), the page's canonical.
+  const upcoming = (games ?? []).filter((g) => !!g.date && !!g.start_time && !isGameExpired({ date: g.date, start_time: g.start_time }));
+  const gamePaths = upcoming.length > 0 ? await openGamePaths() : new Map<string, string>();
+  const gamePages: MetadataRoute.Sitemap = upcoming
     .map((g) => ({
-      url: `${BASE}/game/${g.id}`,
+      url: `${BASE}${gamePaths.get(g.id) ?? gamePath({ id: g.id })}`,
       lastModified: g.updated_at ? new Date(g.updated_at) : new Date(),
       changeFrequency: "hourly",
       priority: 0.6,

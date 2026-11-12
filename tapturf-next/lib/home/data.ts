@@ -20,6 +20,7 @@ import { formatTime12, plural } from "./format";
 import { GAMES_TAG } from "@/lib/cache/listTags";
 import { listScope, scopedRead, tagGamesRender } from "@/lib/queries/listScope";
 import { keepUntil } from "@/lib/queries/changeMark";
+import { gamePath } from "@/lib/utils/gamePath";
 
 // An hour (10 minutes until 10 Nov): the home and its /c/<city> twins show
 // open games, so the games key purges them too (tagGamesRender below).
@@ -81,6 +82,7 @@ export function toHomeGame(g: Game): HomeGame {
   const typed = !g.turfs ? gameVenue(g) : null;
   return {
     id: g.id,
+    path: gamePath(g),
     sport: sp?.name ?? titleCase(g.sport ?? "Game"),
     when,
     time: formatTime12(g.start_time),

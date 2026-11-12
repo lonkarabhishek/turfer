@@ -40,6 +40,7 @@ import { BreakdownList } from "./BreakdownList";
 import { SectionError, SomeFailed } from "./SectionStatus";
 import type { FoldSummary } from "./AdminSection";
 import { turfPath } from "@/lib/utils/turfPath";
+import { gamePath } from "@/lib/utils/gamePath";
 
 /**
  * The admin home's sections (server components). Each awaits only its own
@@ -494,7 +495,7 @@ export async function GamesListSection() {
           <ul className="divide-y divide-primary-100">
             {gamesShown.map((g) => (
               <li key={g.id}>
-                <Link href={`/game/${g.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-primary-50">
+                <Link href={gamePath({ id: g.id })} className="flex items-center gap-3 px-4 py-3 hover:bg-primary-50">
                   <span
                     className={`shrink-0 w-20 text-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                       g.state === "upcoming"

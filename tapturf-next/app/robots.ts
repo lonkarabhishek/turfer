@@ -10,6 +10,8 @@ export default function robots(): MetadataRoute.Robots {
       },
       { userAgent: "GPTBot", allow: "/" },
       { userAgent: "ChatGPT-User", allow: "/" },
+      // ChatGPT search's own crawler: what it indexes is what ChatGPT can cite and link.
+      { userAgent: "OAI-SearchBot", allow: "/" },
       { userAgent: "Google-Extended", allow: "/" },
       { userAgent: "anthropic-ai", allow: "/" },
       { userAgent: "Claude-Web", allow: "/" },

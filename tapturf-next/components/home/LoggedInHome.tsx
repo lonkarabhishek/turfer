@@ -31,6 +31,7 @@ import {
   getGameStatus,
 } from "@/lib/utils/game";
 import type { Game, GameRequest } from "@/types/game";
+import { gamePath } from "@/lib/utils/gamePath";
 
 /**
  * Full self-contained logged-in home. Nothing needs a "go to dashboard"
@@ -183,7 +184,7 @@ export function LoggedInHome({ scope, line }: { scope: HomeScope; line: CityLine
                   {requests.slice(0, 3).map((r) => (
                     <Link
                       key={r.id}
-                      href={`/game/${r.game_id}`}
+                      href={gamePath({ id: r.game_id })}
                       className="block group focus-neon rounded-2xl"
                     >
                       <div className="flex items-center justify-between rounded-2xl border border-hot-500/30 bg-white px-4 py-3 hover:border-hot-500 transition-colors">
@@ -306,7 +307,7 @@ function NextGameHero({ stats }: { stats: UserStats | null }) {
   const status = getGameStatus(g);
 
   return (
-    <Link href={`/game/${g.id}`} className="block group focus-neon rounded-2xl mb-6">
+    <Link href={gamePath(g)} className="block group focus-neon rounded-2xl mb-6">
       <div className="relative overflow-hidden rounded-2xl border border-accent-500/40 bg-accent-50 p-5 hover:border-accent-500 hover:shadow-card-hover transition-all">
         <div className={`absolute left-0 top-0 bottom-0 w-1 ${status === "live" ? "bg-hot-500" : "bg-accent-500"}`} aria-hidden />
         <div className="flex items-center justify-between mb-2">
@@ -359,7 +360,7 @@ function ClassyGameCard({ game, owned = false }: { game: Game; owned?: boolean }
   const status = getGameStatus(game);
 
   return (
-    <Link href={`/game/${game.id}`} className="block group focus-neon rounded-2xl">
+    <Link href={gamePath(game)} className="block group focus-neon rounded-2xl">
       <article
         className={`relative overflow-hidden rounded-2xl border bg-white transition-all ${
           isFull

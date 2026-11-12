@@ -200,24 +200,24 @@ test("a turf key hard-expires that one turf page and marks no tag", () => {
 
 test("the games key marks the games tag (no list read, no turf page)", () => {
   const c = purgeCalls(planPurge(["games"]), false);
-  assert.deepEqual(c, { warm: false, tags: [GAMES_TAG], paths: [] });
+  assert.deepEqual(c, { warm: false, tags: [GAMES_TAG], paths: [], pages: ["/game/[id]"] });
   assert.equal(GAMES_TAG, "games");
 });
 
 test("a mixed batch: the lists, games and turf pages together", () => {
   const c = purgeCalls(planPurge(["games", "list:pune", "turf:turf-up-hinjewadi"]), false);
-  assert.deepEqual(c, { warm: true, tags: ["turf-data", "turf-data:india", "turf-data:pune", "games"], paths: ["/turf/turf-up-hinjewadi"] });
+  assert.deepEqual(c, { warm: true, tags: ["turf-data", "turf-data:india", "turf-data:pune", "games"], paths: ["/turf/turf-up-hinjewadi"], pages: ["/game/[id]"] });
 });
 
 test("a legacy per-row post never purges the lists (only its turf page)", () => {
   const keys = keysForRow("turfs", "UPDATE", row({ name: "Turf Up 2" }), row());
   const c = purgeCalls(planPurge(keys), true);
-  assert.deepEqual(c, { warm: false, tags: [], paths: ["/turf/turf-up-hinjewadi"] });
+  assert.deepEqual(c, { warm: false, tags: [], paths: ["/turf/turf-up-hinjewadi"], pages: [] });
 });
 
 test("rejected keys purge nothing; an empty batch purges nothing", () => {
-  assert.deepEqual(purgeCalls(planPurge(["list:Pune", "page:/", "games:x"]), false), { warm: false, tags: [], paths: [] });
-  assert.deepEqual(purgeCalls(planPurge([]), false), { warm: false, tags: [], paths: [] });
+  assert.deepEqual(purgeCalls(planPurge(["list:Pune", "page:/", "games:x"]), false), { warm: false, tags: [], paths: [], pages: [] });
+  assert.deepEqual(purgeCalls(planPurge([]), false), { warm: false, tags: [], paths: [], pages: [] });
 });
 
 test("scope tags: a city slug or india, never anything a tag could be confused with", () => {

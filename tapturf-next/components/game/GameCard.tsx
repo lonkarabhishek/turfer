@@ -10,6 +10,7 @@ import { Avatar } from "./detail/Avatar";
 import { GamePhoto } from "./detail/GamePhoto";
 import { LevelMeter } from "./detail/GameFacts";
 import { SportGlyph } from "./detail/SportArt";
+import { gamePath } from "@/lib/utils/gamePath";
 
 const chip = "inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[13px] font-semibold whitespace-nowrap";
 const photoChip = "photo-chip inline-flex items-center gap-1.5 h-8 px-3 rounded-full shadow-soft text-[13px] font-semibold whitespace-nowrap";
@@ -55,7 +56,7 @@ export function GameCard({ game, hideVenue = false, cityLabel, now, eager = fals
 
   return (
     <Link
-      href={`/game/${game.id}`}
+      href={gamePath(game)}
       className="group flex flex-col card-lift overflow-hidden rounded-3xl border border-primary-200 bg-white shadow-soft hover:shadow-card-hover"
     >
       {!hideVenue && (

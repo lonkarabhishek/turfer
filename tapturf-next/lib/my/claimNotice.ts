@@ -1,4 +1,5 @@
 import { bookingLine } from "../turfPage/noContact";
+import { gamePath } from "../utils/gamePath";
 
 // Relative imports only, so node --test runs this (lib/my/claimNotice.test.ts, npm run test:my).
 
@@ -75,7 +76,7 @@ export function claimDecisionNotice(
 export const BOOKING_TO_OWNER = ["booking_request", "booking_cancelled_by_player"] as const;
 export const BOOKING_TO_PLAYER = ["booking_confirmed", "booking_declined", "booking_cancelled"] as const;
 
-/** Where tapping a notification goes, and what its small link says: a game, a claim decision's turf, or a booking request. Null: nowhere (it marks read). */
+/** Where tapping a notification goes, and what its small link says: a game (by its id: the page 308s to its readable URL, lib/utils/gamePath.ts), a claim decision's turf, or a booking request. Null: nowhere (it marks read). */
 export function notificationLink(type: string, metadata: unknown): { href: string; label: string | null } | null {
   const m = metadata && typeof metadata === "object" && !Array.isArray(metadata) ? (metadata as Record<string, unknown>) : {};
   const id = (v: unknown) => (typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v) ? v.toLowerCase() : null);
@@ -87,5 +88,5 @@ export function notificationLink(type: string, metadata: unknown): { href: strin
   if ((BOOKING_TO_PLAYER as readonly string[]).includes(type)) return { href: "/dashboard?tab=requests", label: "Your requests" };
   // Older rows stored either { gameId } or { game_id }.
   const game = typeof m.gameId === "string" ? m.gameId : typeof m.game_id === "string" ? m.game_id : null;
-  return game ? { href: `/game/${game}`, label: null } : null;
+  return game ? { href: gamePath({ id: game }), label: null } : null;
 }

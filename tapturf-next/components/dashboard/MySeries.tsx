@@ -7,6 +7,7 @@ import { SeriesStopSheet } from "@/components/game/SeriesStopSheet";
 import { repeatLabel, repeatSummary } from "@/lib/games/repeat";
 import type { GameSeries } from "@/lib/games/types";
 import { formatGameDay } from "@/lib/utils/game";
+import { gamePath } from "@/lib/utils/gamePath";
 
 /**
  * The repeats a host runs, on the Me tab's Hosted list: how each repeats,
@@ -58,7 +59,7 @@ export function MySeries({
                     {s.next ? (
                       <>
                         Next{" "}
-                        <Link href={`/game/${s.next.id}`} className="font-semibold text-accent-700 underline underline-offset-2 focus-neon rounded">
+                        <Link href={gamePath({ id: s.next.id })} className="font-semibold text-accent-700 underline underline-offset-2 focus-neon rounded">
                           {formatGameDay(s.next.date).short}
                         </Link>
                         {" · "}

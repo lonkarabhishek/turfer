@@ -12,6 +12,7 @@ import type { GameSeries } from "@/lib/games/types";
 import { getMySeries, stopSeries } from "@/lib/queries/games";
 import { MySeries } from "./MySeries";
 import type { Game } from "@/types/game";
+import { gamePath } from "@/lib/utils/gamePath";
 
 export type GamesView = "created" | "joined";
 
@@ -177,7 +178,7 @@ export function MyGames({
 function GameRow({ game, highlight = false, host = false, waiting = 0, repeats = null }: { game: Game; highlight?: boolean; host?: boolean; waiting?: number; repeats?: string | null }) {
   const status = game.status === "cancelled" ? "cancelled" : getGameStatus(game);
   return (
-    <Link href={`/game/${game.id}`} className="block group focus-neon rounded-2xl">
+    <Link href={gamePath(game)} className="block group focus-neon rounded-2xl">
       <div
         className={`relative overflow-hidden rounded-2xl border bg-white p-4 transition-all ${
           highlight

@@ -5,6 +5,7 @@ import { gameDates } from "./gameDates";
 import { jsonLdHtml } from "./jsonLd";
 import { stateFor } from "../city";
 import { gameVenue } from "../utils/game";
+import { gamePath } from "../utils/gamePath";
 import type { Game } from "../../types/game";
 
 // 4 Nov 2026, 12:00 in India.
@@ -13,6 +14,8 @@ const HOST = "aaaaaaaa-aaaa-4aaa-8aaa-000000000001";
 const TURF_GAME = "dddddddd-dddd-4ddd-8ddd-000000000002";
 const VENUE_GAME = "dddddddd-dddd-4ddd-8ddd-000000000001";
 const SITE = "https://www.tapturf.in";
+// The readable URL (lib/utils/gamePath.ts): what @id, url, the offer and a host with no profile point at.
+const TURF_PATH = "/game/box-cricket-kings-arena-baner-pune-sat-7-nov-7pm-dddddddd";
 
 const base: Game = {
   id: TURF_GAME,
@@ -66,7 +69,7 @@ function legacyPageJsonLd(game: Game, id: string, now: number) {
   return {
     "@context": "https://schema.org",
     "@type": "SportsEvent",
-    "@id": `https://www.tapturf.in/game/${id}`,
+    "@id": `${SITE}${gamePath(game)}`,
     name: `${game.sport} at ${venueName}`,
     description: `Join a ${game.sport} game at ${venueName} on TapTurf.`,
     ...gameDates(game),
@@ -101,7 +104,7 @@ function legacyPageJsonLd(game: Game, id: string, now: number) {
     organizer: { "@type": "Person", name: game.host_name || "TapTurf host" },
     offers: {
       "@type": "Offer",
-      url: `https://www.tapturf.in/game/${id}`,
+      url: `${SITE}${gamePath(game)}`,
       price: game.price_per_player ?? 0,
       priceCurrency: "INR",
       availability: game.current_players < game.max_players ? "https://schema.org/InStock" : "https://schema.org/SoldOut",
@@ -115,7 +118,7 @@ function legacyPageJsonLd(game: Game, id: string, now: number) {
 function legacyListItem(g: Game) {
   return {
     "@type": "SportsEvent",
-    "@id": `https://www.tapturf.in/game/${g.id}`,
+    "@id": `${SITE}${gamePath(g)}`,
     name: `${g.sport} at ${g.turfs?.name || "a local turf"}`,
     ...gameDates(g),
     sport: g.sport,
@@ -147,7 +150,7 @@ const isSiteUrl = (u: unknown) => typeof u === "string" && /^https:\/\/www\.tapt
 
 test("game page: organizer is the host with a url, performer the host, image the game's own www cards", () => {
   const ld = gameEventJsonLd(base, { id: TURF_GAME, now: NOW });
-  assert.deepEqual(ld.organizer, { "@type": "Person", name: "Ravi Kumar", url: `${SITE}/game/${TURF_GAME}` }, "no profile: the game page");
+  assert.deepEqual(ld.organizer, { "@type": "Person", name: "Ravi Kumar", url: `${SITE}${TURF_PATH}` }, "no profile: the game page");
   assert.deepEqual(ld.performer, { "@type": "Person", name: "Ravi Kumar" });
   assert.equal(ld.image.length, 3);
   for (const u of ld.image) assert.ok(isSiteUrl(u) && u.startsWith(`${SITE}/api/og/game/${TURF_GAME}`), u);
@@ -161,7 +164,7 @@ test("game page: organizer is the host with a url, performer the host, image the
 
   // Anything that is not a username (it never comes from the lookup, but the url must stay on the site) is the game page.
   for (const bad of ["Ravi K", "../admin", "x", "ravi@example.com", "9876543210"]) {
-    assert.equal(gameEventJsonLd(base, { id: TURF_GAME, hostUsername: bad, now: NOW }).organizer.url, `${SITE}/game/${TURF_GAME}`, bad);
+    assert.equal(gameEventJsonLd(base, { id: TURF_GAME, hostUsername: bad, now: NOW }).organizer.url, `${SITE}${TURF_PATH}`, bad);
   }
 });
 
@@ -173,7 +176,7 @@ test("game page: a normal turf game's JSON-LD is unchanged but for organizer.url
   assert.deepEqual(JSON.parse(JSON.stringify(ld)), {
     "@context": "https://schema.org",
     "@type": "SportsEvent",
-    "@id": `${SITE}/game/${TURF_GAME}`,
+    "@id": `${SITE}${TURF_PATH}`,
     name: "Box Cricket at Kings Arena",
     description: "Join a Box Cricket game at Kings Arena on TapTurf.",
     image: [`${SITE}/api/og/game/${TURF_GAME}?v=${v}`, `${SITE}/api/og/game/${TURF_GAME}/4x3?v=${v}`, `${SITE}/api/og/game/${TURF_GAME}/1x1?v=${v}`],
@@ -189,7 +192,7 @@ test("game page: a normal turf game's JSON-LD is unchanged but for organizer.url
     },
     organizer: { "@type": "Person", name: "Ravi Kumar", url: `${SITE}/u/ravi_k` },
     performer: { "@type": "Person", name: "Ravi Kumar" },
-    offers: { "@type": "Offer", url: `${SITE}/game/${TURF_GAME}`, price: 150, priceCurrency: "INR", availability: "https://schema.org/InStock", validFrom: "2026-11-04T06:30:00.000Z" },
+    offers: { "@type": "Offer", url: `${SITE}${TURF_PATH}`, price: 150, priceCurrency: "INR", availability: "https://schema.org/InStock", validFrom: "2026-11-04T06:30:00.000Z" },
     maximumAttendeeCapacity: 12,
     remainingAttendeeCapacity: 4,
   });
@@ -232,7 +235,7 @@ test("/games: each item gets organizer (with url), performer, image, description
   assert.deepEqual(turf.image, gameEventJsonLd(base, { id: TURF_GAME, now: NOW }).image, "the same cards as the game page");
   assert.equal(venue.organizer.url, `${SITE}/u/ravi_k`, "keyed by the host's account, not the game");
   const other = gamesJsonLd([{ ...base, creator_id: "aaaaaaaa-aaaa-4aaa-8aaa-000000000009" }], new Map([[HOST, "ravi_k"]]), NOW).itemListElement[0].item;
-  assert.equal(other.organizer.url, `${SITE}/game/${TURF_GAME}`, "a host with no profile: the game page");
+  assert.equal(other.organizer.url, `${SITE}${TURF_PATH}`, "a host with no profile: the game page");
 });
 
 test("/games: a typed venue's item has its Place with PostalAddress (it had none) and its own name", () => {
@@ -261,7 +264,7 @@ test("/games: a normal turf game's item is unchanged but for the added keys, the
   const v = /\?v=([0-9a-z]+)$/.exec(list.itemListElement[0].item.image[0])![1];
   assert.deepEqual(JSON.parse(JSON.stringify(list.itemListElement[0].item)), {
     "@type": "SportsEvent",
-    "@id": `${SITE}/game/${TURF_GAME}`,
+    "@id": `${SITE}${TURF_PATH}`,
     name: "Box Cricket at Kings Arena",
     description: "Join a Box Cricket game at Kings Arena on TapTurf.",
     image: [`${SITE}/api/og/game/${TURF_GAME}?v=${v}`, `${SITE}/api/og/game/${TURF_GAME}/4x3?v=${v}`, `${SITE}/api/og/game/${TURF_GAME}/1x1?v=${v}`],
@@ -271,7 +274,7 @@ test("/games: a normal turf game's item is unchanged but for the added keys, the
     eventStatus: "https://schema.org/EventScheduled",
     eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
     location: { "@type": "Place", name: "Kings Arena", address: "Survey 12, Baner, Pune" },
-    organizer: { "@type": "Person", name: "Ravi Kumar", url: `${SITE}/game/${TURF_GAME}` },
+    organizer: { "@type": "Person", name: "Ravi Kumar", url: `${SITE}${TURF_PATH}` },
     performer: { "@type": "Person", name: "Ravi Kumar" },
     offers: { "@type": "Offer", price: 150, priceCurrency: "INR", availability: "https://schema.org/InStock" },
     maximumAttendeeCapacity: 12,

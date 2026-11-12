@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { afterMidnight, cityText, clockText, dayText, escapeHtml, mapsLink, namesText, oneLine, priceText, sportText, venueLine, whenRange, whenText } from "./format";
-import { renderEmail } from "./templates";
+import { pagePath, renderEmail } from "./templates";
 import { offKey, offToken, readOffToken } from "./token";
 import { svixKey, svixSign, svixVerify } from "./svix";
 import { emailConfig, fromOf, mailtoOff, resendBody, sendEmail, testApiBase } from "./send";
@@ -128,7 +128,12 @@ test("each email says what it should", () => {
   assert.match(r(1).text, /Ravi Kumar asked to join your Football game on Sat 14 Nov\./);
   assert.match(r(1).text, /When: Sat 14 Nov, 7 PM to 8 PM/);
   assert.match(r(1).text, /Players: 6 of 10 in/);
-  assert.match(r(1).text, new RegExp(`Accept or decline: https://www\\.tapturf\\.in/game/${GAME}`));
+  // The database sends /game/<uuid>; the email links the game's readable URL (pagePath).
+  assert.match(r(1).text, /Accept or decline: https:\/\/www\.tapturf\.in\/game\/football-kings-turf-baner-pune-sat-14-nov-7pm-dddddddd$/m);
+  assert.ok(r(1).html.includes('href="https://www.tapturf.in/game/football-kings-turf-baner-pune-sat-14-nov-7pm-dddddddd"'), "the button too");
+  assert.ok(!r(1).html.includes(`/game/${GAME}`) && !r(1).text.includes(`/game/${GAME}`), "never the id link");
+  assert.equal(pagePath({ path: "/games", game: game() }), "/games", "another path as sent");
+  assert.equal(pagePath({ path: `/game/${GAME}`, game: game({ venue: { ...game().venue, name: null } }) }), `/game/${GAME}`, "no venue to name: the id link, which redirects");
   assert.doesNotMatch(r(1).text, /Host: /, "the host is not told who hosts");
 
   assert.equal(r(2).subject, "3 players want to join your Football game");
@@ -175,7 +180,9 @@ test("the sport as the app says it, Welcome's reason, a game after midnight", ()
   const lower = job("request_accepted", { game: game({ sport: "cricket" }) });
   const e = renderEmail(lower, LINKS)!;
   assert.equal(e.subject, "You're in: Cricket on Sat 14 Nov, 7 PM");
-  assert.doesNotMatch(`${e.subject} ${e.preheader} ${e.text}`, /\bcricket\b/, "never lower case");
+  // Its words, that is: the game's readable link is lower case (lib/utils/gamePath.ts).
+  assert.doesNotMatch(`${e.subject} ${e.preheader} ${e.text.replace(/https:\/\/\S+/g, "")}`, /\bcricket\b/, "never lower case");
+  assert.match(e.text, /See the game: https:\/\/www\.tapturf\.in\/game\/cricket-kings-turf-baner-pune-sat-14-nov-7pm-dddddddd$/m);
   const rem = renderEmail(job("reminder", { when: "soon", game: game({ sport: "football", host_first: null }) }), LINKS)!;
   assert.match(rem.text, /^Football is on\.$/m, "a sentence never starts in lower case");
 

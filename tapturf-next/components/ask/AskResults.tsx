@@ -24,6 +24,7 @@ import { CompareTableView, HostCardView, PriceChartView, ResultsMapView } from "
 import { FreeHoursLine } from "@/components/turf/FreeHoursLine";
 import { FREE_FILTER_LABEL, freeHref, freeLine, parseFreeCard, type FreeLine } from "@/lib/availability/free";
 import { useEffect, useState } from "react";
+import { gamePath } from "@/lib/utils/gamePath";
 
 /** Compact cards for inside the chat. Horizontal snap row on phones. */
 
@@ -134,7 +135,7 @@ export function GameMiniCard({ game }: { game: Game & { distanceKm?: number } })
   const typed = !game.turfs ? gameVenue(game) : null;
   return (
     <Link
-      href={`/game/${game.id}`}
+      href={gamePath(game)}
       className="snap-start shrink-0 w-[248px] rounded-2xl bg-white border border-primary-100 shadow-soft p-3.5 hover:border-primary-200 hover:shadow-elevated transition-[box-shadow,border-color] duration-200 cursor-pointer"
     >
       <div className="flex items-center justify-between gap-2">
