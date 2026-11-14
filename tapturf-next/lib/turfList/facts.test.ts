@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Turf } from "../../types/turf";
 import {
   FACETS,
+  FACET_LABELS,
   allDay,
   decodeWeek,
   encodeWeek,
@@ -190,4 +191,12 @@ test("price per hour: the card's price rule, per hour", () => {
   const venue = turf({ sports: ["Football", "Box Cricket"], morning_price: 1500, sport_bands: { "box-cricket": [900, 1100] } });
   assert.equal(hourlyPrice(venue, { chip: "Box Cricket" }), 900);
   assert.equal(hourlyPrice(turf({ sports: ["Football", "Badminton"], morning_price: 1500, sport_bands: { football: [1500, 1500] } }), { chip: "Badminton" }), null);
+});
+
+test("Claimed by owner: from turfs.claimed alone (true), in the URL as f=claimed", () => {
+  assert.deepEqual(facetsOf(filterFactsOf(row({ claimed: true }), null).m), ["claimed"]);
+  for (const v of [false, null, undefined, "true", 1]) assert.deepEqual(facetsOf(filterFactsOf(row({ claimed: v }), null).m), [], String(v));
+  assert.ok(FACETS.includes("claimed"));
+  assert.equal(FACETS[0], "free", "a new facet goes at the end, so f=free stays first");
+  assert.equal(FACET_LABELS.claimed, "Claimed by owner");
 });

@@ -22,7 +22,7 @@ import { cardPrice, type CardSport } from "../utils/cardSport";
  * only when this toggle is on or the sheet's counts are asked for, never
  * from the turf's facts.
  */
-export const FACETS = ["free", "open", "24h", "lights", "covered", "parking", "washroom", "changing", "rated", "coaching", "equipment"] as const;
+export const FACETS = ["free", "open", "24h", "lights", "covered", "parking", "washroom", "changing", "rated", "coaching", "equipment", "claimed"] as const;
 export type Facet = (typeof FACETS)[number];
 
 const BIT = Object.fromEntries(FACETS.map((f, i) => [f, 1 << i])) as Record<Facet, number>;
@@ -222,6 +222,8 @@ export type FactRow = {
   washroom_available?: unknown;
   changing_room_available?: unknown;
   equipment_provided?: unknown;
+  /** turfs.claimed: an owner or manager has an active claim (kept by private.sync_turf_claimed). */
+  claimed?: unknown;
   is_24x7?: unknown;
   start_time?: unknown;
   end_time?: unknown;
@@ -242,6 +244,7 @@ const COLUMN: [Facet, keyof FactRow][] = [
   ["washroom", "washroom_available"],
   ["changing", "changing_room_available"],
   ["equipment", "equipment_provided"],
+  ["claimed", "claimed"],
 ];
 
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
@@ -311,6 +314,7 @@ export const FACET_LABELS: Record<Facet, string> = {
   rated: "4.5+ on Google",
   coaching: "Coaching",
   equipment: "Equipment provided",
+  claimed: "Claimed by owner",
 };
 
 /** ₹1,000 */

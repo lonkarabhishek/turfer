@@ -31,6 +31,7 @@ const GROUPS: { title: string; facets: [Facet, string | null][] }[] = [
     ],
   },
   { title: "Rating", facets: [["rated", "The Google rating"]] },
+  { title: "Owner", facets: [["claimed", "Its owner or manager runs its page on TapTurf"]] },
 ];
 
 /** The popover: at most this tall (and 70% of the screen), never under this. */

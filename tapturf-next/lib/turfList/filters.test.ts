@@ -90,6 +90,7 @@ function world(n: number, seed = 1) {
       washroom_available: yes(0.35),
       changing_room_available: yes(0.25),
       equipment_provided: yes(0.1),
+      claimed: yes(0.05),
       is_24x7: r() < 0.3,
       start_time: r() < 0.6 ? "06:00:00" : null,
       end_time: r() < 0.6 ? "23:00:00" : null,
