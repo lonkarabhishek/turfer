@@ -83,6 +83,9 @@ test("free hours: times only on cards shown and marked by an owner; the reply ho
   // Facilities and players stay as asked; a budget holds on every card.
   assert.equal(FACTS.not_free_hours({ reply: "Here are turfs with parking.", memo: { intent: "find_turf" } }), null);
   assert.match(FACTS.not_free_hours({ reply: "Dribble Den has hours marked free by its owner.", memo: { free_hours: true } }), /answered as free hours/);
+  // A player's search never gets the owners' answer (lib/ask/ownerHelp.ts).
+  assert.equal(FACTS.not_owner_help({ intent: "find_turf", reply: "Here are turfs in Pune.", memo: { intent: "find_turf" } }), null);
+  assert.match(FACTS.not_owner_help({ intent: "owner", reply: "You claim your turf's page yourself.", memo: { owner_help: true }, owner: {} }), /turf owner's question/);
   assert.equal(FACTS.cards_price_max({ turfs: [{ name: "A", morning_price: 900, evening_price: 1400 }] }, "1000"), null);
   assert.match(FACTS.cards_price_max({ turfs: [{ name: "A", morning_price: 1800 }, { name: "B" }] }, "1000"), /2 card\(s\) over ₹1000/);
   assert.equal(FACTS.free_cards_marked(none, undefined, {}, { free: [] }), null);

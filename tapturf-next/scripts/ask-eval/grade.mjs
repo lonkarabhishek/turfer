@@ -202,6 +202,8 @@ export const FACTS = {
     return /(?:^|\. )No\b|hasn't marked|couldn't check/i.test(r) ? null : `no free cards, but the reply reads "${r}"`;
   },
   // Not a free hours question (a facility, a price, players): answered as asked, never from the marked hours.
+  // A player's search or question never gets the owners' answer (lib/ask/ownerHelp.ts).
+  not_owner_help: (j) => (j.intent === "owner" || j.memo?.owner_help === true || j.owner ? `answered as a turf owner's question: "${j.reply}"` : null),
   not_free_hours: (j) => (j.memo?.free_hours === true || Object.keys(j.freeSlots ?? {}).length ? `answered as free hours: "${j.reply}"` : null),
   // Every card within the budget asked: its lowest listed rate (a card with none is not within it).
   cards_price_max: (j, max) => {

@@ -3,6 +3,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 // Relative, so npm run test:ask runs applyAskFilters (lib/ai/relax.test.ts).
 import { CITIES, CITY_ALIASES, CITY_IDS, cityInText, cityInfo, type CityId } from "../city";
+import { OWNER_PROMPT_LINE } from "../ask/ownerHelp";
 import { SPORT_PAGES, turfPlaysSport, sportBySlug } from "../sports";
 import { areaFor } from "../utils/area";
 import { getMinimumPrice, hasRealPrices, summarisePrice } from "../utils/prices";
@@ -108,7 +109,7 @@ export function turfExtrasAsked(f: AskReading): TurfExtra[] {
 
 /** A previous exchange, sent back so follow-ups can build on it. */
 /** free_hours: that turn answered which turfs have hours marked free (lib/ask/freeHours.ts), so "and tomorrow?" asks the same. */
-export type AskTurn = { user: string; reply: string; filters: Partial<AskReading> & { top?: string[]; free_hours?: boolean } };
+export type AskTurn = { user: string; reply: string; filters: Partial<AskReading> & { top?: string[]; free_hours?: boolean; owner_help?: boolean } };
 /** What the player is looking at when they ask (a turf page, a city page). turfId: that venue's row, as two can share a name in one city. */
 export type AskContext = { turf?: string | null; turfId?: string | null; city?: CityId | null };
 
@@ -212,6 +213,7 @@ Rules:
 - summary: at most 12 words restating the request in plain words, sentence case, no quotes, ₹ before amounts. Examples: Box cricket in Kothrud under ₹1,000 an hour. Football games this weekend near you. Hindu Gymkhana vs Vedant Sports Academy. For other: a 3 to 6 word label like "Just saying hi".
 - followups: two or three things the player might say next, each under 6 words, as they would type them ("Only 24 hours", "Cheaper ones", "Compare the top two", "Any games there this weekend"). For a greeting: three example asks. Never repeat the current message.
 - reply: one or two short sentences to the player, as the box would say them. For a search: what you are about to show ("Here are box cricket cages in Kothrud under ₹1,000, cheapest first."). For a named venue, say you are looking it up ("Let me find Prime Turf Marol."), never a city you guessed for it. For compare or question: a lead-in ("Let me put those two side by side."). For create_game: one line saying you'll set the game up from their message ("Let's set that up. Tap below and check the details."). For tool: one line saying which free tool does it and that it needs no sign-in ("TapTurf has a free NRR calculator for exactly this. It reads overs the cricket way, so 5.3 is five overs and three balls."); when the message includes numbers you may give the answer in the reply too, but only if you are sure of the maths. For other: when the player is clearly after cricket admin we do not have a tool for, say so and offer the nearest tool. For a greeting or small talk: greet back warmly and say what you can do in one line (find a turf, find a game, compare two venues, ask about one). For anything else off-topic: a light, kind one-liner steering back to turfs and games. Never promise results you cannot see; never invent a venue.${v10 ? `\n${V10_REPLY}` : ""}
+${OWNER_PROMPT_LINE}
 - Never name, recommend or point to a turf-booking app or booking website (Playo, Hudle, KheloMore, Playspots, Turf Town, District, Kixar, BookMyShow, Turfwala, TIDA Sports, Sporloc and the like) in reply, summary or followups, not even when the player names one ("Hudle pe Baner me football turf?" gets "Here are football turfs in Baner."), and never say a venue is booked online or through an app: TapTurf lists venues itself.`;
 }
 

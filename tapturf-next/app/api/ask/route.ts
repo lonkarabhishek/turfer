@@ -109,6 +109,7 @@ import {
 } from "@/lib/ask/freeHours";
 import { freeFiltersAsked, freeKeep } from "@/lib/ask/freeFilters";
 import { turfPlaysSport } from "@/lib/sports";
+import { ownerAnswer, ownerAsk, ownerText, ownerVenue } from "@/lib/ask/ownerHelp";
 
 // GET /api/ask?q=...&city=pune&lat=..&lng=..
 // One box, four intents: find a turf, find a game, compare venues,
@@ -134,8 +135,8 @@ const BLOG_DEADLINE_MS = 40_000;
 // model: a slow reading on top would run past the chat's wait.
 const BLOG_LATE_MS = 20_000;
 
-/** How the sentence was read: a ready answer, a cached reading, Claude now, or keywords; blog: answered from the article on screen; live: from the live score on screen. */
-type Via = "quick" | "cache" | "claude" | "keywords" | "blog" | "live";
+/** How the sentence was read: a ready answer, a cached reading, Claude now, or keywords; blog: answered from the article on screen; live: from the live score on screen; owner: a turf owner's question, answered from lib/ask/ownerHelp.ts. */
+type Via = "quick" | "cache" | "claude" | "keywords" | "blog" | "live" | "owner";
 
 function ipHash(req: Request): string {
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
@@ -254,6 +255,8 @@ function parseHistory(raw: string | null, version: RouterVersion): AskTurn[] {
       else delete keep.free_text;
       // A free hours answer (lib/ask/freeHours.ts): only true, so "and tomorrow?" asks the same.
       if (keep.free_hours !== true) delete keep.free_hours;
+      // An owner's answer (lib/ask/ownerHelp.ts): only true, so "how long does it take" asks about the same.
+      if (f.owner_help === true) keep.owner_help = true;
       if (Array.isArray(f.top)) keep.top = (f.top as unknown[]).filter((x) => typeof x === "string").slice(0, 5).map((x) => String(x).slice(0, 80));
       return [{ user: String(h.user).slice(0, MAX_Q), reply: String(h.reply ?? "").slice(0, 200), filters: keep as AskTurn["filters"] }];
     });
@@ -332,6 +335,55 @@ export async function GET(req: Request) {
   }
 
   const usage = newUsage();
+
+  // A turf owner's question ("claim my turf page", "how do I list my venue",
+  // "how long does verification take", "mera turf list karna hai"): answered
+  // from myTapturf's own steps (lib/ask/ownerHelp.ts), on any page, before
+  // the sentence is read and never by the model, which made a process up
+  // (asks of 16 Nov 2026). A turf it names that we list gets its own claim
+  // link (/my?claim=<id>&owner=1), or is said to be claimed already; on a
+  // turf's page, a question that names none is about that turf. A follow-up
+  // after such an answer ("is it free") asks about the same.
+  const ownerKind = ownerAsk(q, history[history.length - 1]?.filters.owner_help === true);
+  if (ownerKind) {
+    const t0 = performance.now();
+    const turfs = await turfsLoad.catch(() => [] as Turf[]);
+    // The page's turf only for a question about one turf's page: not "how do I list a turf", which may be another.
+    const pageTurf = ctx.turfId && ownerKind !== "list" && ownerKind !== "not_listed" && ownerKind !== "cost" ? (turfs.find((t) => t.id === ctx.turfId) ?? null) : null;
+    const answer = ownerAnswer(ownerKind, ownerVenue(turfs, q, [cityNamed(turfs, q), ctx.city, prefCity], pageTurf));
+    ms.handler = Math.round(performance.now() - t0);
+    ms.total = Date.now() - started;
+    const body = {
+      query: q,
+      intent: "owner",
+      summary: "For turf owners",
+      reply: answer.reply,
+      followups: answer.followups,
+      source: "keywords",
+      via: "owner",
+      ...(version === 10 ? { router: 10 } : {}),
+      filters: { city: null, sport: null, areas: [], maxPrice: null, time: null, when: null, skill: null, open24x7: false, wantsNearby: false, needs: [], players: null, sort: "rating" },
+      needsLocation: false,
+      freeLeft,
+      // A follow-up is another owner's question (owner_help), or a fresh search.
+      memo: { intent: "other", owner_help: true, top: [] },
+      relaxed: [],
+      total: 0,
+      owner: { kind: answer.kind, about: answer.about, steps: answer.steps, notes: answer.notes, links: answer.links },
+    };
+    logFinish(supabase, logId, {
+      // No shown_ids: a claim link is no card a player saw (owners see that count on myTapturf).
+      filters: { intent: "owner", kind: answer.kind, about: answer.about, turf_ids: answer.turfIds, ...(version === 10 ? { _router: 10 } : {}), ...(choice.eval ? { _eval: true } : {}), _src: "owner", _t: ms },
+      // 1 for an answer: admin counts 0 as an ask that found nothing.
+      results: 1,
+      ms: Date.now() - started,
+      source: "keywords",
+      // The reply with its steps and notes, as the owner read them (the column keeps the first 400 characters).
+      reply: ownerText(answer),
+      intent: "owner",
+    });
+    return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store", "Server-Timing": timingOf(ms, "owner") } });
+  }
 
   // On a live score page a question about the match is answered from the
   // match itself, read as followers get it (lib/ask/live.ts): the usual

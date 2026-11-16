@@ -12,7 +12,7 @@ import type { AskVisuals, CardPrices } from "@/lib/ask/visuals";
 
 export type AskResponse = {
   query: string;
-  intent: "find_turf" | "find_game" | "compare" | "question" | "create_game" | "tool" | "other" | "blog" | "live";
+  intent: "find_turf" | "find_game" | "compare" | "question" | "create_game" | "tool" | "other" | "blog" | "live" | "owner";
   summary: string;
   reply: string;
   followups: string[];
@@ -75,6 +75,8 @@ export type AskResponse = {
   tool?: { slug: string; name: string; tagline: string; href: string };
   /** For blog: the short version of the article on screen, or an answer about it, with its sources. */
   blog?: BlogAnswer;
+  /** For owner: a turf owner's question (lib/ask/ownerHelp.ts): the steps under the reply, what is said after them, and the buttons (myTapturf, a turf's claim link, our email). */
+  owner?: { kind: string; about: string; steps: string[]; notes: string[]; links: { label: string; href: string; primary?: boolean }[] };
   /** For live: the live score it was answered from (lib/ask/live.ts), and its last update in India's time ("7:41 pm"). */
   live?: { code: string; state: string; asOf: string | null };
 };
