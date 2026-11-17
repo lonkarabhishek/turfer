@@ -1,6 +1,7 @@
 import type { Passport } from "./passport";
 import type { PlayedWithPerson } from "./playedWith";
 import type { Streak } from "./streak";
+import type { TaggedGame } from "../games/played";
 
 /**
  * The passport routes: what they answer, shared by the routes and the
@@ -28,6 +29,11 @@ export type PassportResponse = {
   whatsapp: WhatsAppState | null;
   /** The same summary /api/me/played gives, so every number on the page agrees once the passport is in. */
   played: PlayedResponse;
+  /**
+   * Games that are over where a host tagged this person and they never answered (lib/games/played.ts,
+   * 20261118_game_tags_shown.sql): the card asks "Did you play?". Newest first; none before that file.
+   */
+  tagged?: TaggedGame[];
 };
 
 export type PlayedResponse = {

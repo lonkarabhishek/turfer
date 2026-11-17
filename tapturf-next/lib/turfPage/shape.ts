@@ -179,9 +179,11 @@ export function shapeGames(raw: unknown, venue: { id: string; name: string; addr
     .filter(isObj)
     .filter((g) => typeof g.id === "string")
     .map((g) => {
+      // The host's updates and the game's log stay on its own page too (20261118_game_updates.sql); of the names, the count.
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { host_phone, confirmed_names, ...rest } = g;
-      return { ...(rest as unknown as Game), turfs: { id: venue.id, name: venue.name, address: venue.address } };
+      const { host_phone, confirmed_names, updates, activity, ...rest } = g;
+      const named = Array.isArray(confirmed_names) && confirmed_names.length > 0 ? { confirmed_named: confirmed_names.length } : {};
+      return { ...(rest as unknown as Game), ...named, turfs: { id: venue.id, name: venue.name, address: venue.address } };
     });
 }
 

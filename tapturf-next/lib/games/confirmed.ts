@@ -8,11 +8,17 @@ import { asciiDigits, venueText } from "./otherVenue";
  *   names   what the host typed about a friend ("Rahul"): shown on the
  *           game page only, never an account;
  *   extra   people without a name ("+2 more");
- *   tags    TapTurf players the host picked. Until a tagged player says
- *           "Yes, I'm in" nobody but the host sees who it is: the page
- *           counts them with the people without a name. A yes makes them
- *           a player like any other; "Not me" or the host's untag frees
- *           the spot; an unanswered tag ends when the game starts.
+ *   tags    TapTurf players the host picked. Since 20261118_game_tags_shown.sql
+ *           (the site owner, 18 Nov 2026) the page lists a tagged player
+ *           at once, by name and photo, as "added by <host>" (only people
+ *           with "Let others find and tag me" on can be tagged; one who
+ *           turns it off later is counted, not named). "I'm in" makes
+ *           them a player like any other; "Remove me" (before the start)
+ *           or the host's untag frees the spot; an unanswered tag stays
+ *           on the lineup through kickoff, never a player, and afterwards
+ *           they can say on their Passport whether they played
+ *           (lib/games/played.ts). Before that file, and for a tag made
+ *           before it: hidden until "Yes, I'm in", ended at kickoff.
  * games.current_players is the host and the joined players plus all three
  * (20261117_game_confirmed.sql recounts it), so every card, list and count
  * that reads it agrees. The rules here are the database's
@@ -193,21 +199,74 @@ export const CONFIRMED_COPY = {
   fieldHint: "Type a first name or nickname, or pick a TapTurf player to tag.",
   add: "Add name",
   more: "More without names",
-  publicNote: "Names show on the game page. A TapTurf player you tag gets a notification, and shows by name only after they say yes.",
+  // True before and after 20261118_game_tags_shown.sql (a tagged player shows at once only after it; the create flow can't tell which).
+  publicNote: "Names show on the game page. A TapTurf player you tag gets a notification and can take themselves off.",
   full: "That fills the game. Raise max players to add more.",
   repeatNote: "Names and the count go on every game of this repeat. Tags are for the first game only.",
   lineupLabel: "Confirmed with the host",
 } as const;
 
-/** The tagged player's notification and the game page's card: what they are asked. */
+/**
+ * The tagged player's notification and the game page's card. A shown tag (20261118_game_tags_shown.sql: they are
+ * on the page already) offers "I'm in" and "Remove me"; one from before it asks "Yes, I'm in" or "Not me".
+ */
 export const TAG_COPY = {
   yes: "Yes, I'm in",
   no: "Not me",
+  in: "I'm in",
+  remove: "Remove me",
   saidYes: "You're in. See you at the game.",
   saidNo: "Done. You're off this game.",
   gone: "This tag isn't there any more.",
   closed: "This game has started or is off.",
 } as const;
+
+/** The two buttons of a tag: a shown one's, or the older question's. */
+export function tagButtons(shown: boolean): { yes: string; no: string } {
+  return shown ? { yes: TAG_COPY.in, no: TAG_COPY.remove } : { yes: TAG_COPY.yes, no: TAG_COPY.no };
+}
+
+/** A tagged player the game's page names: waiting, with tagging still on (public.game_tags_shown). u: their public username. */
+export type ShownTag = { id: string; uid: string; name: string; photo: string | null; u: string | null };
+
+const TAG_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TAG_USERNAME = /^[a-z][a-z0-9_]{2,19}$/;
+
+/** game_tags_shown's answer as the page takes it: these keys only, 20 at most, each player once. */
+export function shownTagViews(x: unknown): ShownTag[] {
+  const out: ShownTag[] = [];
+  const seen = new Set<string>();
+  for (const t of Array.isArray(x) ? x : []) {
+    const o = (t ?? {}) as Record<string, unknown>;
+    if (typeof o.id !== "string" || !TAG_ID.test(o.id) || typeof o.uid !== "string" || !TAG_ID.test(o.uid) || seen.has(o.uid.toLowerCase())) continue;
+    seen.add(o.uid.toLowerCase());
+    out.push({
+      id: o.id.toLowerCase(),
+      uid: o.uid.toLowerCase(),
+      name: typeof o.name === "string" && o.name.trim() ? o.name.trim().slice(0, 80) : "Player",
+      photo: typeof o.photo === "string" && /^https:\/\//.test(o.photo) ? o.photo : null,
+      u: typeof o.u === "string" && TAG_USERNAME.test(o.u) ? o.u : null,
+    });
+    if (out.length >= TAGS_MAX) break;
+  }
+  return out;
+}
+
+/**
+ * The tagged players a visitor is shown by name. `named` came with the
+ * page (the server's copy, up to about a minute old after a change);
+ * `tagged` is the row's own count, read now. Anyone who is a player by
+ * now (said "I'm in"; `inGame`, the lineup read now) or whom this viewer
+ * just saw leave (`left`: their own "Remove me") is taken out. If the
+ * copy still names more people than wait, someone took themselves off
+ * since it was made and it can't say who: nobody is named ("+N more")
+ * until the page's copy is fresh, so a player who removed themselves is
+ * gone for everyone at once.
+ */
+export function namedTags(i: { named: readonly ShownTag[]; tagged: number; inGame: ReadonlySet<string>; left?: ReadonlySet<string> }): ShownTag[] {
+  const list = i.named.filter((t) => !i.inGame.has(t.uid) && !i.left?.has(t.uid));
+  return list.length > Math.max(0, i.tagged) ? [] : list;
+}
 
 /** PostgREST's answer for a column the table doesn't have (before 20261117_game_confirmed.sql). */
 export function missingConfirmedColumn(error: { code?: string | null; message?: string | null } | null | undefined): boolean {

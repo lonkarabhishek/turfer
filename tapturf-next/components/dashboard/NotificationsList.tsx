@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { AlarmClock, Bell, CalendarCheck, CalendarClock, CalendarPlus, CalendarX, Check, ChevronRight, Hourglass, Info, MapPin, Store, UserCheck, UserMinus, UserPlus, XCircle } from "lucide-react";
+import { AlarmClock, Bell, CalendarCheck, CalendarClock, CalendarPlus, CalendarX, Check, ChevronRight, Hourglass, Info, MapPin, Megaphone, Stamp, Store, UserCheck, UserMinus, UserPlus, XCircle } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { quietToken } from "@/lib/account/client";
 import { getUserNotifications, markAsRead, markAllAsRead } from "@/lib/queries/notifications";
 import { answerTag } from "@/lib/queries/games";
-import { TAG_COPY } from "@/lib/games/confirmed";
-import { CLAIM_APPROVED, CLAIM_REJECTED, notificationLink } from "@/lib/my/claimNotice";
+import { tagButtons } from "@/lib/games/confirmed";
+import { CLAIM_APPROVED, CLAIM_REJECTED, TAG_PLAYED_ASK, notificationLink } from "@/lib/my/claimNotice";
 import type { Notification } from "@/types/notification";
 
 const ICON_MAP: Record<string, typeof Bell> = {
@@ -25,6 +25,9 @@ const ICON_MAP: Record<string, typeof Bell> = {
   game_tagged: UserCheck,
   game_tag_yes: UserCheck,
   game_tag_no: UserMinus,
+  // 20261118: after a game a tagged player never answered about, a pointer to the Passport's "Did you play?"; an update from a game's host.
+  [TAG_PLAYED_ASK]: Stamp,
+  game_update_posted: Megaphone,
   // A turf claim TapTurf decided (20261106_owner_claims_clarity.sql admin_answer_owner_claim).
   [CLAIM_APPROVED]: Store,
   [CLAIM_REJECTED]: Info,
@@ -69,7 +72,8 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
   };
 
-  // "Yes, I'm in" or "Not me" on a tag (lib/games/confirmed.ts): the answer goes, and the notification is read.
+  // A tag's answer (lib/games/confirmed.ts): "I'm in" or "Remove me" when the page lists them already (the
+  // notification says shown), else "Yes, I'm in" or "Not me". The answer goes, and the notification is read.
   const handleTag = async (notif: Notification, yes: boolean) => {
     const gameId = typeof notif.metadata?.gameId === "string" ? notif.metadata.gameId : null;
     if (!gameId) return;
@@ -195,7 +199,7 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
                         onClick={() => handleTag(notif, true)}
                         className="h-10 rounded-full bg-accent-600 hover:bg-accent-700 px-4 text-[14px] font-semibold text-white disabled:opacity-60"
                       >
-                        {TAG_COPY.yes}
+                        {tagButtons(notif.metadata?.shown === true).yes}
                       </button>
                       <button
                         type="button"
@@ -203,7 +207,7 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
                         onClick={() => handleTag(notif, false)}
                         className="h-10 rounded-full border border-primary-300 bg-white px-4 text-[14px] font-semibold text-primary-900 hover:bg-primary-50 disabled:opacity-60"
                       >
-                        {TAG_COPY.no}
+                        {tagButtons(notif.metadata?.shown === true).no}
                       </button>
                     </div>
                   )}

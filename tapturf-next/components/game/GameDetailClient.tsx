@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Trophy, X, Loader2, Pencil, Save, Send, UserCheck } from "lucide-react";
+import { ArrowLeft, Megaphone, Trophy, X, Loader2, Pencil, Save, Send, UserCheck } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { quietToken } from "@/lib/account/client";
 import {
@@ -14,6 +14,8 @@ import {
   getMyRequestForGame,
   getSeriesGames,
   getSeriesInfo,
+  postUpdate,
+  removeUpdate,
   sendJoinRequest,
   acceptRequest,
   declineRequest,
@@ -22,7 +24,11 @@ import {
 } from "@/lib/queries/games";
 import { repeatLabel } from "@/lib/games/repeat";
 import { isMapsUrl } from "@/lib/games/otherVenue";
-import { TAG_COPY, confirmedIn, confirmedReady } from "@/lib/games/confirmed";
+import { confirmedIn, confirmedReady, namedTags, tagButtons, type ShownTag } from "@/lib/games/confirmed";
+import { speedOf } from "@/lib/games/progress";
+import { UPDATES_COPY, UPDATE_CHARS, canPostUpdate, updateProblem, updateProblemText, updatesList, updatesReady } from "@/lib/games/updates";
+import { activityLog } from "@/lib/games/activity";
+import { cleanVenueName } from "@/lib/utils/bookingApps";
 import type { GameTag, SeriesInfo } from "@/lib/games/types";
 import { ConfirmedField, draftCount, emptyConfirmed, type ConfirmedDraft } from "./ConfirmedField";
 import {
@@ -67,12 +73,30 @@ import { GameSkeleton } from "./detail/GameSkeleton";
 import { gamePath, gameUrl } from "@/lib/utils/gamePath";
 import { GameRepeat } from "./detail/GameRepeat";
 import { GameScore } from "./detail/GameScore";
+import { GameActivity } from "./detail/GameActivity";
 import { SeriesStopSheet } from "./SeriesStopSheet";
 
 const field = "w-full min-h-12 border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-accent-600 focus:border-accent-600 bg-primary-50";
 const label = "block text-[14px] font-medium text-primary-700 mb-1";
 
-export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null }: { gameId: string; liveLinks?: boolean; /** The game's own turf session code (lib/tournament/codes.ts gameTournamentCode), for a cricket match game. */ sessionCode?: string | null }) {
+const NO_TAGS: readonly ShownTag[] = [];
+
+export function GameDetailClient({
+  gameId,
+  liveLinks = false,
+  sessionCode = null,
+  tagged = NO_TAGS,
+}: {
+  gameId: string;
+  liveLinks?: boolean;
+  /** The game's own turf session code (lib/tournament/codes.ts gameTournamentCode), for a cricket match game. */
+  sessionCode?: string | null;
+  /**
+   * The tagged players this page names (lib/games/shownTags.server.ts): read with the page's own copy on the
+   * server, never by the browser, and checked here against the row and lineup read now (namedTags).
+   */
+  tagged?: readonly ShownTag[];
+}) {
   const { user, login, getToken, signedInWith } = useAuth();
   // Reads on load never sign anyone out; the actions use getToken.
   const readToken = quietToken(signedInWith);
@@ -112,10 +136,24 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
   const [stopOpen, setStopOpen] = useState(false);
   // Already confirmed (lib/games/confirmed.ts): the host's waiting tags, whether this viewer is tagged and waiting, the
   // answer being sent and what came back, and the edit sheet's draft.
-  const [tags, setTags] = useState<{ gameId: string; list: GameTag[]; mine: boolean } | null>(null);
+  const [tags, setTags] = useState<{ gameId: string; list: GameTag[]; mine: boolean; shown: boolean } | null>(null);
   const [tagBusy, setTagBusy] = useState(false);
   const [tagSaid, setTagSaid] = useState("");
+  // This viewer took themselves off (Remove me): gone from the names at once, before the page's copy is fresh.
+  const [leftTag, setLeftTag] = useState<string | null>(null);
   const [people, setPeople] = useState<ConfirmedDraft>(emptyConfirmed);
+  // Updates from the host (lib/games/updates.ts): the sheet, what is typed, and one being taken back.
+  const [showUpdate, setShowUpdate] = useState(false);
+  const [updateText, setUpdateText] = useState("");
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateError, setUpdateError] = useState("");
+  const [removing, setRemoving] = useState<string | null>(null);
+  // "2 h ago": the clock, read when the page mounts and again each minute.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const isHost = !!user && !!game && game.creator_id === user.id;
   const status = game ? getGameStatus(game) : "upcoming";
@@ -183,18 +221,21 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
   const taggedCount = confirmedIn(game).tagged;
   const loadTags = async () => {
     const t = await getGameTags(readToken, gameId);
-    setTags({ gameId, list: t.tags, mine: t.mine });
+    setTags({ gameId, list: t.tags, mine: t.mine, shown: t.shown });
   };
   useEffect(() => {
     if (!viewerId || taggedCount === 0) return;
     let alive = true;
-    void getGameTags(readToken, gameId).then((t) => alive && setTags({ gameId, list: t.tags, mine: t.mine }));
+    void getGameTags(readToken, gameId).then((t) => alive && setTags({ gameId, list: t.tags, mine: t.mine, shown: t.shown }));
     return () => {
       alive = false;
     };
   }, [gameId, viewerId, taggedCount, readToken]);
   const waitingTags = isHost && taggedCount > 0 && tags?.gameId === gameId ? tags.list : [];
-  const taggedMe = !isHost && !isParticipant && taggedCount > 0 && tags?.gameId === gameId && tags.mine;
+  // The viewer's own waiting tag. Answered before the game starts; once it is over, on their Passport.
+  const myTag = !isHost && !isParticipant && taggedCount > 0 && tags?.gameId === gameId && tags.mine ? { shown: tags.shown } : null;
+  const taggedMe = !!myTag && status === "upcoming" && game?.status !== "cancelled" && game?.status !== "completed";
+  const askPlayed = !!myTag && status === "expired" && game?.status !== "cancelled";
 
   const handleTag = async (yes: boolean) => {
     setTagBusy(true);
@@ -202,10 +243,34 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
     setTagBusy(false);
     setTagSaid(r.text);
     if (r.done) {
-      setTags({ gameId, list: [], mine: false });
+      setTags({ gameId, list: [], mine: false, shown: false });
+      if (viewerId) setLeftTag(viewerId);
       await loadGame();
       await loadParticipants();
     }
+  };
+
+  const handlePostUpdate = async () => {
+    const bad = updateProblem(updateText);
+    if (bad) return setUpdateError(updateProblemText(bad));
+    setUpdateBusy(true);
+    setUpdateError("");
+    const r = await postUpdate(getToken, gameId, updateText.trim());
+    setUpdateBusy(false);
+    if ("error" in r) return setUpdateError(r.error);
+    setGame((g) => (g ? { ...g, updates: r.updates } : g));
+    setNow(Date.now());
+    setUpdateText("");
+    setShowUpdate(false);
+  };
+
+  const handleRemoveUpdate = async (id: string) => {
+    setRemoving(id);
+    const r = await removeUpdate(getToken, gameId, id);
+    setRemoving(null);
+    if ("error" in r) return setUpdateError(r.error);
+    setUpdateError("");
+    setGame((g) => (g ? { ...g, updates: r.updates } : g));
   };
 
   // A game of a repeat: its rule and its next games (public reads, as the game is).
@@ -378,7 +443,8 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
       end_time: editData.end_time,
       max_players: editData.max_players,
       price_per_player: Number(editData.price_per_player),
-      description: editData.description || undefined,
+      // Once the game has updates (20261118_game_updates.sql) its first note is not edited: the host posts an update.
+      ...(updatesReady(game) ? {} : { description: editData.description || undefined }),
       turf_booked: editData.turf_booked,
       skill_level: editData.skill_level as Game["skill_level"],
       ...move,
@@ -436,6 +502,26 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
   const listed = where?.listed ?? true;
   const chip: HeroChip = heroChip({ isHost, status: game.status, timing: status, spotsLeft });
   const note = cta === "cancelled" || cta === "ended" || cta === "full" ? cta : null;
+  // The bar's label: "Filling fast" only when players really joined quickly (lib/games/progress.ts), from the lineup's own times.
+  const joiners = participants.filter((p) => p.user_id !== game.creator_id);
+  const speed = speedOf({
+    current: game.current_players,
+    max: game.max_players,
+    closed: status !== "upcoming" || cancelled || game.status === "completed",
+    now,
+    createdAt: game.created_at,
+    joined: joiners.length,
+    joinedAt: joiners.map((p) => p.joined_at),
+  });
+  // The tagged players named to this visitor: the page's copy, less anyone in the lineup by now and the viewer once they left.
+  const named = isHost
+    ? []
+    : namedTags({ named: tagged, tagged: confirmedIn(game).tagged, inGame: new Set(participants.map((p) => p.user_id)), left: leftTag ? new Set([leftTag]) : undefined });
+  // What the host has said, newest first, and whether they can add to it now.
+  const updates = updatesList(game, hostNote(game));
+  const canPost = isHost && canPostUpdate(game) && status !== "expired" && !cancelled && game.status !== "completed";
+  const log = activityLog({ game, hostFirst, participants, clean: cleanVenueName });
+  const buttons = tagButtons(!!myTag?.shown);
 
   const model: CtaModel = {
     state: cta,
@@ -518,12 +604,14 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
               <section aria-labelledby="tag-h" className="rounded-2xl border border-accent-500/40 bg-accent-50 p-4">
                 <h2 id="tag-h" className="flex items-center gap-2 text-[16px] font-bold text-primary-900">
                   <UserCheck className="w-5 h-5 text-accent-700 shrink-0" aria-hidden />
-                  {taggedMe ? "Are you in?" : "Thanks"}
+                  {taggedMe ? (myTag?.shown ? "You're on the list" : "Are you in?") : "Thanks"}
                 </h2>
                 {taggedMe ? (
                   <>
                     <p className="mt-1 text-[14px] leading-snug text-primary-800">
-                      {hostFirst === "the host" ? "The host" : hostFirst} added you as confirmed for this game. Your name shows in the lineup only if you say yes.
+                      {myTag?.shown
+                        ? `${hostFirst === "the host" ? "The host" : hostFirst} added you to this game, and your name shows in the lineup. Tap I'm in to confirm, or remove yourself: your name comes off at once.`
+                        : `${hostFirst === "the host" ? "The host" : hostFirst} added you as confirmed for this game. Your name shows in the lineup only if you say yes.`}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
@@ -532,7 +620,7 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
                         onClick={() => handleTag(true)}
                         className="h-11 rounded-full bg-accent-600 hover:bg-accent-700 px-5 text-[15px] font-semibold text-white disabled:opacity-60"
                       >
-                        {TAG_COPY.yes}
+                        {buttons.yes}
                       </button>
                       <button
                         type="button"
@@ -540,7 +628,7 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
                         onClick={() => handleTag(false)}
                         className="h-11 rounded-full border border-primary-300 bg-white px-5 text-[15px] font-semibold text-primary-900 hover:bg-primary-50 disabled:opacity-60"
                       >
-                        {TAG_COPY.no}
+                        {buttons.no}
                       </button>
                     </div>
                     {tagSaid && <p role="alert" className="mt-2 text-[14px] text-hot-600">{tagSaid}</p>}
@@ -549,6 +637,16 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
                   <p role="status" className="mt-1 text-[14px] text-primary-800">{tagSaid}</p>
                 )}
               </section>
+            )}
+
+            {/* Tagged, never answered, and the game is over: the answer is on their Passport. */}
+            {askPlayed && !tagSaid && (
+              <p className="rounded-2xl border border-primary-200 bg-primary-50 p-4 text-[14px] leading-snug text-primary-800">
+                {hostFirst === "the host" ? "The host" : hostFirst} added you to this game. Did you play?{" "}
+                <Link href="/dashboard?tab=passport" className="font-semibold text-accent-800 underline underline-offset-2">
+                  Confirm it on your Passport
+                </Link>
+              </p>
             )}
 
             <GameFacts
@@ -570,7 +668,16 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
               hostFirst={hostFirst}
               hostPhoto={game.host_profile_image_url}
               hostId={game.creator_id}
-              note={hostNote(game)}
+              updates={updates}
+              now={now}
+              canPost={canPost}
+              onPost={() => {
+                setUpdateError("");
+                setShowUpdate(true);
+              }}
+              onRemove={handleRemoveUpdate}
+              removing={removing}
+              error={showUpdate ? "" : updateError}
               isHost={isHost}
               phone={phone}
               showNumber={showNumber}
@@ -582,6 +689,8 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
               participants={participants}
               confirmed={confirmedIn(game)}
               waitingTags={waitingTags}
+              tagged={named}
+              speed={speed}
               hostFirst={hostFirst}
               creatorId={game.creator_id}
               viewerId={viewerId}
@@ -654,6 +763,9 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
                 </a>
               </p>
             )}
+
+            {/* Last on the page: what happened to the game and when (lib/games/activity.ts). */}
+            <GameActivity log={log} now={now} />
           </div>
         </div>
 
@@ -735,6 +847,61 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
                 {joinError || "Couldn't send your request. You may have asked already."}
               </p>
             )}
+          </div>
+        </ViewportOverlay>
+      )}
+
+      {showUpdate && (
+        <ViewportOverlay className="z-50 flex items-end md:items-center justify-center">
+          <div className="fixed inset-0 bg-black/50 animate-fade-in" onClick={() => setShowUpdate(false)} />
+          <div role="dialog" aria-modal="true" aria-labelledby="update-h" className="relative w-full md:max-w-md max-h-[calc(var(--vv-h,100dvh)*0.92)] overflow-y-auto overscroll-contain bg-white rounded-t-3xl md:rounded-3xl p-6 animate-slide-up">
+            <div className="flex items-center justify-between mb-3">
+              <h2 id="update-h" className="text-[20px] font-bold text-primary-900 flex items-center gap-2">
+                <Megaphone className="w-5 h-5 text-primary-500" aria-hidden />
+                {UPDATES_COPY.post}
+              </h2>
+              <button onClick={() => setShowUpdate(false)} aria-label="Close" className="size-11 -mr-2 grid place-items-center rounded-full hover:bg-primary-100">
+                <X className="w-5 h-5 text-primary-700" aria-hidden />
+              </button>
+            </div>
+            <label htmlFor="update-text" className="sr-only">Your update</label>
+            <textarea
+              id="update-text"
+              value={updateText}
+              onChange={(e) => {
+                setUpdateText(e.target.value);
+                if (updateError) setUpdateError("");
+              }}
+              aria-describedby="update-hint"
+              placeholder={UPDATES_COPY.placeholder}
+              maxLength={UPDATE_CHARS}
+              rows={4}
+              className={`${field} resize-none`}
+            />
+            <div className="mt-1 flex items-start justify-between gap-3">
+              <p id="update-hint" className="text-[13px] leading-snug text-primary-500">{UPDATES_COPY.hint}</p>
+              <p className="shrink-0 text-[13px] text-primary-500 tabular" aria-hidden>
+                {[...updateText].length}/{UPDATE_CHARS}
+              </p>
+            </div>
+            <button
+              onClick={handlePostUpdate}
+              disabled={updateBusy || !updateText.trim()}
+              className="w-full mt-4 h-12 rounded-full bg-accent-600 hover:bg-accent-700 text-white text-[16px] font-semibold disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {updateBusy ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
+                  Posting…
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" aria-hidden />
+                  Post update
+                </>
+              )}
+            </button>
+            {updateError && <p role="alert" className="text-[14px] text-hot-600 text-center mt-3">{updateError}</p>}
           </div>
         </ViewportOverlay>
       )}
@@ -840,6 +1007,27 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
                 </select>
               </div>
 
+              {updatesReady(game) ? (
+                // The note the game went up with stays as it is; what the host adds now is an update, with its time.
+                canPost && (
+                  <div>
+                    <p className={label}>Something to tell the players?</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowEditModal(false);
+                        setUpdateError("");
+                        setShowUpdate(true);
+                      }}
+                      className="h-11 inline-flex items-center gap-2 rounded-full border border-primary-300 px-4 text-[15px] font-semibold text-primary-900 hover:bg-primary-50"
+                    >
+                      <Megaphone className="w-4 h-4" aria-hidden />
+                      {UPDATES_COPY.post}
+                    </button>
+                    <p className="mt-1 text-[13px] text-primary-500">It shows on the game page with the time, and the players are told.</p>
+                  </div>
+                )
+              ) : (
               <div>
                 <label htmlFor="edit-note" className={label}>Note for players</label>
                 <textarea
@@ -854,6 +1042,7 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
                 />
                 <p id="edit-note-hint" className="mt-1 text-[13px] text-primary-500">Shown on the game page</p>
               </div>
+              )}
 
               <label className="flex items-center gap-3 min-h-11 cursor-pointer">
                 <input

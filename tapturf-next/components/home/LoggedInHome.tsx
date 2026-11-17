@@ -22,6 +22,8 @@ import { CityLine } from "@/components/city/CityLine";
 import { UserAvatar } from "@/components/account/UserAvatar";
 import { StreakNudge } from "@/components/profile/StreakNudge";
 import { usePlayed } from "@/components/profile/usePlayed";
+import { PlayersBar } from "@/components/game/PlayersBar";
+import { joinedOnTapTurf, speedOf } from "@/lib/games/progress";
 import {
   filterNonExpiredGames,
   sortGamesByDateTime,
@@ -358,6 +360,8 @@ function ClassyGameCard({ game, owned = false }: { game: Game; owned?: boolean }
   const isTight = spotsLeft > 0 && spotsLeft <= 2;
   const kickoff = useMemo(() => new Date(`${game.date}T${game.start_time}`), [game.date, game.start_time]);
   const status = getGameStatus(game);
+  // Read once per mount (this card is drawn in the browser only, after the games are fetched).
+  const [kickoffNow] = useState(() => Date.now());
 
   return (
     <Link href={gamePath(game)} className="block group focus-neon rounded-2xl">
@@ -433,19 +437,25 @@ function ClassyGameCard({ game, owned = false }: { game: Game; owned?: boolean }
             </span>
           </div>
 
-          {/* Players fill bar */}
+          {/* Players: the count, and the shared bar ("Filling fast" only when it is: lib/games/progress.ts). */}
           <div className="mt-3 flex items-center gap-2">
             <span className="text-[10px] font-mono tabular text-primary-500 w-10 shrink-0">
               {game.current_players}/{game.max_players}
             </span>
-            <div className="flex-1 h-1 bg-primary-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  isFull ? "bg-primary-300" : isTight ? "bg-hot-500" : "bg-accent-500"
-                }`}
-                style={{ width: `${Math.min((game.current_players / game.max_players) * 100, 100)}%` }}
-              />
-            </div>
+            <PlayersBar
+              current={game.current_players}
+              max={game.max_players}
+              size="tile"
+              className="flex-1 min-w-0 !h-5"
+              speed={speedOf({
+                current: game.current_players,
+                max: game.max_players,
+                closed: status !== "upcoming" || game.status === "cancelled" || game.status === "completed",
+                now: kickoffNow,
+                createdAt: game.created_at,
+                joined: joinedOnTapTurf(game),
+              })}
+            />
           </div>
         </div>
       </article>

@@ -1,19 +1,32 @@
-import { Lock, MessageCircle, Phone } from "lucide-react";
+import { Lock, Megaphone, MessageCircle, Phone } from "lucide-react";
+import { UPDATES_COPY, updateWhen, type UpdateEntry } from "@/lib/games/updates";
 import { VerifiedTickFor } from "@/components/account/VerifiedTick";
 import { waNumber } from "@/lib/utils/gameState";
 import { Avatar } from "./Avatar";
 
 /**
- * Who hosts, their note in their own words (when they wrote one), and how
- * to reach them: the number and WhatsApp for the players they accepted,
- * otherwise a line that says when it shows.
+ * Who hosts, what they have said about the game, and how to reach them:
+ * the number and WhatsApp for the players they accepted, otherwise a line
+ * that says when it shows. What they said is their updates, newest first,
+ * each with when it was posted (lib/games/updates.ts): the note the game
+ * went up with is the first of them, at the time the game was posted. A
+ * game with that note alone looks as it always did; with nothing, players
+ * see nothing and the host a quiet "Post an update". The host posts from
+ * here and can take an update back; nothing is edited, so the times stay
+ * true.
  */
 export function GameHostCard({
   hostName,
   hostFirst,
   hostPhoto,
   hostId,
-  note,
+  updates,
+  now,
+  canPost = false,
+  onPost,
+  onRemove,
+  removing = null,
+  error = "",
   isHost,
   phone,
   showNumber,
@@ -25,7 +38,18 @@ export function GameHostCard({
   hostFirst: string;
   hostPhoto?: string | null;
   hostId: string;
-  note: string | null;
+  /** updatesList(): every update, newest first, then the note the game went up with. */
+  updates: readonly UpdateEntry[];
+  /** For "2 h ago". */
+  now: number;
+  /** The host can post one now (the database takes updates, the game is on, it has fewer than 20). */
+  canPost?: boolean;
+  onPost?: () => void;
+  onRemove?: (id: string) => void;
+  /** The update being taken back. */
+  removing?: string | null;
+  /** Why the last take-back didn't go through, in the server's words. */
+  error?: string;
   isHost: boolean;
   /** The host's number when the game has one. */
   phone: string | null;
@@ -37,6 +61,18 @@ export function GameHostCard({
   onSignIn?: () => void;
 }) {
   const named = hostFirst !== "the host";
+  // The note alone: as calm as it always was.
+  const only = updates.length === 1 && updates[0].original ? updates[0] : null;
+  const postButton = isHost && canPost && onPost && (
+    <button
+      type="button"
+      onClick={onPost}
+      className="h-11 inline-flex items-center gap-2 rounded-full border border-primary-300 px-4 text-[15px] font-semibold text-primary-900 hover:bg-primary-50 press-tight"
+    >
+      <Megaphone className="w-4 h-4" aria-hidden />
+      {UPDATES_COPY.post}
+    </button>
+  );
   return (
     <section aria-labelledby="host-h" className="rounded-3xl border border-primary-200 bg-white p-5 shadow-soft">
       <div className="flex items-center gap-3 min-w-0">
@@ -52,13 +88,60 @@ export function GameHostCard({
         </div>
       </div>
 
-      {note && (
+      {only ? (
         <figure className="mt-4 rounded-2xl rounded-tl-md bg-primary-50 p-4">
           <figcaption className="text-[13px] font-semibold text-primary-700">
             {isHost ? "Your note" : named ? `A note from ${hostFirst}` : "A note from the host"}
           </figcaption>
-          <blockquote className="mt-1 text-[16px] leading-relaxed text-primary-900 whitespace-pre-line [overflow-wrap:anywhere]">{note}</blockquote>
+          <blockquote className="mt-1 text-[16px] leading-relaxed text-primary-900 whitespace-pre-line [overflow-wrap:anywhere]">{only.text}</blockquote>
+          {only.at !== null && (
+            <p className="mt-1.5 text-[12px] text-primary-500">
+              {UPDATES_COPY.posted} · <time dateTime={updateWhen(only, now).iso}>{updateWhen(only, now).stamp}</time>
+            </p>
+          )}
         </figure>
+      ) : updates.length > 0 ? (
+        <div className="mt-4">
+          <h3 id="updates-h" className="text-[13px] font-semibold text-primary-700">
+            {isHost ? UPDATES_COPY.yours : `Updates from ${named ? hostFirst : "the host"}`}
+          </h3>
+          <ol aria-labelledby="updates-h" className="mt-2 space-y-2">
+            {updates.map((u, i) => {
+              const when = updateWhen(u, now);
+              return (
+                <li key={u.id ?? "note"} className={`rounded-2xl rounded-tl-md p-4 ${i === 0 ? "bg-accent-50" : "bg-primary-50"}`}>
+                  <p className="text-[16px] leading-relaxed text-primary-900 whitespace-pre-line [overflow-wrap:anywhere]">{u.text}</p>
+                  <p className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-[12px] text-primary-500">
+                    {u.original ? (
+                      <span>{UPDATES_COPY.posted}{when.stamp ? " ·" : ""}</span>
+                    ) : (
+                      <span className="font-semibold text-primary-700">{when.ago} ·</span>
+                    )}
+                    {when.stamp && <time dateTime={when.iso}>{when.stamp}</time>}
+                    {isHost && u.id && onRemove && (
+                      <button
+                        type="button"
+                        disabled={removing === u.id}
+                        onClick={() => onRemove(u.id as string)}
+                        aria-label={`Remove the update from ${when.stamp}`}
+                        className="ml-auto -my-2 h-9 px-2 text-[13px] font-semibold text-primary-700 underline underline-offset-2 hover:text-primary-900 disabled:opacity-60"
+                      >
+                        {UPDATES_COPY.remove}
+                      </button>
+                    )}
+                  </p>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      ) : null}
+      {error && <p role="alert" className="mt-2 text-[14px] text-hot-600">{error}</p>}
+      {postButton && (
+        <div className="mt-3">
+          {updates.length === 0 && <p className="mb-2 text-[14px] text-primary-500">{UPDATES_COPY.none}</p>}
+          {postButton}
+        </div>
       )}
 
       {isHost ? (

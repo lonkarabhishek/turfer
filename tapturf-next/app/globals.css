@@ -293,6 +293,42 @@ button, a, [role="button"], summary, label[for] {
   animation: livePulse 1.6s ease-in-out infinite;
 }
 
+/* Players bar (components/game/PlayersBar.tsx): the fill grows once, when
+   the page first paints, or when the bar scrolls into view (the component
+   holds it at data-fill="wait" until then, then sets "go"). A bar that is
+   really filling fast (lib/games/progress.ts) gets a slow sheen across its
+   fill. Neither under prefers-reduced-motion (below, and here once more so
+   the bar is right even if that block is ever dropped). */
+@keyframes playersBarFill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+@keyframes playersBarSheen {
+  0%        { transform: translateX(-100%); }
+  55%, 100% { transform: translateX(100%); }
+}
+.players-bar-fill {
+  position: relative;
+  overflow: hidden;
+  transform-origin: left center;
+  animation: playersBarFill 800ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.players-bar-fill[data-fill="wait"] { animation: none; transform: scaleX(0); }
+.players-bar-fill[data-fill="go"] { animation: playersBarFill 800ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.players-bar-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.55) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: playersBarSheen 2.6s ease-in-out 900ms infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .players-bar-fill,
+  .players-bar-fill[data-fill] { animation: none !important; transform: none !important; }
+  .players-bar-sheen::after { animation: none !important; display: none; }
+}
+
 /* Neon focus ring helper (green, high-contrast on white) */
 .focus-neon:focus-visible {
   outline: 2px solid #16A34A;

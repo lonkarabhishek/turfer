@@ -7,6 +7,7 @@ import { anonDb } from "./db";
 import { legacyRpc } from "./legacy";
 import { missingVenueColumn, storedVenueCity } from "./otherVenue";
 import { hasConfirmedKeys, missingConfirmedColumn } from "./confirmed";
+import { updateProblem } from "./updates";
 import { isUuid, parseChanges, parseCreate, parseNote, parseSeries } from "./payload";
 import { cityInfo } from "../city";
 import type { GameChanges } from "./types";
@@ -72,6 +73,8 @@ function refusal(d: Record<string, unknown>): NextResponse {
       return VENUE_OFF();
     case "confirmed_off":
       return CONFIRMED_OFF();
+    case "most":
+      return accountReply({ reason: "updates_full" }, "not_allowed");
     default:
       return accountError("unavailable");
   }
@@ -243,6 +246,10 @@ export async function patchGame(req: Request, gameId: string): Promise<NextRespo
   if ("bad" in p) return accountReply({ field: p.bad }, "bad");
   const off = (await venueOff(p.ok)) ?? (await confirmedOff(p.ok));
   if (off) return off;
+  // Once the database has updates (20261118_game_updates.sql) the note the game went up with is not edited any
+  // more: what the host adds is an update, with its time. A page loaded before that still sends the note with
+  // every save: it is left out, and the rest of the edit goes through.
+  if ("description" in p.ok && (await updatesReady())) delete p.ok.description;
   const notice = await moveNotice(gameId.toLowerCase(), p.ok);
   return run("game_update", { p_user_id: w.userId, p_game_id: gameId.toLowerCase(), p_changes: p.ok, p_move_notice: notice }, (d) => ({
     r: "ok",
@@ -265,11 +272,14 @@ export async function cancelGame(req: Request, gameId: string): Promise<NextResp
 
 const text = (x: unknown) => (typeof x === "string" && x ? x : null);
 
-/** Waiting tags as the host reads them: these keys only. */
-function tagViews(x: unknown): { id: string; name: string; photo: string | null; u: string | null }[] {
+/**
+ * Waiting tags as the host reads them: these keys only. shown (20261118_game_tags_shown.sql): the page names that
+ * player to everyone; absent before that file, when nobody tagged is named.
+ */
+function tagViews(x: unknown): { id: string; name: string; photo: string | null; u: string | null; shown?: boolean }[] {
   return list(x)
     .filter((t): t is Record<string, unknown> => !!t && typeof t === "object" && isUuid((t as Record<string, unknown>).id))
-    .map((t) => ({ id: t.id as string, name: text(t.name) ?? "Player", photo: text(t.photo), u: text(t.u) }));
+    .map((t) => ({ id: t.id as string, name: text(t.name) ?? "Player", photo: text(t.photo), u: text(t.u), ...(typeof t.shown === "boolean" ? { shown: t.shown } : {}) }));
 }
 
 /**
@@ -285,22 +295,106 @@ export async function getGameTags(req: Request, gameId: string): Promise<NextRes
   if ("unavailable" in res) return accountError("unavailable");
   const d = res.data;
   if (d.r !== "ok") return refusal(d);
-  return accountReply(d.host === true ? { host: true, tags: tagViews(d.tags) } : { host: false, mine: d.mine === "pending" ? "pending" : null });
+  if (d.host === true) return accountReply({ host: true, tags: tagViews(d.tags) });
+  // shown: their waiting tag is one the page names them by (they answer "I'm in" or "Remove me").
+  return accountReply({ host: false, mine: d.mine === "pending" ? "pending" : null, ...(d.mine === "pending" && typeof d.shown === "boolean" ? { shown: d.shown } : {}) });
 }
 
-/** POST /api/games/[id]/tags { answer: "yes" | "no" }: the tagged caller says they are in, or that it isn't them. */
+const TAG_ANSWERS = ["yes", "no", "played", "not_played"];
+
+/**
+ * POST /api/games/[id]/tags { answer }: the tagged caller's answer. Before the game, "yes" (I'm in) or "no"
+ * (Remove me, Not me). Once it is over, on their Passport: "played" (they become a player of it, so it counts)
+ * or "not_played" (they come off its lineup), through game_tag_played (20261118_game_tags_shown.sql).
+ */
 export async function postGameTag(req: Request, gameId: string): Promise<NextResponse> {
   const w = await who(req, allowWrite);
   if ("reply" in w) return w.reply;
   if (!isUuid(gameId)) return accountError("bad");
   const body = await readSmallJson(req, 500);
-  if (!body || (body.answer !== "yes" && body.answer !== "no") || Object.keys(body).some((k) => k !== "answer")) return accountReply({ field: "answer" }, "bad");
-  const res = await accountRpcIfThere("game_tag_answer", { p_user_id: w.userId, p_game_id: gameId.toLowerCase(), p_yes: body.answer === "yes" });
+  if (!body || typeof body.answer !== "string" || !TAG_ANSWERS.includes(body.answer) || Object.keys(body).some((k) => k !== "answer")) return accountReply({ field: "answer" }, "bad");
+  const after = body.answer === "played" || body.answer === "not_played";
+  const res = await accountRpcIfThere(after ? "game_tag_played" : "game_tag_answer", {
+    p_user_id: w.userId,
+    p_game_id: gameId.toLowerCase(),
+    p_yes: body.answer === "yes" || body.answer === "played",
+  });
   if ("missing" in res) return CONFIRMED_OFF();
   if ("unavailable" in res) return accountError("unavailable");
   const d = res.data;
   if (d.r !== "ok") return refusal(d);
   return accountReply({ r: "ok", status: d.status === "yes" ? "yes" : "no", current_players: typeof d.current_players === "number" ? d.current_players : null });
+}
+
+/* ------------------------------------------------------------------ */
+/* Updates from the host (20261118_game_updates.sql)                   */
+/* ------------------------------------------------------------------ */
+
+/** Updates while the database takes none (before 20261118_game_updates.sql): said plainly; the note shows as it did. */
+const UPDATES_OFF = () => accountReply({ reason: "updates_off" }, "unavailable");
+
+const UPDATE_KEYS = ["id", "at", "text"] as const;
+
+/** A game's updates as the routes send them: these keys only. */
+function updateViews(x: unknown): Record<string, unknown>[] {
+  return list(x)
+    .filter((u): u is Record<string, unknown> => !!u && typeof u === "object" && isUuid((u as Record<string, unknown>).id))
+    .map((u) => Object.fromEntries(UPDATE_KEYS.map((k) => [k, u[k]])));
+}
+
+let updatesSeen = false;
+let updatesMissingAt = 0;
+
+/** Whether the database takes updates (games.updates is there); as venuesReady, but a read that fails says no. */
+export async function updatesReady(): Promise<boolean> {
+  if (updatesSeen) return true;
+  if (updatesMissingAt && Date.now() - updatesMissingAt < 60_000) return false;
+  try {
+    const { error } = await anonDb().from("games").select("updates").limit(0);
+    if (!error) {
+      updatesSeen = true;
+      return true;
+    }
+    updatesMissingAt = Date.now();
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** For the route tests: forget what updatesReady saw. */
+export function forgetUpdatesReady(): void {
+  updatesSeen = false;
+  updatesMissingAt = 0;
+}
+
+/** POST /api/games/[id]/updates { text }: the host posts an update; the game's players and waiting requests are told. */
+export async function postGameUpdate(req: Request, gameId: string): Promise<NextResponse> {
+  const w = await who(req, allowWrite);
+  if ("reply" in w) return w.reply;
+  if (!isUuid(gameId)) return accountError("bad");
+  // Bytes, not characters: 300 characters of Devanagari are 900.
+  const body = await readSmallJson(req, 2_000);
+  if (!body || updateProblem(body.text) !== null || Object.keys(body).some((k) => k !== "text")) return accountReply({ field: "text" }, "bad");
+  const res = await accountRpcIfThere("game_update_post", { p_user_id: w.userId, p_game_id: gameId.toLowerCase(), p_text: (body.text as string).trim() });
+  if ("missing" in res) return UPDATES_OFF();
+  if ("unavailable" in res) return accountError("unavailable");
+  const d = res.data;
+  if (d.r !== "ok") return refusal(d);
+  return accountReply({ r: "ok", updates: updateViews(d.updates), notified: typeof d.notified === "number" ? d.notified : 0 });
+}
+
+/** DELETE /api/games/[id]/updates/[update]: the host takes back an update they posted. */
+export async function deleteGameUpdate(req: Request, gameId: string, updateId: string): Promise<NextResponse> {
+  const w = await who(req, allowWrite);
+  if ("reply" in w) return w.reply;
+  if (!isUuid(gameId) || !isUuid(updateId)) return accountError("bad");
+  const res = await accountRpcIfThere("game_update_remove", { p_user_id: w.userId, p_game_id: gameId.toLowerCase(), p_update_id: updateId.toLowerCase() });
+  if ("missing" in res) return UPDATES_OFF();
+  if ("unavailable" in res) return accountError("unavailable");
+  const d = res.data;
+  if (d.r !== "ok") return refusal(d);
+  return accountReply({ r: "ok", updates: updateViews(d.updates) });
 }
 
 /* ------------------------------------------------------------------ */

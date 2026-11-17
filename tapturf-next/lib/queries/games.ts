@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import { cleanVenueName } from "@/lib/utils/bookingApps";
 import { usableTurfPhotos } from "@/lib/utils/images";
 import {
+  answerPlayedCall,
   answerRequestCall,
   answerTagCall,
   createGameCall,
@@ -10,6 +11,8 @@ import {
   incomingRequestsCall,
   myRequestsCall,
   mySeriesCall,
+  postUpdateCall,
+  removeUpdateCall,
   requestsForGameCall,
   sendRequestCall,
   stopSeriesCall,
@@ -22,6 +25,8 @@ import {
 import type { Repeat } from "@/lib/games/repeat";
 import { missingVenueColumn } from "@/lib/games/otherVenue";
 import { TAG_COPY } from "@/lib/games/confirmed";
+import { PLAYED_COPY } from "@/lib/games/played";
+import { updatesOf, type GameUpdate } from "@/lib/games/updates";
 import type { CreateGameBody, GameChanges, GameErrorBody, GameSeries, GameTag, SeriesInfo } from "@/lib/games/types";
 import type { Game, GameRequest, GameParticipant, CreateGameData } from "@/types/game";
 
@@ -38,25 +43,36 @@ function outcome<T extends object>(a: GameAnswer<T>, has: keyof T): { ok: T } | 
 
 // ── Game CRUD ──────────────────────────────────────────
 
+/**
+ * What a list of games reads: every games column but the host's updates
+ * and the game's log (20261118_game_updates.sql), which only the game's
+ * own page shows, so a list's rows stay the size they were. A database
+ * that lacks one of these (an older one) is read whole, as before.
+ */
+const LIST_COLUMNS =
+  "id, creator_id, turf_id, title, description, sport, skill_level, max_players, current_players, date, start_time, end_time, price_per_player, status, created_at, updated_at, host_name, host_phone, host_profile_image_url, turf_booked, series_id, venue_name, venue_address, venue_area, venue_city, venue_maps_url, confirmed_names, confirmed_extra, confirmed_tagged";
+
+type Listed = { data: Record<string, unknown>[] | null; error: { code?: string; message: string } | null };
+
+/** One list read: the list's columns, or every column where the database has no such list. */
+async function listed(read: (columns: string) => PromiseLike<unknown>): Promise<Listed> {
+  const first = (await read(LIST_COLUMNS)) as Listed;
+  return first.error?.code === "42703" ? ((await read("*")) as Listed) : first;
+}
+
 export async function getAvailableGames(filters?: {
   sport?: string;
   skillLevel?: string;
   date?: string;
 }) {
   const supabase = createClient();
-  let query = supabase
-    .from("games")
-    .select("*")
-    .in("status", ["open", "upcoming", "active"])
-    .order("date", { ascending: true });
-
-  if (filters?.sport) query = query.eq("sport", filters.sport);
-  if (filters?.skillLevel && filters.skillLevel !== "all") {
-    query = query.eq("skill_level", filters.skillLevel);
-  }
-  if (filters?.date) query = query.eq("date", filters.date);
-
-  const { data, error } = await query;
+  const { data, error } = await listed((columns) => {
+    let query = supabase.from("games").select(columns).in("status", ["open", "upcoming", "active"]).order("date", { ascending: true });
+    if (filters?.sport) query = query.eq("sport", filters.sport);
+    if (filters?.skillLevel && filters.skillLevel !== "all") query = query.eq("skill_level", filters.skillLevel);
+    if (filters?.date) query = query.eq("date", filters.date);
+    return query;
+  });
 
   if (error || !data) return { data: [] as Game[], error: error?.message || null };
 
@@ -78,7 +94,7 @@ export async function getAvailableGames(filters?: {
     }
   }
 
-  return { data: data as Game[], error: null };
+  return { data: data as unknown as Game[], error: null };
 }
 
 /**
@@ -89,17 +105,19 @@ export async function getAvailableGames(filters?: {
 export async function getUpcomingGamesForTurf(turfId: string) {
   const supabase = createClient();
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-  const { data, error } = await supabase
-    .from("games")
-    .select("*")
-    .eq("turf_id", turfId)
-    .in("status", ["open", "upcoming", "active"])
-    .gte("date", today)
-    .order("date", { ascending: true })
-    .order("start_time", { ascending: true })
-    .limit(20);
+  const { data, error } = await listed((columns) =>
+    supabase
+      .from("games")
+      .select(columns)
+      .eq("turf_id", turfId)
+      .in("status", ["open", "upcoming", "active"])
+      .gte("date", today)
+      .order("date", { ascending: true })
+      .order("start_time", { ascending: true })
+      .limit(20),
+  );
   if (error || !data) return [] as Game[];
-  return data as Game[];
+  return data as unknown as Game[];
 }
 
 export async function getGameById(gameId: string) {
@@ -146,11 +164,7 @@ export async function getMyRequestForGame(getToken: GetToken, gameId: string) {
 
 export async function getUserGames(userId: string) {
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("games")
-    .select("*")
-    .eq("creator_id", userId)
-    .order("created_at", { ascending: false });
+  const { data, error } = await listed((columns) => supabase.from("games").select(columns).eq("creator_id", userId).order("created_at", { ascending: false }));
 
   if (error || !data) return { data: [] as Game[], error: error?.message || null };
 
@@ -171,7 +185,7 @@ export async function getUserGames(userId: string) {
     }
   }
 
-  return { data: data as Game[], error: null };
+  return { data: data as unknown as Game[], error: null };
 }
 
 export async function getUserJoinedGames(userId: string) {
@@ -184,13 +198,9 @@ export async function getUserJoinedGames(userId: string) {
   if (error || !data || data.length === 0) return { data: [] as Game[], error: null };
 
   const gameIds = data.map((p) => p.game_id);
-  const { data: games, error: gamesError } = await supabase
-    .from("games")
-    .select("*")
-    .in("id", gameIds)
-    .order("date", { ascending: true });
+  const { data: games, error: gamesError } = await listed((columns) => supabase.from("games").select(columns).in("id", gameIds).order("date", { ascending: true }));
 
-  return { data: (games as Game[]) || [], error: gamesError?.message || null };
+  return { data: (games as unknown as Game[]) || [], error: gamesError?.message || null };
 }
 
 /** The create flow's game as the API takes it: at its turf, or at the venue the host typed (lib/games/otherVenue.ts). */
@@ -298,12 +308,42 @@ export async function confirmedPeopleReady(): Promise<boolean> {
   }
 }
 
-/** The game's tagged players still to answer, for its host ([] for anyone else), and whether the caller is one. */
-export async function getGameTags(getToken: GetToken, gameId: string): Promise<{ tags: GameTag[]; mine: boolean }> {
+/**
+ * The game's tagged players still to answer, for its host ([] for anyone else), and whether the caller is one;
+ * shown: the caller's own tag is one the page names them by (20261118_game_tags_shown.sql), so they are offered
+ * "I'm in" and "Remove me".
+ */
+export async function getGameTags(getToken: GetToken, gameId: string): Promise<{ tags: GameTag[]; mine: boolean; shown: boolean }> {
   const a = await tagsForGameCall(getToken, gameId);
-  const b = a.body as { host?: boolean; tags?: GameTag[]; mine?: string | null };
-  if (a.status !== 200 || !b) return { tags: [], mine: false };
-  return b.host === true ? { tags: Array.isArray(b.tags) ? b.tags : [], mine: false } : { tags: [], mine: b.mine === "pending" };
+  const b = a.body as { host?: boolean; tags?: GameTag[]; mine?: string | null; shown?: boolean };
+  if (a.status !== 200 || !b) return { tags: [], mine: false, shown: false };
+  return b.host === true
+    ? { tags: Array.isArray(b.tags) ? b.tags : [], mine: false, shown: false }
+    : { tags: [], mine: b.mine === "pending", shown: b.mine === "pending" && b.shown === true };
+}
+
+/** Once the game is over, on the Passport: "Yes, I played" or "No, I didn't". The words to show either way. */
+export async function answerPlayed(getToken: GetToken, gameId: string, played: boolean): Promise<{ ok: boolean; done: boolean; text: string }> {
+  const a = await answerPlayedCall(getToken, gameId, played);
+  const b = (a.body ?? {}) as Partial<GameErrorBody>;
+  if (a.status === 200 && !b.error) return { ok: true, done: true, text: played ? PLAYED_COPY.saidYes : PLAYED_COPY.saidNo };
+  if (b.reason === "gone") return { ok: false, done: true, text: PLAYED_COPY.gone };
+  if (b.reason === "closed") return { ok: false, done: true, text: PLAYED_COPY.closed };
+  return { ok: false, done: false, text: gameProblem(a) ?? "Something went wrong. Please try again." };
+}
+
+// ── Updates from the host ──────────────────────────────
+
+/** The host posts an update on their game; its players and waiting requests are told. The game's updates after it. */
+export async function postUpdate(getToken: GetToken, gameId: string, text: string): Promise<{ updates: GameUpdate[] } | { error: string }> {
+  const r = outcome(await postUpdateCall(getToken, gameId, text), "updates");
+  return "error" in r ? r : { updates: updatesOf(r.ok) };
+}
+
+/** The host takes back an update they posted. */
+export async function removeUpdate(getToken: GetToken, gameId: string, updateId: string): Promise<{ updates: GameUpdate[] } | { error: string }> {
+  const r = outcome(await removeUpdateCall(getToken, gameId, updateId), "updates");
+  return "error" in r ? r : { updates: updatesOf(r.ok) };
 }
 
 /** A tagged player's answer: "Yes, I'm in" or "Not me". The words to show either way. */

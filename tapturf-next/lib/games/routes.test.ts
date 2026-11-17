@@ -19,6 +19,9 @@ import {
   forgetConfirmedReady,
   getGameTags,
   postGameTag,
+  postGameUpdate,
+  deleteGameUpdate,
+  forgetUpdatesReady,
 } from "./server";
 import { dbProfile, googleSession, installNet, net, phoneToken, req, testEnv } from "../account/testkit";
 
@@ -671,4 +674,100 @@ test("tags: the host reads who is waiting (never an account id), anyone else onl
   net.rpc.game_tag_answer = () => ({ r: "closed" });
   const closed = await postGameTag(req(`/api/games/${GAME}/tags`, { method: "POST", token: phoneToken(), body: { answer: "yes" } }), GAME);
   assert.deepEqual([closed.status, (await json(closed)).reason], [409, "closed"]);
+});
+
+/* ---------------- 20261118: tagged players shown at once, afterwards, updates ---------------- */
+
+test("tags, once tagged players show at once: the host reads who the page names; a player whether theirs is a shown one", async () => {
+  signedIn();
+  net.rpc.game_tags_for = () => ({ r: "ok", host: true, tags: [{ id: TAG, name: "Ravi Kumar", photo: null, u: "ravi_k", shown: true, user_id: "acc-9" }, { id: TAG.replace(/1$/, "2"), name: "Kiran", photo: null, u: null, shown: false }] });
+  const host = await getGameTags(req(`/api/games/${GAME}/tags`, { token: phoneToken() }), GAME);
+  assert.deepEqual(await json(host), { host: true, tags: [{ id: TAG, name: "Ravi Kumar", photo: null, u: "ravi_k", shown: true }, { id: TAG.replace(/1$/, "2"), name: "Kiran", photo: null, u: null, shown: false }] });
+  net.rpc.game_tags_for = () => ({ r: "ok", host: false, mine: "pending", shown: true });
+  assert.deepEqual(await json(await getGameTags(req(`/api/games/${GAME}/tags`, { token: phoneToken() }), GAME)), { host: false, mine: "pending", shown: true });
+  net.rpc.game_tags_for = () => ({ r: "ok", host: false, mine: "pending", shown: false });
+  assert.deepEqual(await json(await getGameTags(req(`/api/games/${GAME}/tags`, { token: phoneToken() }), GAME)), { host: false, mine: "pending", shown: false }, "a tag from before the file");
+  net.rpc.game_tags_for = () => ({ r: "ok", host: false, mine: null, shown: true });
+  assert.deepEqual(await json(await getGameTags(req(`/api/games/${GAME}/tags`, { token: phoneToken() }), GAME)), { host: false, mine: null }, "nothing waits: nothing more is said");
+});
+
+test("afterwards: Yes, I played and No, I didn't are the caller's own answer, through their own function", async () => {
+  signedIn();
+  net.rpc.game_tag_played = (a) => ({ r: "ok", status: a.p_yes ? "yes" : "no", current_players: 7 });
+  net.rpc.game_tag_answer = () => ({ r: "closed" });
+  const yes = await postGameTag(req(`/api/games/${GAME}/tags`, { method: "POST", token: phoneToken(), body: { answer: "played" } }), GAME);
+  assert.deepEqual([yes.status, await json(yes)], [200, { r: "ok", status: "yes", current_players: 7 }]);
+  const no = await postGameTag(req(`/api/games/${GAME}/tags`, { method: "POST", token: phoneToken(), body: { answer: "not_played" } }), GAME);
+  assert.deepEqual(await json(no), { r: "ok", status: "no", current_players: 7 });
+  assert.deepEqual(net.calls("game_tag_played").map((c) => [c.args.p_user_id, c.args.p_game_id, c.args.p_yes]), [["acc-1", GAME, true], ["acc-1", GAME, false]]);
+  assert.equal(net.calls("game_tag_answer").length, 0, "never the before-kickoff function");
+  // Before the game, yes and no still go to game_tag_answer alone.
+  await postGameTag(req(`/api/games/${GAME}/tags`, { method: "POST", token: phoneToken(), body: { answer: "yes" } }), GAME);
+  assert.deepEqual([net.calls("game_tag_answer").length, net.calls("game_tag_played").length], [1, 2]);
+  for (const [r, status] of [["gone", 400], ["closed", 409]] as const) {
+    net.rpc.game_tag_played = () => ({ r });
+    const res = await postGameTag(req(`/api/games/${GAME}/tags`, { method: "POST", token: phoneToken(), body: { answer: "played" } }), GAME);
+    assert.deepEqual([res.status, (await json(res)).reason], [status, r]);
+  }
+  net.rpc.game_tag_played = missing;
+  const off = await postGameTag(req(`/api/games/${GAME}/tags`, { method: "POST", token: phoneToken(), body: { answer: "played" } }), GAME);
+  assert.deepEqual([off.status, (await json(off)).reason], [503, "confirmed_off"], "before the file: said plainly");
+  assert.equal((await postGameTag(req(`/api/games/${GAME}/tags`, { method: "POST", body: { answer: "played" } }), GAME)).status, 401, "signed in only");
+});
+
+const UPD = "abababab-abab-4bab-8bab-000000000001";
+
+test("updates: the host's own post and take-back, checked here first; these keys only", async () => {
+  signedIn();
+  const entry = { id: UPD, at: "2026-11-17T10:10:00+00:00", text: "Turf booked", by: "acc-1" };
+  net.rpc.game_update_post = () => ({ r: "ok", update: entry, updates: [entry], notified: 3 });
+  const res = await postGameUpdate(req(`/api/games/${GAME}/updates`, { method: "POST", token: phoneToken(), body: { text: "  Turf booked  " } }), GAME.toUpperCase());
+  assert.deepEqual([res.status, await json(res)], [200, { r: "ok", updates: [{ id: UPD, at: "2026-11-17T10:10:00+00:00", text: "Turf booked" }], notified: 3 }]);
+  assert.equal(res.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual(net.calls("game_update_post")[0].args, { p_key: "test-account-key", p_user_id: "acc-1", p_game_id: GAME, p_text: "Turf booked" }, "as the verified account, trimmed");
+  for (const body of [{}, { text: "" }, { text: "   " }, { text: "x".repeat(301) }, { text: 7 }, { text: "ok", user_id: "acc-2" }, { text: "ok", at: "2020-01-01" }]) {
+    const bad = await postGameUpdate(req(`/api/games/${GAME}/updates`, { method: "POST", token: phoneToken(), body }), GAME);
+    assert.deepEqual([bad.status, await json(bad)], [400, { field: "text", error: "bad" }], JSON.stringify(body).slice(0, 40));
+  }
+  assert.equal(net.calls("game_update_post").length, 1, "the bad ones never reached the database; nobody names the poster or the time");
+  assert.equal((await postGameUpdate(req("/api/games/x/updates", { method: "POST", token: phoneToken(), body: { text: "ok" } }), "x")).status, 400);
+  assert.equal((await postGameUpdate(req(`/api/games/${GAME}/updates`, { method: "POST", body: { text: "ok" } }), GAME)).status, 401, "signed in only");
+  for (const [r, status, body] of [["not_host", 409, { reason: "not_host", error: "not_allowed" }], ["closed", 409, { reason: "closed", error: "not_allowed" }],
+    ["most", 409, { reason: "updates_full", error: "not_allowed" }], ["limit", 429, null], ["gone", 400, { reason: "gone", error: "bad" }]] as const) {
+    net.rpc.game_update_post = () => ({ r });
+    const no = await postGameUpdate(req(`/api/games/${GAME}/updates`, { method: "POST", token: phoneToken(), body: { text: "ok" } }), GAME);
+    assert.equal(no.status, status, r);
+    if (body) assert.deepEqual(await json(no), body, r);
+  }
+  net.rpc.game_update_post = missing;
+  const off = await postGameUpdate(req(`/api/games/${GAME}/updates`, { method: "POST", token: phoneToken(), body: { text: "ok" } }), GAME);
+  assert.deepEqual([off.status, await json(off)], [503, { reason: "updates_off", error: "unavailable" }], "before the file: said plainly");
+
+  net.rpc.game_update_remove = () => ({ r: "ok", updates: [] });
+  const gone = await deleteGameUpdate(req(`/api/games/${GAME}/updates/${UPD}`, { method: "DELETE", token: phoneToken() }), GAME, UPD.toUpperCase());
+  assert.deepEqual([gone.status, await json(gone)], [200, { r: "ok", updates: [] }]);
+  assert.deepEqual(net.calls("game_update_remove")[0].args, { p_key: "test-account-key", p_user_id: "acc-1", p_game_id: GAME, p_update_id: UPD });
+  assert.equal((await deleteGameUpdate(req(`/api/games/${GAME}/updates/x`, { method: "DELETE", token: phoneToken() }), GAME, "x")).status, 400);
+  assert.equal((await deleteGameUpdate(req(`/api/games/${GAME}/updates/${UPD}`, { method: "DELETE" }), GAME, UPD)).status, 401);
+  net.rpc.game_update_remove = missing;
+  assert.equal((await json(await deleteGameUpdate(req(`/api/games/${GAME}/updates/${UPD}`, { method: "DELETE", token: phoneToken() }), GAME, UPD))).reason, "updates_off");
+});
+
+test("the edit sheet's note: left out of an edit once the database has updates, edited as before until then", async () => {
+  signedIn();
+  forgetUpdatesReady();
+  net.rpc.game_update = () => ({ r: "ok", game: { id: GAME }, notified: 0 });
+  // Before 20261118_game_updates.sql: games has no updates column.
+  net.rest = () => Response.json({ code: "42703", message: "column games.updates does not exist" }, { status: 400 });
+  await patchGame(req(`/api/games/${GAME}`, { method: "PATCH", token: phoneToken(), body: { max_players: 12, description: "Bring bibs" } }), GAME);
+  assert.deepEqual(net.calls("game_update")[0].args.p_changes, { max_players: 12, description: "Bring bibs" }, "the note is edited, as before");
+  await patchGame(req(`/api/games/${GAME}`, { method: "PATCH", token: phoneToken(), body: { max_players: 13 } }), GAME);
+  assert.equal(net.restCalls.length, 1, "asked only for an edit that carries the note");
+  // After it.
+  forgetUpdatesReady();
+  net.rest = restDb({ games: [] });
+  const res = await patchGame(req(`/api/games/${GAME}`, { method: "PATCH", token: phoneToken(), body: { max_players: 14, description: "A page loaded before the deploy still sends it" } }), GAME);
+  assert.equal(res.status, 200, "the rest of the edit goes through");
+  assert.deepEqual(net.calls("game_update")[2].args.p_changes, { max_players: 14 }, "without the note: what the host adds now is an update, with its time");
+  forgetUpdatesReady();
 });

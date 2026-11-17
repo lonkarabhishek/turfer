@@ -104,10 +104,14 @@ const SECTIONS: LegalSection[] = [
           pick one) is stored without your name, number or account: only the turf, what you answered and whether
           you were signed in. When you host a game you can say who is in already: a friend&rsquo;s name you
           type shows on that game&rsquo;s page to anyone, so type only a first name or nickname, and it is not
-          linked to any account. A TapTurf player you tag gets one notification; until they say yes only you
-          see who you tagged (the game shows a count), and if they say &ldquo;Not me&rdquo; or you untag them
-          they come off; turn off &ldquo;Let others find and tag me&rdquo; on the Me tab and no host can tag
-          you. We also record the time and method of
+          linked to any account. A TapTurf player you tag gets one notification, and their name and photo
+          show on that game&rsquo;s page at once, as added by you; they can remove themselves any time before
+          the game starts, and you can untag them. Turn off &ldquo;Let others find and tag me&rdquo; on the Me
+          tab and no host can tag you, and your name stops showing on games you were tagged in. After a game
+          you were tagged in and didn&rsquo;t answer, your Passport asks whether you played: yes adds the game
+          to your Passport and to the people you played with, no takes you off its lineup. A game&rsquo;s page
+          also lists its activity, such as when it was posted or changed and when each player joined. We also
+          record the time and method of
           each sign-in to spot abuse and to see how many people use the site.
         </p>
         <p id="reports" className="scroll-mt-24">

@@ -148,6 +148,10 @@ test("games: venue attached, host phone never passed on", () => {
   const [c] = shapeGames([{ id: "g2", turf_id: "t1", sport: "football", current_players: 4, max_players: 10, confirmed_names: ["Rahul"], confirmed_extra: 2 }], venue);
   assert.equal("confirmed_names" in c, false);
   assert.equal(c.current_players, 4);
+  assert.equal(c.confirmed_named, 1, "how many names there were, for the bar's speed");
+  // Nor do the host's updates or the game's log (20261118_game_updates.sql).
+  const [u] = shapeGames([{ id: "g3", turf_id: "t1", sport: "football", current_players: 2, max_players: 10, updates: [{ id: "x", at: "2026-11-17T08:00:00Z", text: "Turf booked" }], activity: [{ k: "booked" }] }], venue);
+  assert.deepEqual(["updates" in u, "activity" in u, /Turf booked/.test(JSON.stringify(u))], [false, false, false]);
 });
 
 test("trending: only the pick in this turf's own city", () => {

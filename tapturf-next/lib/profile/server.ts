@@ -116,6 +116,17 @@ export async function readExtras(userId: string): Promise<Map<string, CoPlayerEx
   return out;
 }
 
+/**
+ * The games this account was tagged in and never answered about, that are over
+ * (public.game_tags_played, 20261118_game_tags_shown.sql). null: not available (before that file, or it failed):
+ * the Passport then has no card.
+ */
+export async function readTagged(userId: string): Promise<unknown[] | null> {
+  const r = await accountRpcIfThere("game_tags_played", { p_user_id: userId });
+  if (!("data" in r) || r.data.r !== "ok" || !Array.isArray(r.data.games)) return null;
+  return r.data.games as unknown[];
+}
+
 function whatsappState(d: Record<string, unknown>): WhatsAppState | null {
   const phone = d.phone;
   if (phone !== "ok" && phone !== "unproven" && phone !== "none") return null;

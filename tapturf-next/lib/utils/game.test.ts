@@ -299,6 +299,27 @@ test("/games rows carry the count of the host's confirmed friends, never their n
   const spots = spotsInfo(card.current_players, card.max_players, false);
   assert.deepEqual([spots.title, spots.hint, spots.short, spots.open], ["6 of 10 going", "4 spots open", "4 open", 4]);
   assert.equal(spotsInfo(10, 10, false).short, "Full");
+  // How many names there were stays (lib/games/progress.ts: confirmed friends are not players who joined).
+  assert.equal(card.confirmed_named, 2);
+  assert.equal("confirmed_named" in cardGame({ ...raw, confirmed_names: [] } as Game), false);
+});
+
+test("/games rows leave out the host's updates and the game's log (they show on the game's own page)", () => {
+  // 20261118_game_updates.sql: both ride on the games row; a list row is no bigger than it was.
+  const raw = {
+    id: "g1", creator_id: "u1", turf_id: "t1", title: "Football Game", sport: "Football", skill_level: "all", date: "2026-11-21",
+    start_time: "19:00", end_time: "20:00", current_players: 2, max_players: 10, price_per_player: 100, turf_booked: false,
+    status: "open", host_name: "Asha", created_at: "2026-11-17T00:00:00Z", description: "Bring a dark tee",
+    updates: [{ id: "00000000-0000-4000-8000-000000000001", at: "2026-11-17T08:00:00Z", text: "Turf booked, bring bottles" }],
+    activity: [{ at: "2026-11-17T08:00:00Z", k: "booked" }],
+  } as unknown as Game;
+  const card = cardGame(raw);
+  assert.equal("updates" in card, false);
+  assert.equal("activity" in card, false);
+  assert.doesNotMatch(JSON.stringify(card), /bring bottles|"k":/);
+  assert.equal(card.description, "Bring a dark tee", "the note it went up with is on the row as before");
+  const bare = { ...raw, updates: undefined, activity: undefined };
+  assert.equal(JSON.stringify(cardGame(bare as Game)).length, JSON.stringify(card).length, "the same size as a row from before the file");
 });
 
 test("where a game is: its TapTurf turf, or the venue its host typed", () => {

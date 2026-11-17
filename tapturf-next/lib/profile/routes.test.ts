@@ -162,3 +162,33 @@ test("whatsapp: on or off for the caller only; refused without a proved number; 
   res = await patchWhatsapp(patch(JSON.stringify({ on: true })), deps({ who: "out" }).d);
   assert.equal(res.status, 401);
 });
+
+test("passport: the games they were tagged in and never answered about (Did you play?)", async () => {
+  const TID = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  const row = (n: number, date: string, o: Record<string, unknown> = {}) => ({ game_id: TID(n), sport: "Football", date, start_time: "19:00", end_time: "20:00", venue: "Kings Turf", host: "Ravi", ...o });
+  const { d } = deps();
+  // Before 20261118_game_tags_shown.sql (no such read), and when it can't say: no card, the passport as it was.
+  assert.deepEqual(((await (await getPassport(get("/api/me/passport"), d)).json()) as PassportResponse).tagged, []);
+  for (const tagged of [async () => null, async () => { throw new Error("down"); }]) {
+    const res = await getPassport(get("/api/me/passport"), { ...d, tagged });
+    assert.equal(res.status, 200, "a failed read of the card never holds the passport up");
+    assert.deepEqual(((await res.json()) as PassportResponse).tagged, []);
+  }
+  const asked: string[] = [];
+  const res = await getPassport(get("/api/me/passport"), {
+    ...d,
+    tagged: async (id) => {
+      asked.push(id);
+      // 1 Nov 2026, 6 PM in India: yesterday's game, one three weeks ago, tonight's (not over), one 91 days ago.
+      return [row(2, "2026-10-10"), row(1, "2026-10-31", { phone: "+919800000009" }), row(3, "2026-11-01"), row(4, "2026-08-02"), { game_id: "g1", date: "2026-10-21" }];
+    },
+  });
+  const body = (await res.json()) as PassportResponse;
+  assert.deepEqual(asked, [ME], "for the verified caller only");
+  assert.deepEqual(body.tagged, [
+    { gameId: TID(1), sport: "Football", venue: "Kings Turf", date: "2026-10-31", start_time: "19:00", end_time: "20:00", host: "Ravi" },
+    { gameId: TID(2), sport: "Football", venue: "Kings Turf", date: "2026-10-10", start_time: "19:00", end_time: "20:00", host: "Ravi" },
+  ], "over and within 90 days, newest first, these keys only");
+  assert.equal(body.passport.numbers.games, 2, "none of them counts for anything until they say yes");
+  assert.doesNotMatch(JSON.stringify(body), /98000000/);
+});

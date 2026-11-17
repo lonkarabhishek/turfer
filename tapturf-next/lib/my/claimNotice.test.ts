@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BOOKING_TO_OWNER, BOOKING_TO_PLAYER, CLAIM_APPROVED, CLAIM_REJECTED, KIND_LINE_MAX, claimDecisionNotice, kindLine, notificationLink } from "./claimNotice";
+import { BOOKING_TO_OWNER, BOOKING_TO_PLAYER, CLAIM_APPROVED, CLAIM_REJECTED, KIND_LINE_MAX, TAG_PLAYED_ASK, claimDecisionNotice, kindLine, notificationLink } from "./claimNotice";
 import { BOOKINGS_LINE, claimCopyProblem } from "../turfPage/claimPrompts";
 
 test("approved: their turf is on myTapturf now", () => {
@@ -83,4 +83,13 @@ test("notificationLink: booking requests go to the owner's list on myTapturf, or
     assert.deepEqual(notificationLink(type, null), { href: "/dashboard?tab=requests", label: "Your requests" }, `${type}: the list, whatever the metadata`);
   }
   assert.deepEqual([...BOOKING_TO_OWNER, ...BOOKING_TO_PLAYER].sort(), ["booking_cancelled", "booking_cancelled_by_player", "booking_confirmed", "booking_declined", "booking_request"]);
+});
+
+test("notificationLink: did you play? opens the Passport; an update from a host opens its game", () => {
+  assert.equal(TAG_PLAYED_ASK, "game_tag_played_ask");
+  assert.deepEqual(notificationLink(TAG_PLAYED_ASK, { tab: "passport" }), { href: "/dashboard?tab=passport", label: "Open your Passport" });
+  assert.deepEqual(notificationLink(TAG_PLAYED_ASK, null), { href: "/dashboard?tab=passport", label: "Open your Passport" });
+  const gameId = "dddddddd-dddd-4ddd-8ddd-000000000001";
+  assert.deepEqual(notificationLink("game_update_posted", { gameId, updateId: "x" }), { href: `/game/${gameId}`, label: null });
+  assert.deepEqual(notificationLink("game_tagged", { gameId, tagId: "x", shown: true }), { href: `/game/${gameId}`, label: null });
 });

@@ -4,7 +4,8 @@ import { getAllActiveTurfs } from "@/lib/queries/turfs";
 import { getLiveCities } from "@/lib/queries/cities";
 import { readTrendingPicks, toSpotlights } from "@/lib/queries/trending";
 import { loadOpenGames } from "@/lib/ai/games";
-import { filterNonExpiredGames, gameVenue, nextGameExpiry, sortGamesByDateTime } from "@/lib/utils/game";
+import { filterNonExpiredGames, gameVenue, getGameStatus, nextGameExpiry, sortGamesByDateTime } from "@/lib/utils/game";
+import { joinedOnTapTurf, speedOf } from "@/lib/games/progress";
 import { CITIES, cityInfo, guessCityFromAddress, isCity } from "@/lib/city";
 import { SPORT_PAGES, sportPageForLabel, turfPlaysSport } from "@/lib/sports";
 import { MIN_TURFS_TO_INDEX } from "@/lib/sportCity";
@@ -72,7 +73,7 @@ function toTile(t: Turf, cityLabel?: string): HomeTile {
   };
 }
 
-export function toHomeGame(g: Game): HomeGame {
+export function toHomeGame(g: Game, now: number = Date.now()): HomeGame {
   const [y, m, d] = g.date.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   const when = Number.isNaN(dt.getTime()) ? g.date : `${WEEKDAYS[dt.getUTCDay()]} ${d} ${MONTHS[m - 1]}`;
@@ -90,6 +91,17 @@ export function toHomeGame(g: Game): HomeGame {
     place: typed ? typed.area || typed.address.split(",")[0]?.trim() || null : address?.split(",")[0]?.trim() || null,
     city: typed ? typed.city : (g.turfs?.city ?? guessCityFromAddress(address)),
     spotsLeft: Math.max(0, (g.max_players ?? 0) - (g.current_players ?? 0)),
+    current: g.current_players ?? 0,
+    max: g.max_players ?? 0,
+    // As of this render (the home is kept an hour at most): from the row alone, as a card's.
+    speed: speedOf({
+      current: g.current_players,
+      max: g.max_players,
+      closed: getGameStatus(g, now) !== "upcoming" || g.status === "cancelled" || g.status === "completed",
+      now,
+      createdAt: g.created_at,
+      joined: joinedOnTapTurf(g),
+    }),
     price: Number(g.price_per_player) || 0,
   };
 }
@@ -298,7 +310,7 @@ async function buildHomeData(): Promise<HomeData> {
   // Games shaped per city on the server: the client only picks a key,
   // so a city's count and empty state come from all of its games, not
   // from whichever happen to be soonest nationally.
-  const sortedGames = sortGamesByDateTime(games).map(toHomeGame);
+  const sortedGames = sortGamesByDateTime(games).map((g) => toHomeGame(g));
   const gamesByCity: Record<string, HomeGame[]> = {};
   const openGamesByCity: Record<string, number> = {};
   for (const g of sortedGames) {

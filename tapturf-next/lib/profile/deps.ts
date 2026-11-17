@@ -1,6 +1,6 @@
 import { accountError, caller } from "../account/route";
 import { createAccountLimiter, resolveAccount } from "../account/server";
-import { readExtras, readHistory, readPeople, readRosters, whatsappSwitch } from "./server";
+import { readExtras, readHistory, readPeople, readRosters, readTagged, whatsappSwitch } from "./server";
 import type { ProfileDeps } from "./routes";
 
 // The real deps of the passport routes: the caller verified as the account
@@ -29,5 +29,6 @@ export const profileDeps: ProfileDeps = {
   people: readPeople,
   extras: readExtras,
   whatsapp: whatsappSwitch,
+  tagged: readTagged,
   now: Date.now,
 };

@@ -17,6 +17,7 @@ import type {
   TagAnsweredResponse,
   TagsForResponse,
   UnreadResponse,
+  UpdatesResponse,
 } from "./types";
 
 /**
@@ -68,6 +69,12 @@ export const cancelGameCall = (getToken: GetToken, gameId: string) => call<{ r: 
 export const tagsForGameCall = (getToken: GetToken, gameId: string) => call<TagsForResponse>(getToken, `/api/games/${at(gameId)}/tags`);
 export const answerTagCall = (getToken: GetToken, gameId: string, yes: boolean) =>
   call<TagAnsweredResponse>(getToken, `/api/games/${at(gameId)}/tags`, json("POST", { answer: yes ? "yes" : "no" }));
+/** Once the game is over (the Passport's card): "Yes, I played" or "No, I didn't". */
+export const answerPlayedCall = (getToken: GetToken, gameId: string, played: boolean) =>
+  call<TagAnsweredResponse>(getToken, `/api/games/${at(gameId)}/tags`, json("POST", { answer: played ? "played" : "not_played" }));
+export const postUpdateCall = (getToken: GetToken, gameId: string, text: string) => call<UpdatesResponse>(getToken, `/api/games/${at(gameId)}/updates`, json("POST", { text }));
+export const removeUpdateCall = (getToken: GetToken, gameId: string, updateId: string) =>
+  call<UpdatesResponse>(getToken, `/api/games/${at(gameId)}/updates/${at(updateId)}`, { method: "DELETE" });
 export const requestsForGameCall = (getToken: GetToken, gameId: string) => call<RequestsForResponse>(getToken, `/api/games/${at(gameId)}/requests`);
 export const sendRequestCall = (getToken: GetToken, gameId: string, note: string | null) =>
   call<RequestSentResponse>(getToken, `/api/games/${at(gameId)}/requests`, json("POST", { note }));
@@ -92,6 +99,7 @@ const FIELD_TEXT: Record<string, string> = {
   price_per_player: "The price must be ₹0 to ₹10,000.",
   description: "Keep the note to 500 characters.",
   note: "Keep the note to 300 characters.",
+  text: "Write the update: up to 300 characters.",
   host_phone: "Enter a 10-digit mobile number for players, or leave it empty.",
   turf_id: "Pick the turf again.",
   venue_name: "Check the venue's name: 2 to 80 characters, no phone number, link or email.",
@@ -149,6 +157,10 @@ export function gameProblem(a: GameAnswer<unknown>): string | null {
       return "Venues that aren't on TapTurf can't be added just yet. Pick a TapTurf turf for now.";
     case "confirmed_off":
       return "Adding confirmed players isn't on just yet. Post the game without them for now.";
+    case "updates_off":
+      return "Updates aren't on just yet. Try again in a little while.";
+    case "updates_full":
+      return "This game has 20 updates, the most it can have. Remove one to post another.";
   }
   if (b.error === "bad") return (b.field && FIELD_TEXT[b.field]) || "Something there doesn't look right. Check it and try again.";
   if (b.error === "sign_in") return "Your login ended. Please log in again.";

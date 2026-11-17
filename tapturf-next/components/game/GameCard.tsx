@@ -11,6 +11,8 @@ import { GamePhoto } from "./detail/GamePhoto";
 import { LevelMeter } from "./detail/GameFacts";
 import { SportGlyph } from "./detail/SportArt";
 import { gamePath } from "@/lib/utils/gamePath";
+import { joinedOnTapTurf, speedOf } from "@/lib/games/progress";
+import { PlayersBar } from "./PlayersBar";
 
 const chip = "inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[13px] font-semibold whitespace-nowrap";
 const photoChip = "photo-chip inline-flex items-center gap-1.5 h-8 px-3 rounded-full shadow-soft text-[13px] font-semibold whitespace-nowrap";
@@ -39,7 +41,19 @@ export function GameCard({ game, hideVenue = false, cityLabel, now, eager = fals
   const range = formatTimeRange(game.start_time, game.end_time);
   const spots = spotsInfo(game.current_players, game.max_players, false);
   const full = spots.open === 0;
-  const live = getGameStatus(game, now) === "live";
+  const timing = getGameStatus(game, now);
+  const live = timing === "live";
+  // The bar, and "Filling fast" only when players really joined quickly (lib/games/progress.ts); a card has no
+  // lineup, so that is read from the row: posted in the last 48 hours, half full, enough joined besides the host.
+  const speed = speedOf({
+    current: game.current_players,
+    max: game.max_players,
+    closed: timing !== "upcoming" || game.status === "cancelled" || game.status === "completed",
+    // Server-rendered lists pass the render time until hydration, as the day words do; then it reads the clock.
+    now,
+    createdAt: game.created_at,
+    joined: joinedOnTapTurf(game),
+  });
   const skill = skillInfo(game.skill_level);
   // Its turf, or the venue its host typed (not on TapTurf): named and placed the same way.
   const venue = gameVenue(game);
@@ -144,7 +158,8 @@ export function GameCard({ game, hideVenue = false, cityLabel, now, eager = fals
           )}
         </div>
 
-        <div className="mt-auto border-t border-primary-100 pt-3 flex items-center justify-between gap-3">
+        <PlayersBar current={game.current_players} max={game.max_players} speed={speed} className="mt-auto mb-2" />
+        <div className="border-t border-primary-100 pt-3 flex items-center justify-between gap-3">
           <p className="flex items-center gap-1.5 text-[14px] text-primary-700 min-w-0">
             <Users className="w-4 h-4 text-primary-500 shrink-0" aria-hidden />
             <span className="truncate tabular">

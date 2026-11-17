@@ -476,7 +476,9 @@ export function firstName(name: string | null | undefined): string {
  */
 export function cardGame(g: Game): Game {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { host_phone, confirmed_names, turfs, ...rest } = g;
+  const { host_phone, confirmed_names, updates, activity, turfs, ...row } = g;
+  // How many names there were (lib/games/progress.ts: confirmed friends are not players who joined), not the names.
+  const rest: Game = Array.isArray(confirmed_names) && confirmed_names.length > 0 ? { ...row, confirmed_named: confirmed_names.length } : row;
   if (!turfs) return rest;
   const t = turfs as NonNullable<Game["turfs"]> & { cover_image?: string | null; images?: unknown; image_review?: unknown };
   return {

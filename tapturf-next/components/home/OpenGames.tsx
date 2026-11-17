@@ -3,6 +3,7 @@ import { ArrowUpRight, ChevronRight, Users } from "lucide-react";
 import { labelFor } from "@/lib/city";
 import type { HomeScope } from "@/lib/home/select";
 import type { HomeGame } from "@/lib/home/types";
+import { PlayersBar } from "@/components/game/PlayersBar";
 
 const MOBILE_PILL =
   "sm:hidden mt-3 flex h-11 items-center justify-center rounded-full border border-primary-200 text-[15px] font-semibold text-primary-900 press-tight focus-neon";
@@ -72,6 +73,8 @@ export function OpenGames({
                       {g.time}
                       {where ? ` · ${where}` : ""}
                     </span>
+                    {/* How full it is; "Filling fast" only when players really joined quickly (lib/games/progress.ts). */}
+                    <PlayersBar current={g.current} max={g.max} speed={g.speed} size="tile" className="mt-1.5 !h-4" />
                   </span>
                   <span className="shrink-0 text-right">
                     <span

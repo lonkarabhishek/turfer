@@ -11,10 +11,15 @@ test("policy: the friends a host says are in already, and tagging", () => {
   const at = page.indexOf("<strong>Things you do on TapTurf.</strong>");
   const things = page.slice(at, page.indexOf("</p>", at));
   assert.match(things, /When you host a game you can say who is in already: a friend&rsquo;s name you type shows on that game&rsquo;s page to anyone, so type only a first name or nickname, and it is not linked to any account\./);
-  assert.match(things, /A TapTurf player you tag gets one notification; until they say yes only you see who you tagged \(the game shows a count\), and if they say &ldquo;Not me&rdquo; or you untag them they come off; turn off &ldquo;Let others find and tag me&rdquo; on the Me tab and no host can tag you\./);
+  // 18 Nov 2026 (20261118_game_tags_shown.sql): a tagged player shows at once and can remove themselves; afterwards the Passport asks.
+  assert.match(things, /A TapTurf player you tag gets one notification, and their name and photo show on that game&rsquo;s page at once, as added by you; they can remove themselves any time before the game starts, and you can untag them\./);
+  assert.match(things, /Turn off &ldquo;Let others find and tag me&rdquo; on the Me tab and no host can tag you, and your name stops showing on games you were tagged in\./);
+  assert.match(things, /After a game you were tagged in and didn&rsquo;t answer, your Passport asks whether you played: yes adds the game to your Passport and to the people you played with, no takes you off its lineup\./);
+  assert.match(things, /A game&rsquo;s page also lists its activity, such as when it was posted or changed and when each player joined\./);
+  assert.doesNotMatch(things, /until they say yes only you see who you tagged/, "the sentence from before is gone");
   // No new site-wide notice for it (the site owner's call); the policy's date moves.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-17");
+  assert.equal(PRIVACY_UPDATED, "2026-11-18");
 });
 
 test("policy notice: a new id, so people who dismissed the last one see it", () => {
@@ -29,7 +34,7 @@ test("policy notice: emails, and where the policy says it", () => {
     "If your account has an email Google confirmed, TapTurf now emails you about your games: a welcome, join requests and answers, game changes and reminders. Resend sends them for us. Turn each kind off on the Me tab or with the link in any email. We don't track opens or taps, and we never email about booking requests.",
   );
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-17");
+  assert.equal(PRIVACY_UPDATED, "2026-11-18");
   assert.equal(PRIVACY_NOTICE.anchor, "emails");
   const at = privacyPage.indexOf(`id="${PRIVACY_NOTICE.anchor}"`);
   assert.ok(at >= 0, `the policy has #${PRIVACY_NOTICE.anchor}`);

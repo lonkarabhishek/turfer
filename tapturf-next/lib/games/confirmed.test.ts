@@ -22,8 +22,12 @@ import {
   moreChip,
   nameProblem,
   nameProblemText,
+  namedTags,
+  shownTagViews,
+  tagButtons,
   totalIn,
   type ConfirmedKey,
+  type ShownTag,
 } from "./confirmed";
 import { parseChanges, parseCreate, parseSeries } from "./payload";
 import { gameProblem } from "./client";
@@ -204,4 +208,49 @@ test("a database without the columns yet says so (and nothing else does)", () =>
   assert.equal(missingConfirmedColumn({ code: "42703", message: "column games.venue_name does not exist" }), false);
   assert.equal(missingConfirmedColumn({ code: "57014", message: "canceling statement" }), false);
   assert.equal(missingConfirmedColumn(null), false);
+});
+
+/* ---------------- tagged players shown at once (20261118_game_tags_shown.sql) ---------------- */
+
+const TID = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const shown = (n: number, name: string): ShownTag => ({ id: TID(100 + n), uid: TID(n), name, photo: null, u: name.toLowerCase() });
+
+test("a shown tag offers I'm in and Remove me; one from before the file, the older question", () => {
+  assert.deepEqual(tagButtons(true), { yes: "I'm in", no: "Remove me" });
+  assert.deepEqual(tagButtons(false), { yes: "Yes, I'm in", no: "Not me" });
+});
+
+test("what the page takes of the tagged players it is sent", () => {
+  const rows = [
+    { id: TID(101), uid: TID(1), name: " Ravi Kumar ", photo: "https://lh3.example/ravi", u: "ravi_k", phone: "+919800000001", email: "x@example.com" },
+    { id: TID(102), uid: TID(2), name: "", photo: "javascript:alert(1)", u: "Not A Username" },
+    { id: TID(103), uid: TID(1), name: "Ravi again", photo: null, u: "ravi_k" },
+    { id: "nope", uid: TID(4), name: "No id" },
+    { id: TID(105), name: "No account" },
+    null,
+  ];
+  assert.deepEqual(shownTagViews(rows), [
+    { id: TID(101), uid: TID(1), name: "Ravi Kumar", photo: "https://lh3.example/ravi", u: "ravi_k" },
+    { id: TID(102), uid: TID(2), name: "Player", photo: null, u: null },
+  ], "these keys only, each player once, a photo only from https, a username only when it is one");
+  assert.deepEqual([shownTagViews(null), shownTagViews("x"), shownTagViews({})], [[], [], []]);
+  assert.equal(shownTagViews(Array.from({ length: 30 }, (_, i) => ({ id: TID(200 + i), uid: TID(300 + i), name: "P" }))).length, TAGS_MAX);
+});
+
+test("who a visitor is shown by name: the page's copy against the row read now", () => {
+  const named = [shown(1, "Ravi"), shown(2, "Priya"), shown(3, "Kiran")];
+  const none = new Set<string>();
+  assert.deepEqual(namedTags({ named, tagged: 3, inGame: none }).map((t) => t.name), ["Ravi", "Priya", "Kiran"], "the copy and the count agree: all named");
+  assert.deepEqual(namedTags({ named, tagged: 4, inGame: none }).map((t) => t.name), ["Ravi", "Priya", "Kiran"], "one more tagged since (or one with tagging off): those known are named, the page says +1 more");
+  assert.deepEqual(namedTags({ named, tagged: 2, inGame: new Set([TID(2)]) }).map((t) => t.name), ["Ravi", "Kiran"], "someone said I'm in since: they are in the lineup, not twice");
+  assert.deepEqual(namedTags({ named, tagged: 2, inGame: none }), [], "someone took themselves off since and the copy can't say who: nobody is named until it is fresh");
+  assert.deepEqual(namedTags({ named, tagged: 2, inGame: none, left: new Set([TID(3)]) }).map((t) => t.name), ["Ravi", "Priya"], "the viewer's own Remove me: gone at once, the others stay");
+  assert.deepEqual(namedTags({ named, tagged: 0, inGame: none }), [], "nobody waits: nobody named");
+  assert.deepEqual(namedTags({ named: [], tagged: 3, inGame: none }), [], "before the file (or a failed read): a count only, as before");
+  assert.equal(moreChip({ names: [], extra: 1, tagged: 3 }, namedTags({ named: named.slice(0, 2), tagged: 3, inGame: none }).length), "+2 more", "the rest are a number, with the people without a name");
+});
+
+test("the section's words are true before and after tagged players show at once", () => {
+  assert.equal(CONFIRMED_COPY.publicNote, "Names show on the game page. A TapTurf player you tag gets a notification and can take themselves off.");
+  assert.deepEqual([TAG_COPY.in, TAG_COPY.remove, TAG_COPY.yes, TAG_COPY.no], ["I'm in", "Remove me", "Yes, I'm in", "Not me"]);
 });

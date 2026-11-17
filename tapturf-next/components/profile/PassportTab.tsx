@@ -17,6 +17,7 @@ import { PlayedWithList, WhatsAppSwitch } from "./PlayedWith";
 import { ShareProfile } from "./ShareProfile";
 import { RoundStamps, StampPage, TurfStamps } from "./Stamps";
 import { StreakLine } from "./StreakNudge";
+import { TaggedGames } from "./TaggedGames";
 
 /**
  * The Me tab's Passport: the numbers, the weekly streak, medals, a stamp
@@ -90,7 +91,8 @@ export function PassportTab({ onLoaded }: { onLoaded?: (r: PassportResponse) => 
       </div>
     );
   }
-  return <Passport r={mine.r} />;
+  // After "Yes, I played" or "No, I didn't": the passport is read again (what is shown stays until it arrives).
+  return <Passport r={mine.r} onChanged={() => setAttempt((n) => n + 1)} />;
 }
 
 // The aside goes under the title when both don't fit on one line (a 320 px phone).
@@ -186,7 +188,7 @@ function Medals({ medals, games, now }: { medals: Medal[]; games: number; now: n
   );
 }
 
-function Passport({ r }: { r: PassportResponse }) {
+function Passport({ r, onChanged }: { r: PassportResponse; onChanged: () => void }) {
   const [now] = useState(() => Date.now());
   const { passport: p, playedWith, whatsapp } = r;
   const n = p.numbers;
@@ -196,6 +198,9 @@ function Passport({ r }: { r: PassportResponse }) {
 
   return (
     <div>
+      {/* Games a host tagged them in that they never answered about: did you play? (lib/games/played.ts) */}
+      <TaggedGames games={r.tagged ?? []} onChanged={onChanged} />
+
       {/* ─── The numbers ─────────────────────────────────── */}
       <section aria-labelledby="pp-numbers">
         <Heading id="pp-numbers" icon={<Award className="w-5 h-5" />} title="Your numbers" aside={since ? `Since ${since}` : undefined} />

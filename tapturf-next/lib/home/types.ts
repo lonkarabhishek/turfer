@@ -1,4 +1,5 @@
 import type { SpotlightTurf } from "@/components/turf/TrendingSpotlight";
+import type { Speed } from "@/lib/games/progress";
 
 /**
  * Shapes the home page hands to its components. Everything here is
@@ -62,6 +63,11 @@ export type HomeGame = {
   place: string | null;
   city: string | null;
   spotsLeft: number;
+  /** The players in and the spots, for the bar (components/game/PlayersBar.tsx). */
+  current: number;
+  max: number;
+  /** What the bar says beside it, worked out when the page was rendered (lib/games/progress.ts speedOf): "Filling fast" only when it is. */
+  speed: Speed;
   /** 0 when free or unknown. */
   price: number;
 };

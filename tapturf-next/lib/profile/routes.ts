@@ -4,6 +4,7 @@ import { bestFirst } from "./medals";
 import { coPlayers, playedWithList, type CoPlayerExtra } from "./playedWith";
 import type { History, WhatsAppResult } from "./server";
 import type { PassportResponse, PlayedResponse, WhatsAppResponse } from "./types";
+import { taggedGames } from "../games/played";
 
 // The passport routes (lib/profile/types.ts has the API), for
 // app/api/me/*. Who is asking and every read come in as deps
@@ -21,6 +22,8 @@ export type ProfileDeps = {
   people: (ids: readonly string[]) => Promise<Map<string, { name: string | null; photo: string | null }>>;
   extras: (userId: string) => Promise<Map<string, CoPlayerExtra> | null>;
   whatsapp: (userId: string, on: boolean | null) => Promise<WhatsAppResult>;
+  /** The games this account was tagged in and never answered about, as public.game_tags_played sends them (lib/games/played.ts checks them again); null: can't say. */
+  tagged?: (userId: string) => Promise<unknown[] | null>;
   now: () => number;
 };
 
@@ -50,10 +53,12 @@ export async function getPassport(req: Request, deps: ProfileDeps): Promise<Resp
   if ("reply" in who) return who.reply;
   try {
     const now = deps.now();
-    const [history, extras, wa] = await Promise.all([
+    const [history, extras, wa, tagged] = await Promise.all([
       deps.history(who.userId),
       deps.extras(who.userId).catch(() => null),
       deps.whatsapp(who.userId, null).catch((): WhatsAppResult => ({ unavailable: true })),
+      // "Did you play?": never holds the passport up.
+      deps.tagged ? deps.tagged(who.userId).catch(() => null) : null,
     ]);
     const passport = buildPassport({ userId: who.userId, ...history, since: who.since, now });
     const played = playedGames(who.userId, history.games, now);
@@ -66,6 +71,8 @@ export async function getPassport(req: Request, deps: ProfileDeps): Promise<Resp
       playedWith: playedWithList(list, people, extras),
       whatsapp: "ok" in wa ? wa.ok : null,
       played: summary(passport, played, list.length),
+      // Never a game they are in the history of already (they answered, or joined the usual way).
+      tagged: taggedGames(tagged, now).filter((t) => !byId.has(t.gameId)),
     };
     return reply(body);
   } catch (e) {

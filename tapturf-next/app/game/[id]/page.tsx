@@ -5,6 +5,7 @@ import { permanentRedirect } from "next/navigation";
 import { getGameByParam } from "@/lib/queries/games.server";
 import { tagGamesRender } from "@/lib/queries/listScope";
 import { hostUsernames } from "@/lib/games/hostProfile.server";
+import { shownTagsFor } from "@/lib/games/shownTags.server";
 import { gameShareImages } from "@/lib/og/gameCard";
 import { gameExpiresAt, gameVenue, isGameExpired } from "@/lib/utils/game";
 import { keepUntil } from "@/lib/queries/changeMark";
@@ -124,6 +125,9 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
   // A cricket match game's turf session live link: its own tournament code, worked out here (the key is server only).
   const key = tournamentKey();
   const sessionCode = game && key && formatFor(game.sport) ? gameTournamentCode(game.id, key) : null;
+  // The tagged players this page names (20261118_game_tags_shown.sql): read here, kept with the page, only for a
+  // game that has any. Visible lineup only: never in the title, description, JSON-LD or share card.
+  const tagged = game ? await shownTagsFor(game) : [];
 
   return (
     <>
@@ -134,7 +138,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
         />
       )}
       {/* The live link copy only when live links are set up (LIVE_WRITE_KEY is server-only). */}
-      <GameDetailClient gameId={game?.id ?? id} liveLinks={Boolean(process.env.LIVE_WRITE_KEY)} sessionCode={sessionCode} />
+      <GameDetailClient gameId={game?.id ?? id} liveLinks={Boolean(process.env.LIVE_WRITE_KEY)} sessionCode={sessionCode} tagged={tagged} />
     </>
   );
 }

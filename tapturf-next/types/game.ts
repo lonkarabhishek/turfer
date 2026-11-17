@@ -47,6 +47,15 @@ export interface Game {
   confirmed_names?: string[];
   confirmed_extra?: number;
   confirmed_tagged?: number;
+  /** A list row only (cardGame, shapeGames): how many names there were, the names left out (lib/games/progress.ts). */
+  confirmed_named?: number;
+  /**
+   * The host's updates ({id, at, text}, oldest first; lib/games/updates.ts) and what happened to the game
+   * ({at, k, ...}; lib/games/activity.ts), 20261118_game_updates.sql. Absent before that file; both are left out of
+   * every list (they show on the game's own page).
+   */
+  updates?: unknown;
+  activity?: unknown;
   // Joined data from turfs table
   turfs?: {
     id: string;
