@@ -16,6 +16,9 @@ import {
   postSeries,
   stopSeries,
   forgetVenuesReady,
+  forgetConfirmedReady,
+  getGameTags,
+  postGameTag,
 } from "./server";
 import { dbProfile, googleSession, installNet, net, phoneToken, req, testEnv } from "../account/testkit";
 
@@ -559,4 +562,113 @@ test("move to a typed venue: the notice in its own words; the database decides i
   const args = net.calls("game_update")[0].args;
   assert.deepEqual(args.p_changes, { turf_booked: false, venue_name: "Shivaji Maidan", venue_address: "Baner Road", venue_city: "pune", venue_area: "Baner", venue_maps_url: null });
   assert.deepEqual(args.p_move_notice, { title: "Venue changed", message: "Asha moved Football on Sat 7 Nov to Shivaji Maidan, Baner" });
+});
+
+/* ---------------- Already confirmed (20261117_game_confirmed.sql) ---------------- */
+
+const PEOPLE = { confirmed_names: [" Rahul ", "Amit  Bhai"], confirmed_extra: 2, confirmed_tags: ["ravi_k", "ravi_k"] };
+const PEOPLE_CLEAN = { confirmed_names: ["Rahul", "Amit Bhai"], confirmed_extra: 2, confirmed_tags: ["ravi_k"] };
+const noConfirmed = () => Response.json({ code: "42703", message: "column games.confirmed_names does not exist" }, { status: 400 });
+const TAG = "cccccccc-cccc-4ccc-8ccc-000000000001";
+
+test("create and edit with confirmed people: checked and cleaned here, then the database's call; asked once whether it takes them", async () => {
+  signedIn();
+  forgetConfirmedReady();
+  net.rest = restDb({ games: [] });
+  net.rpc.game_create = () => ({ r: "ok", game: { id: GAME, current_players: 6 } });
+  net.rpc.game_update = () => ({ r: "ok", game: { id: GAME, current_players: 4 }, notified: 0 });
+  net.rpc.game_series_create = () => ({ r: "ok", series: { id: SERIES }, games: [{ id: GAME }], made: 1 });
+  const made = await postGame(req("/api/games", { method: "POST", token: phoneToken(), body: { ...BODY, ...PEOPLE } }));
+  assert.equal(made.status, 200);
+  assert.deepEqual(net.calls("game_create")[0].args.p_game, { ...BODY, ...PEOPLE_CLEAN }, "the names collapsed, a username once");
+  assert.deepEqual(net.restCalls.map((c) => [c.method, c.table, /confirmed_names/.test(c.search)]), [["GET", "games", true]], "one look that games have confirmed_names");
+  const edit = await patchGame(req(`/api/games/${GAME}`, { method: "PATCH", token: phoneToken(), body: { confirmed_extra: 1, confirmed_untag: [TAG.toUpperCase()] } }), GAME);
+  assert.equal(edit.status, 200);
+  assert.deepEqual(net.calls("game_update")[0].args.p_changes, { confirmed_extra: 1, confirmed_untag: [TAG] });
+  const series = await postSeries(req("/api/game-series", { method: "POST", token: phoneToken(), body: { game: { ...BODY, ...PEOPLE }, repeat: REPEAT } }));
+  assert.equal(series.status, 200);
+  assert.deepEqual(net.calls("game_series_create")[0].args.p_game, { ...BODY, ...PEOPLE_CLEAN });
+  assert.equal(net.restCalls.length, 1, "once seen, not asked again");
+  for (const [body, field] of [
+    [{ ...BODY, confirmed_names: ["Rahul 9822012345"] }, "confirmed_names"],
+    [{ ...BODY, confirmed_names: ["rahul.com"] }, "confirmed_names"],
+    [{ ...BODY, confirmed_extra: 31 }, "confirmed_extra"],
+    [{ ...BODY, confirmed_tags: ["aaaaaaaa-aaaa-4aaa-8aaa-000000000002"] }, "confirmed_tags"],
+    [{ ...BODY, max_players: 3, confirmed_extra: 3 }, "confirmed"],
+    [{ ...BODY, confirmed_untag: [TAG] }, "confirmed_untag"],
+  ] as const) {
+    const bad = await postGame(req("/api/games", { method: "POST", token: phoneToken(), body }));
+    assert.deepEqual([bad.status, await json(bad)], [400, { field, error: "bad" }], JSON.stringify(body));
+  }
+  assert.equal(net.calls("game_create").length, 1, "the bad ones never reached the database");
+  // The database's own refusals come through in the route's words.
+  net.rpc.game_update = () => ({ r: "bad", field: "confirmed" });
+  const over = await patchGame(req(`/api/games/${GAME}`, { method: "PATCH", token: phoneToken(), body: { confirmed_extra: 9 } }), GAME);
+  assert.deepEqual([over.status, await json(over)], [400, { field: "confirmed", error: "bad" }]);
+  net.rpc.game_update = () => ({ r: "too_few", players: 7 });
+  const few = await patchGame(req(`/api/games/${GAME}`, { method: "PATCH", token: phoneToken(), body: { max_players: 6 } }), GAME);
+  assert.deepEqual([few.status, await json(few)], [400, { reason: "too_few", players: 7, error: "bad" }]);
+});
+
+test("a database without confirmed people yet: they are refused plainly (confirmed_off), every other create and edit goes on as before", async () => {
+  signedIn();
+  forgetConfirmedReady();
+  forgetVenuesReady();
+  net.rest = noConfirmed;
+  net.rpc.game_create = () => ({ r: "ok", game: { id: GAME } });
+  net.rpc.game_series_create = () => ({ r: "ok", series: { id: SERIES }, games: [], made: 0 });
+  net.rpc.game_update = () => ({ r: "ok", game: { id: GAME }, notified: 0 });
+  const made = await postGame(req("/api/games", { method: "POST", token: phoneToken(), body: { ...BODY, confirmed_extra: 2 } }));
+  assert.deepEqual([made.status, await json(made)], [503, { reason: "confirmed_off", error: "unavailable" }]);
+  const series = await postSeries(req("/api/game-series", { method: "POST", token: phoneToken(), body: { game: { ...BODY, confirmed_names: ["Rahul"] }, repeat: REPEAT } }));
+  assert.deepEqual([series.status, (await json(series)).reason], [503, "confirmed_off"]);
+  const edit = await patchGame(req(`/api/games/${GAME}`, { method: "PATCH", token: phoneToken(), body: { confirmed_tags: ["ravi_k"] } }), GAME);
+  assert.deepEqual([edit.status, (await json(edit)).reason], [503, "confirmed_off"]);
+  assert.equal(net.rpcCalls.filter((c) => c.fn !== "account_resolve").length, 0, "no function was called for them");
+  assert.equal(net.restCalls.length, 1, "asked once (again a minute on)");
+  const plain = await postGame(req("/api/games", { method: "POST", token: phoneToken(), body: BODY }));
+  assert.equal(plain.status, 200, "a game without them is made");
+  assert.deepEqual(net.calls("game_create")[0].args.p_game, BODY, "exactly as before");
+  assert.equal((await patchGame(req(`/api/games/${GAME}`, { method: "PATCH", token: phoneToken(), body: { max_players: 12 } }), GAME)).status, 200, "and an edit of anything else");
+  assert.equal(net.restCalls.length, 1, "neither asked about the columns");
+  // The tags routes before the functions exist: nobody is tagged, and an answer is refused plainly.
+  net.rpc.game_tags_for = missing;
+  net.rpc.game_tag_answer = missing;
+  const tags = await getGameTags(req(`/api/games/${GAME}/tags`, { token: phoneToken() }), GAME);
+  assert.deepEqual([tags.status, await json(tags)], [200, { host: false, mine: null }]);
+  const ans = await postGameTag(req(`/api/games/${GAME}/tags`, { method: "POST", token: phoneToken(), body: { answer: "yes" } }), GAME);
+  assert.deepEqual([ans.status, (await json(ans)).reason], [503, "confirmed_off"]);
+  forgetConfirmedReady();
+});
+
+test("tags: the host reads who is waiting (never an account id), anyone else only whether they are; the answer is the caller's own", async () => {
+  signedIn();
+  net.rpc.game_tags_for = () => ({ r: "ok", host: true, tags: [{ id: TAG, name: "Ravi Kumar", photo: null, u: "ravi_k", user_id: "acc-9", phone: "+919000000002" }, { id: "nope", name: "X" }] });
+  const host = await getGameTags(req(`/api/games/${GAME}/tags`, { token: phoneToken() }), GAME.toUpperCase());
+  assert.deepEqual([host.status, await json(host)], [200, { host: true, tags: [{ id: TAG, name: "Ravi Kumar", photo: null, u: "ravi_k" }] }], "these keys only");
+  assert.deepEqual(net.calls("game_tags_for")[0].args, { p_key: net.calls("game_tags_for")[0].args.p_key, p_user_id: "acc-1", p_game_id: GAME }, "as the caller's own account");
+  net.rpc.game_tags_for = () => ({ r: "ok", host: false, mine: "pending" });
+  assert.deepEqual(await json(await getGameTags(req(`/api/games/${GAME}/tags`, { token: phoneToken() }), GAME)), { host: false, mine: "pending" });
+  net.rpc.game_tags_for = () => ({ r: "ok", host: false, mine: null, tags: [{ id: TAG, name: "Ravi Kumar" }] });
+  assert.deepEqual(await json(await getGameTags(req(`/api/games/${GAME}/tags`, { token: phoneToken() }), GAME)), { host: false, mine: null }, "a list is never passed on to anyone but the host");
+  assert.equal((await getGameTags(req("/api/games/x/tags", { token: phoneToken() }), "x")).status, 400);
+  assert.equal((await getGameTags(req(`/api/games/${GAME}/tags`), GAME)).status, 401, "signed in only");
+
+  net.rpc.game_tag_answer = (a) => ({ r: "ok", status: a.p_yes ? "yes" : "no", current_players: a.p_yes ? 4 : 3 });
+  const yes = await postGameTag(req(`/api/games/${GAME}/tags`, { method: "POST", token: phoneToken(), body: { answer: "yes" } }), GAME);
+  assert.deepEqual([yes.status, await json(yes)], [200, { r: "ok", status: "yes", current_players: 4 }]);
+  const no = await postGameTag(req(`/api/games/${GAME}/tags`, { method: "POST", token: phoneToken(), body: { answer: "no" } }), GAME);
+  assert.deepEqual(await json(no), { r: "ok", status: "no", current_players: 3 });
+  assert.deepEqual(net.calls("game_tag_answer").map((c) => [c.args.p_user_id, c.args.p_game_id, c.args.p_yes]), [["acc-1", GAME, true], ["acc-1", GAME, false]]);
+  for (const body of [{}, { answer: "maybe" }, { answer: "yes", user_id: "acc-2" }]) {
+    const bad = await postGameTag(req(`/api/games/${GAME}/tags`, { method: "POST", token: phoneToken(), body }), GAME);
+    assert.deepEqual([bad.status, await json(bad)], [400, { field: "answer", error: "bad" }], JSON.stringify(body));
+  }
+  assert.equal(net.calls("game_tag_answer").length, 2, "nothing but yes or no reaches the database, and never a named account");
+  net.rpc.game_tag_answer = () => ({ r: "gone" });
+  const gone = await postGameTag(req(`/api/games/${GAME}/tags`, { method: "POST", token: phoneToken(), body: { answer: "yes" } }), GAME);
+  assert.deepEqual([gone.status, (await json(gone)).reason], [400, "gone"]);
+  net.rpc.game_tag_answer = () => ({ r: "closed" });
+  const closed = await postGameTag(req(`/api/games/${GAME}/tags`, { method: "POST", token: phoneToken(), body: { answer: "yes" } }), GAME);
+  assert.deepEqual([closed.status, (await json(closed)).reason], [409, "closed"]);
 });

@@ -10,7 +10,8 @@ import {
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { quietToken } from "@/lib/account/client";
-import { createGame, createSeries, getMySeries, otherVenueReady } from "@/lib/queries/games";
+import { confirmedPeopleReady, createGame, createSeries, getMySeries, otherVenueReady } from "@/lib/queries/games";
+import { ConfirmedField, draftCount, emptyConfirmed, type ConfirmedDraft } from "./ConfirmedField";
 import { getTurfPlace, searchTurfs } from "@/lib/queries/users";
 import { gameShareText } from "@/lib/utils/gameShare";
 import { formatGameDay, gamePlace } from "@/lib/utils/game";
@@ -205,6 +206,11 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
   const [customCost, setCustomCost] = useState("");
   const [notes, setNotes] = useState("");
   const [turfBooked, setTurfBooked] = useState(false);
+  // Already confirmed (lib/games/confirmed.ts): shown only once the database takes them (20261117_game_confirmed.sql).
+  const [confirmed, setConfirmed] = useState<ConfirmedDraft>(emptyConfirmed);
+  const [confirmedOn, setConfirmedOn] = useState(false);
+  // How many the new game says are going (the host and the confirmed people), for the share message.
+  const [createdCount, setCreatedCount] = useState(1);
   const [timeSheetOpen, setTimeSheetOpen] = useState(false);
   // How the game repeats (null: it doesn't). Offered once the database has repeats (GET /api/game-series ready).
   const [repeat, setRepeat] = useState<Repeat | null>(null);
@@ -259,6 +265,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
   useEffect(() => {
     let alive = true;
     void otherVenueReady().then((on) => alive && setVenuesOn(on));
+    void confirmedPeopleReady().then((on) => alive && setConfirmedOn(on));
     return () => {
       alive = false;
     };
@@ -384,6 +391,10 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
       setSubmitError("Enter a 10-digit mobile number for players, or leave it empty.");
       return;
     }
+    if (confirmedOn && 1 + draftCount(confirmed) > maxPlayers) {
+      setSubmitError("That's more people than spots. Raise max players, or confirm fewer.");
+      return;
+    }
     setSubmitError("");
     setSubmitting(true);
     if (hostPhone) {
@@ -394,6 +405,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
       turfId: venue ? "" : turfId,
       venue,
       date, startTime, endTime, sport, format: sport, skillLevel, maxPlayers, costPerPerson, notes: notes || undefined, turfBooked,
+      ...(confirmedOn ? { confirmedNames: confirmed.names, confirmedExtra: confirmed.extra, confirmedTags: confirmed.tags.map((t) => t.u) } : {}),
     };
     const phone = hostPhone ? `+91${hostPhone}` : "";
     // Where it is, for the WhatsApp message: a typed venue says it itself; a turf's area and city are read once it is made.
@@ -405,6 +417,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
       if (data && data.games.length > 0) {
         setSeriesGames(data.games);
         setCreatedGameId(data.games[0].id);
+        setCreatedCount(data.games[0].current_players || 1);
         setStep(4);
         void readPlace();
       } else if (data) {
@@ -418,6 +431,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
     setSubmitting(false);
     if (data && !error) {
       setCreatedGameId(data.id);
+      setCreatedCount(data.current_players || 1);
       setStep(4);
       void readPlace();
     }
@@ -441,7 +455,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
         start_time: startTime,
         end_time: endTime,
         max_players: maxPlayers,
-        current_players: 1,
+        current_players: createdCount,
         price_per_player: costPerPerson,
         skill_level: skillLevel,
         turf_booked: turfBooked,
@@ -1056,7 +1070,7 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                     <span className="text-[15px] font-medium text-primary-800">Max players</span>
                     <div className="flex items-center gap-3 bg-primary-100 rounded-xl p-1">
                       <button
-                        onClick={() => setMaxPlayers(Math.max(2, maxPlayers - 1))}
+                        onClick={() => setMaxPlayers(Math.max(2, confirmedOn ? 1 + draftCount(confirmed) : 2, maxPlayers - 1))}
                         className="w-8 h-8 flex items-center justify-center rounded-lg bg-white text-primary-800 font-bold text-lg active:scale-95 transition-all shadow-sm focus-neon"
                         aria-label="Decrease"
                       >
@@ -1099,6 +1113,13 @@ export function CreateGameFlow({ liveLinks = false }: { liveLinks?: boolean } = 
                     </button>
                   </div>
                 </div>
+
+                {/* Already confirmed: friends who are in before anyone joins on TapTurf */}
+                {confirmedOn && (
+                  <div className="mt-4 bg-white border border-primary-200 rounded-2xl p-4">
+                    <ConfirmedField value={confirmed} onChange={setConfirmed} max={maxPlayers} joined={1} repeat={!!repeat} />
+                  </div>
+                )}
 
                 {/* COST group */}
                 <p className="text-[11px] font-semibold text-primary-500 px-1 pb-2 pt-6">

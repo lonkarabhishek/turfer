@@ -6,6 +6,17 @@ import { PRIVACY_NOTICE, PRIVACY_UPDATED, privacyNoticeText } from "./policy";
 
 const privacyPage = fs.readFileSync(path.join(process.cwd(), "app/privacy/page.tsx"), "utf8");
 
+test("policy: the friends a host says are in already, and tagging", () => {
+  const page = privacyPage.replace(/\s+/g, " ");
+  const at = page.indexOf("<strong>Things you do on TapTurf.</strong>");
+  const things = page.slice(at, page.indexOf("</p>", at));
+  assert.match(things, /When you host a game you can say who is in already: a friend&rsquo;s name you type shows on that game&rsquo;s page to anyone, so type only a first name or nickname, and it is not linked to any account\./);
+  assert.match(things, /A TapTurf player you tag gets one notification; until they say yes only you see who you tagged \(the game shows a count\), and if they say &ldquo;Not me&rdquo; or you untag them they come off; turn off &ldquo;Let others find and tag me&rdquo; on the Me tab and no host can tag you\./);
+  // No new site-wide notice for it (the site owner's call); the policy's date moves.
+  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_UPDATED, "2026-11-17");
+});
+
 test("policy notice: a new id, so people who dismissed the last one see it", () => {
   assert.notEqual(PRIVACY_NOTICE.id, PRIVACY_NOTICE.earlier.id);
   assert.match(PRIVACY_NOTICE.id, /^\d{4}-\d{2}-\d{2}-/, "named for the date of its change");
@@ -18,7 +29,7 @@ test("policy notice: emails, and where the policy says it", () => {
     "If your account has an email Google confirmed, TapTurf now emails you about your games: a welcome, join requests and answers, game changes and reminders. Resend sends them for us. Turn each kind off on the Me tab or with the link in any email. We don't track opens or taps, and we never email about booking requests.",
   );
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-12");
+  assert.equal(PRIVACY_UPDATED, "2026-11-17");
   assert.equal(PRIVACY_NOTICE.anchor, "emails");
   const at = privacyPage.indexOf(`id="${PRIVACY_NOTICE.anchor}"`);
   assert.ok(at >= 0, `the policy has #${PRIVACY_NOTICE.anchor}`);

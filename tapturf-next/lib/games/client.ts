@@ -14,6 +14,8 @@ import type {
   RequestSentResponse,
   RequestsForResponse,
   RequestsResponse,
+  TagAnsweredResponse,
+  TagsForResponse,
   UnreadResponse,
 } from "./types";
 
@@ -63,6 +65,9 @@ const at = (id: string) => encodeURIComponent(id);
 export const createGameCall = (getToken: GetToken, game: CreateGameBody) => call<GameResponse>(getToken, "/api/games", json("POST", game));
 export const updateGameCall = (getToken: GetToken, gameId: string, changes: GameChanges) => call<GameResponse>(getToken, `/api/games/${at(gameId)}`, json("PATCH", changes));
 export const cancelGameCall = (getToken: GetToken, gameId: string) => call<{ r: "ok" }>(getToken, `/api/games/${at(gameId)}/cancel`, json("POST", {}));
+export const tagsForGameCall = (getToken: GetToken, gameId: string) => call<TagsForResponse>(getToken, `/api/games/${at(gameId)}/tags`);
+export const answerTagCall = (getToken: GetToken, gameId: string, yes: boolean) =>
+  call<TagAnsweredResponse>(getToken, `/api/games/${at(gameId)}/tags`, json("POST", { answer: yes ? "yes" : "no" }));
 export const requestsForGameCall = (getToken: GetToken, gameId: string) => call<RequestsForResponse>(getToken, `/api/games/${at(gameId)}/requests`);
 export const sendRequestCall = (getToken: GetToken, gameId: string, note: string | null) =>
   call<RequestSentResponse>(getToken, `/api/games/${at(gameId)}/requests`, json("POST", { note }));
@@ -95,6 +100,11 @@ const FIELD_TEXT: Record<string, string> = {
   venue_city: "Check the city.",
   venue_maps_url: "Paste the link Google Maps gives you (Share, then Copy link), or leave it empty.",
   sport: "Pick a sport.",
+  confirmed_names: "Check the names: a first name or nickname each, letters only, up to 20 characters.",
+  confirmed_extra: "Check how many more are confirmed: 0 to 30.",
+  confirmed_tags: "Couldn't tag those players. Pick them again.",
+  confirmed_untag: "Couldn't untag that player. Refresh and try again.",
+  confirmed: "That's more people than spots. Raise max players, or confirm fewer.",
   repeat: "Check how it repeats.",
   rule: "Check how it repeats.",
   interval: "Repeat every 1 to 4 weeks.",
@@ -137,6 +147,8 @@ export function gameProblem(a: GameAnswer<unknown>): string | null {
       return "Repeating games aren't on yet. Post this as a single game for now.";
     case "venue_off":
       return "Venues that aren't on TapTurf can't be added just yet. Pick a TapTurf turf for now.";
+    case "confirmed_off":
+      return "Adding confirmed players isn't on just yet. Post the game without them for now.";
   }
   if (b.error === "bad") return (b.field && FIELD_TEXT[b.field]) || "Something there doesn't look right. Check it and try again.";
   if (b.error === "sign_in") return "Your login ended. Please log in again.";

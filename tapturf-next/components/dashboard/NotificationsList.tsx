@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { AlarmClock, Bell, CalendarCheck, CalendarClock, CalendarPlus, CalendarX, Check, ChevronRight, Hourglass, Info, MapPin, Store, UserPlus, XCircle } from "lucide-react";
+import { AlarmClock, Bell, CalendarCheck, CalendarClock, CalendarPlus, CalendarX, Check, ChevronRight, Hourglass, Info, MapPin, Store, UserCheck, UserMinus, UserPlus, XCircle } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { quietToken } from "@/lib/account/client";
 import { getUserNotifications, markAsRead, markAllAsRead } from "@/lib/queries/notifications";
+import { answerTag } from "@/lib/queries/games";
+import { TAG_COPY } from "@/lib/games/confirmed";
 import { CLAIM_APPROVED, CLAIM_REJECTED, notificationLink } from "@/lib/my/claimNotice";
 import type { Notification } from "@/types/notification";
 
@@ -19,6 +21,10 @@ const ICON_MAP: Record<string, typeof Bell> = {
   game_time_changed: CalendarClock,
   game_reminder: AlarmClock,
   game_request_waiting: Hourglass,
+  // 20261117_game_confirmed.sql: a host tagged this player as confirmed; to the host, the player's answer.
+  game_tagged: UserCheck,
+  game_tag_yes: UserCheck,
+  game_tag_no: UserMinus,
   // A turf claim TapTurf decided (20261106_owner_claims_clarity.sql admin_answer_owner_claim).
   [CLAIM_APPROVED]: Store,
   [CLAIM_REJECTED]: Info,
@@ -37,6 +43,9 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
   const readToken = quietToken(signedInWith);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  // A tag being answered from the list, and what came back, by notification id.
+  const [tagBusy, setTagBusy] = useState<string | null>(null);
+  const [tagSaid, setTagSaid] = useState<Record<string, string>>({});
 
   // Again for another account.
   useEffect(() => {
@@ -58,6 +67,17 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
   const handleMarkRead = async (id: string) => {
     await markAsRead(getToken, id);
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
+  };
+
+  // "Yes, I'm in" or "Not me" on a tag (lib/games/confirmed.ts): the answer goes, and the notification is read.
+  const handleTag = async (notif: Notification, yes: boolean) => {
+    const gameId = typeof notif.metadata?.gameId === "string" ? notif.metadata.gameId : null;
+    if (!gameId) return;
+    setTagBusy(notif.id);
+    const r = await answerTag(getToken, gameId, yes);
+    setTagBusy(null);
+    setTagSaid((s) => ({ ...s, [notif.id]: r.text }));
+    if (r.done) await handleMarkRead(notif.id);
   };
 
   const handleMarkAllRead = async () => {
@@ -158,6 +178,43 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
               ? "border-primary-200 bg-white hover:border-primary-300"
               : "border-accent-500/30 bg-accent-50 hover:border-accent-500"
           }`;
+
+          // A tag still to answer: the two answers, and a link to the game (buttons can't sit inside a link).
+          if (notif.type === "game_tagged" && link && (!notif.is_read || tagSaid[notif.id])) {
+            return (
+              <div key={notif.id} className={cardClass}>
+                {inner}
+                <div className="mt-3 pl-11">
+                  {tagSaid[notif.id] ? (
+                    <p role="status" className="text-[13px] font-semibold text-primary-800">{tagSaid[notif.id]}</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={tagBusy === notif.id}
+                        onClick={() => handleTag(notif, true)}
+                        className="h-10 rounded-full bg-accent-600 hover:bg-accent-700 px-4 text-[14px] font-semibold text-white disabled:opacity-60"
+                      >
+                        {TAG_COPY.yes}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={tagBusy === notif.id}
+                        onClick={() => handleTag(notif, false)}
+                        className="h-10 rounded-full border border-primary-300 bg-white px-4 text-[14px] font-semibold text-primary-900 hover:bg-primary-50 disabled:opacity-60"
+                      >
+                        {TAG_COPY.no}
+                      </button>
+                    </div>
+                  )}
+                  <Link href={link.href} className="mt-2 inline-flex min-h-9 items-center gap-0.5 text-[13px] font-semibold text-accent-700">
+                    See the game
+                    <ChevronRight className="w-3.5 h-3.5" aria-hidden />
+                  </Link>
+                </div>
+              </div>
+            );
+          }
 
           // If the notification points somewhere (a game, a claimed turf), tap opens it.
           // Otherwise it's still tappable to mark as read.

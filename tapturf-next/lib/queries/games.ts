@@ -3,6 +3,7 @@ import { cleanVenueName } from "@/lib/utils/bookingApps";
 import { usableTurfPhotos } from "@/lib/utils/images";
 import {
   answerRequestCall,
+  answerTagCall,
   createGameCall,
   createSeriesCall,
   gameProblem,
@@ -12,6 +13,7 @@ import {
   requestsForGameCall,
   sendRequestCall,
   stopSeriesCall,
+  tagsForGameCall,
   updateGameCall,
   withdrawRequestCall,
   type GameAnswer,
@@ -19,7 +21,8 @@ import {
 } from "@/lib/games/client";
 import type { Repeat } from "@/lib/games/repeat";
 import { missingVenueColumn } from "@/lib/games/otherVenue";
-import type { CreateGameBody, GameChanges, GameSeries, SeriesInfo } from "@/lib/games/types";
+import { TAG_COPY } from "@/lib/games/confirmed";
+import type { CreateGameBody, GameChanges, GameErrorBody, GameSeries, GameTag, SeriesInfo } from "@/lib/games/types";
 import type { Game, GameRequest, GameParticipant, CreateGameData } from "@/types/game";
 
 // Public reads (games, lineups, turfs) use the anon key, as the pages
@@ -208,6 +211,10 @@ function createBody(gameData: CreateGameData, hostPhone: string): CreateGameBody
     description: gameData.description || gameData.notes || null,
     turf_booked: gameData.turfBooked || false,
     host_phone: hostPhone,
+    // Already confirmed: sent only when the host added someone, so a game without them is the body it always was.
+    ...(gameData.confirmedNames?.length ? { confirmed_names: gameData.confirmedNames } : {}),
+    ...(gameData.confirmedExtra ? { confirmed_extra: gameData.confirmedExtra } : {}),
+    ...(gameData.confirmedTags?.length ? { confirmed_tags: gameData.confirmedTags } : {}),
   };
 }
 
@@ -273,6 +280,40 @@ export async function getSeriesInfo(ids: (string | null | undefined)[]): Promise
 export async function updateGame(getToken: GetToken, gameId: string, updates: GameChanges) {
   const r = outcome(await updateGameCall(getToken, gameId, updates), "game");
   return "error" in r ? { data: null, error: r.error } : { data: r.ok.game, error: null };
+}
+
+// ── Already confirmed: tags ────────────────────────────
+
+/**
+ * Whether the database takes confirmed people (games has confirmed_names,
+ * 20261117_game_confirmed.sql): the create flow shows "Already confirmed"
+ * only when this says yes. False when it can't tell.
+ */
+export async function confirmedPeopleReady(): Promise<boolean> {
+  try {
+    const { error } = await createClient().from("games").select("confirmed_names").limit(0);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+/** The game's tagged players still to answer, for its host ([] for anyone else), and whether the caller is one. */
+export async function getGameTags(getToken: GetToken, gameId: string): Promise<{ tags: GameTag[]; mine: boolean }> {
+  const a = await tagsForGameCall(getToken, gameId);
+  const b = a.body as { host?: boolean; tags?: GameTag[]; mine?: string | null };
+  if (a.status !== 200 || !b) return { tags: [], mine: false };
+  return b.host === true ? { tags: Array.isArray(b.tags) ? b.tags : [], mine: false } : { tags: [], mine: b.mine === "pending" };
+}
+
+/** A tagged player's answer: "Yes, I'm in" or "Not me". The words to show either way. */
+export async function answerTag(getToken: GetToken, gameId: string, yes: boolean): Promise<{ ok: boolean; done: boolean; text: string }> {
+  const a = await answerTagCall(getToken, gameId, yes);
+  const b = (a.body ?? {}) as Partial<GameErrorBody>;
+  if (a.status === 200 && !b.error) return { ok: true, done: true, text: yes ? TAG_COPY.saidYes : TAG_COPY.saidNo };
+  if (b.reason === "gone") return { ok: false, done: true, text: TAG_COPY.gone };
+  if (b.reason === "closed") return { ok: false, done: true, text: TAG_COPY.closed };
+  return { ok: false, done: false, text: gameProblem(a) ?? "Something went wrong. Please try again." };
 }
 
 // ── Game Requests ──────────────────────────────────────

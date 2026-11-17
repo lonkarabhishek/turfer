@@ -38,6 +38,6 @@ export async function loadOpenGames({ strict = false }: { strict?: boolean } = {
     for (const t of turfs ?? []) turfsMap[(t as { id: string }).id] = { ...(t as NonNullable<Game["turfs"]>), name: cleanVenueName((t as { name: string }).name) };
   }
   return (data as unknown as Game[])
-    .map((g) => ({ ...g, host_phone: "", turfs: g.turf_id ? turfsMap[g.turf_id] : undefined }))
+    .map((g) => ({ ...g, host_phone: "", confirmed_names: undefined, turfs: g.turf_id ? turfsMap[g.turf_id] : undefined }))
     .filter((g) => !isGameExpired(g));
 }

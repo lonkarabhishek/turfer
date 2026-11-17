@@ -2,13 +2,15 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Trophy, X, Loader2, Pencil, Save, Send } from "lucide-react";
+import { ArrowLeft, Trophy, X, Loader2, Pencil, Save, Send, UserCheck } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { quietToken } from "@/lib/account/client";
 import {
   getGameById,
   getGameParticipants,
+  answerTag,
   getGameRequests,
+  getGameTags,
   getMyRequestForGame,
   getSeriesGames,
   getSeriesInfo,
@@ -20,7 +22,9 @@ import {
 } from "@/lib/queries/games";
 import { repeatLabel } from "@/lib/games/repeat";
 import { isMapsUrl } from "@/lib/games/otherVenue";
-import type { SeriesInfo } from "@/lib/games/types";
+import { TAG_COPY, confirmedIn, confirmedReady } from "@/lib/games/confirmed";
+import type { GameTag, SeriesInfo } from "@/lib/games/types";
+import { ConfirmedField, draftCount, emptyConfirmed, type ConfirmedDraft } from "./ConfirmedField";
 import {
   durationLabel,
   firstName,
@@ -106,6 +110,12 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
   // The repeat this game is one of (its rule, and its other games still open), and the host's stop sheet.
   const [series, setSeries] = useState<{ id: string; info: SeriesInfo | null; others: Pick<Game, "id" | "date" | "start_time" | "end_time">[] } | null>(null);
   const [stopOpen, setStopOpen] = useState(false);
+  // Already confirmed (lib/games/confirmed.ts): the host's waiting tags, whether this viewer is tagged and waiting, the
+  // answer being sent and what came back, and the edit sheet's draft.
+  const [tags, setTags] = useState<{ gameId: string; list: GameTag[]; mine: boolean } | null>(null);
+  const [tagBusy, setTagBusy] = useState(false);
+  const [tagSaid, setTagSaid] = useState("");
+  const [people, setPeople] = useState<ConfirmedDraft>(emptyConfirmed);
 
   const isHost = !!user && !!game && game.creator_id === user.id;
   const status = game ? getGameStatus(game) : "upcoming";
@@ -167,6 +177,36 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
       alive = false;
     };
   }, [game, user, isHost, gameId, readToken]);
+
+  // Tagged players: one small read, only when the game says someone is tagged and waiting, for a signed-in viewer
+  // (the host gets who; anyone else only whether it is them).
+  const taggedCount = confirmedIn(game).tagged;
+  const loadTags = async () => {
+    const t = await getGameTags(readToken, gameId);
+    setTags({ gameId, list: t.tags, mine: t.mine });
+  };
+  useEffect(() => {
+    if (!viewerId || taggedCount === 0) return;
+    let alive = true;
+    void getGameTags(readToken, gameId).then((t) => alive && setTags({ gameId, list: t.tags, mine: t.mine }));
+    return () => {
+      alive = false;
+    };
+  }, [gameId, viewerId, taggedCount, readToken]);
+  const waitingTags = isHost && taggedCount > 0 && tags?.gameId === gameId ? tags.list : [];
+  const taggedMe = !isHost && !isParticipant && taggedCount > 0 && tags?.gameId === gameId && tags.mine;
+
+  const handleTag = async (yes: boolean) => {
+    setTagBusy(true);
+    const r = await answerTag(getToken, gameId, yes);
+    setTagBusy(false);
+    setTagSaid(r.text);
+    if (r.done) {
+      setTags({ gameId, list: [], mine: false });
+      await loadGame();
+      await loadParticipants();
+    }
+  };
 
   // A game of a repeat: its rule and its next games (public reads, as the game is).
   const seriesId = game?.series_id ?? null;
@@ -294,6 +334,7 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
       skill_level: game.skill_level || "all",
     });
     setNewVenue(null);
+    setPeople({ ...emptyConfirmed(), names: confirmedIn(game).names, extra: confirmedIn(game).extra });
     setSaveError("");
     setShowEditModal(true);
   };
@@ -321,6 +362,16 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
       : moved
         ? { turf_id: moved.id }
         : {};
+    // Already confirmed: only what the host changed goes, so an edit of anything else is the body it always was.
+    const was = confirmedIn(game);
+    const confirmedChanges = confirmedReady(game)
+      ? {
+          ...(people.names.length !== was.names.length || people.names.some((n, i) => n !== was.names[i]) ? { confirmed_names: people.names } : {}),
+          ...(people.extra !== was.extra ? { confirmed_extra: people.extra } : {}),
+          ...(people.tags.length ? { confirmed_tags: people.tags.map((t) => t.u) } : {}),
+          ...(people.untag.length ? { confirmed_untag: people.untag } : {}),
+        }
+      : {};
     const { error } = await updateGame(getToken, game.id, {
       date: editData.date,
       start_time: editData.start_time,
@@ -331,6 +382,7 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
       turf_booked: editData.turf_booked,
       skill_level: editData.skill_level as Game["skill_level"],
       ...move,
+      ...confirmedChanges,
     });
     setSaving(false);
     if (error) {
@@ -338,6 +390,7 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
     } else {
       setShowEditModal(false);
       await loadGame();
+      if ("confirmed_tags" in confirmedChanges || "confirmed_untag" in confirmedChanges) await loadTags();
     }
   };
 
@@ -460,6 +513,44 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
 
             {note && !isHost && <GameStatusNote kind={note} taken={spots.line} />}
 
+            {/* A tagged player: the host says they are in. Their answer, once. */}
+            {(taggedMe || tagSaid) && (
+              <section aria-labelledby="tag-h" className="rounded-2xl border border-accent-500/40 bg-accent-50 p-4">
+                <h2 id="tag-h" className="flex items-center gap-2 text-[16px] font-bold text-primary-900">
+                  <UserCheck className="w-5 h-5 text-accent-700 shrink-0" aria-hidden />
+                  {taggedMe ? "Are you in?" : "Thanks"}
+                </h2>
+                {taggedMe ? (
+                  <>
+                    <p className="mt-1 text-[14px] leading-snug text-primary-800">
+                      {hostFirst === "the host" ? "The host" : hostFirst} added you as confirmed for this game. Your name shows in the lineup only if you say yes.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={tagBusy}
+                        onClick={() => handleTag(true)}
+                        className="h-11 rounded-full bg-accent-600 hover:bg-accent-700 px-5 text-[15px] font-semibold text-white disabled:opacity-60"
+                      >
+                        {TAG_COPY.yes}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={tagBusy}
+                        onClick={() => handleTag(false)}
+                        className="h-11 rounded-full border border-primary-300 bg-white px-5 text-[15px] font-semibold text-primary-900 hover:bg-primary-50 disabled:opacity-60"
+                      >
+                        {TAG_COPY.no}
+                      </button>
+                    </div>
+                    {tagSaid && <p role="alert" className="mt-2 text-[14px] text-hot-600">{tagSaid}</p>}
+                  </>
+                ) : (
+                  <p role="status" className="mt-1 text-[14px] text-primary-800">{tagSaid}</p>
+                )}
+              </section>
+            )}
+
             <GameFacts
               day={day}
               past={ended}
@@ -489,6 +580,9 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
 
             <GameLineup
               participants={participants}
+              confirmed={confirmedIn(game)}
+              waitingTags={waitingTags}
+              hostFirst={hostFirst}
               creatorId={game.creator_id}
               viewerId={viewerId}
               current={game.current_players}
@@ -705,7 +799,7 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
                   <input
                     id="edit-max"
                     type="number"
-                    min={game?.current_players || 1}
+                    min={Math.max(2, participants.length + draftCount(people, waitingTags))}
                     value={editData.max_players}
                     onChange={(e) => setEditData({ ...editData, max_players: parseInt(e.target.value) || 0 })}
                     className={field}
@@ -723,6 +817,18 @@ export function GameDetailClient({ gameId, liveLinks = false, sessionCode = null
                   />
                 </div>
               </div>
+
+              {/* The friends the host says are in: names, people without one, tagged players. Not for a game that is over or off. */}
+              {confirmedReady(game) && !ended && game.status !== "cancelled" && game.status !== "completed" && (
+                <ConfirmedField
+                  value={people}
+                  onChange={setPeople}
+                  max={editData.max_players}
+                  joined={Math.max(1, participants.length)}
+                  waiting={waitingTags}
+                  className="rounded-2xl border border-primary-200 p-4"
+                />
+              )}
 
               <div>
                 <label htmlFor="edit-skill" className={label}>Skill level</label>

@@ -67,7 +67,7 @@ test("edit: only the sheet's fields; a move is a turf id", () => {
   assert.deepEqual(parseChanges({}), { bad: "body" });
   assert.deepEqual(parseChanges({ max_players: 0 }), { bad: "max_players" });
   assert.deepEqual([...CHANGE_FIELDS].sort(), [
-    "date", "description", "end_time", "max_players", "price_per_player", "skill_level", "start_time", "turf_booked", "turf_id",
+    "confirmed_extra", "confirmed_names", "confirmed_tags", "confirmed_untag", "date", "description", "end_time", "max_players", "price_per_player", "skill_level", "start_time", "turf_booked", "turf_id",
     "venue_address", "venue_area", "venue_city", "venue_maps_url", "venue_name",
   ]);
   assert.equal(fieldProblem([], CHANGE_FIELDS), "body");

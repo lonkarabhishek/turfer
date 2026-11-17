@@ -469,13 +469,14 @@ export function firstName(name: string | null | undefined): string {
 
 /**
  * A game as a /games card needs it. These rows go into the list's public,
- * cached HTML, so the host's number stays out, and the turf keeps its
- * area and up to 2 cleaned photos instead of the raw image arrays and the
- * map embed.
+ * cached HTML, so the host's number stays out, and so do the names of the
+ * friends the host confirmed (they show on the game's own page only; the
+ * count is in current_players); the turf keeps its area and up to 2
+ * cleaned photos instead of the raw image arrays and the map embed.
  */
 export function cardGame(g: Game): Game {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { host_phone, turfs, ...rest } = g;
+  const { host_phone, confirmed_names, turfs, ...rest } = g;
   if (!turfs) return rest;
   const t = turfs as NonNullable<Game["turfs"]> & { cover_image?: string | null; images?: unknown; image_review?: unknown };
   return {

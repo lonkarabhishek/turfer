@@ -102,7 +102,12 @@ const SECTIONS: LegalSection[] = [
           play at it), and when you tap Call or WhatsApp on a turf page. After you tap Call or WhatsApp, we may
           ask you once, when you are back on TapTurf, whether you got a slot; your answer (and the time, if you
           pick one) is stored without your name, number or account: only the turf, what you answered and whether
-          you were signed in. We also record the time and method of
+          you were signed in. When you host a game you can say who is in already: a friend&rsquo;s name you
+          type shows on that game&rsquo;s page to anyone, so type only a first name or nickname, and it is not
+          linked to any account. A TapTurf player you tag gets one notification; until they say yes only you
+          see who you tagged (the game shows a count), and if they say &ldquo;Not me&rdquo; or you untag them
+          they come off; turn off &ldquo;Let others find and tag me&rdquo; on the Me tab and no host can tag
+          you. We also record the time and method of
           each sign-in to spot abuse and to see how many people use the site.
         </p>
         <p id="reports" className="scroll-mt-24">

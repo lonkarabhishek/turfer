@@ -1,0 +1,550 @@
+{
+ "about": "A confirmed friend's name and the four keys of a create or an edit, and whether each is taken. lib/games/confirmed.ts (npm run test:games: nameProblem, confirmedFieldOk) and 20261117_game_confirmed.sql (scripts/sql-tests/game_confirmed.check.mjs: private.game_confirmed_name_ok, private.game_confirmed_problem) must agree on every one.",
+ "names": [
+  {
+   "what": "a first name",
+   "value": "Rahul",
+   "ok": true
+  },
+  {
+   "what": "a nickname with a dot",
+   "value": "A.K.",
+   "ok": true
+  },
+  {
+   "what": "an initial and a name",
+   "value": "S.Kumar",
+   "ok": true
+  },
+  {
+   "what": "two words",
+   "value": "Amit Bhai",
+   "ok": true
+  },
+  {
+   "what": "a hyphen",
+   "value": "Jean-Paul",
+   "ok": true
+  },
+  {
+   "what": "an apostrophe",
+   "value": "D'Souza",
+   "ok": true
+  },
+  {
+   "what": "a curly apostrophe",
+   "value": "D’Souza",
+   "ok": true
+  },
+  {
+   "what": "Hindi",
+   "value": "राहुल",
+   "ok": true
+  },
+  {
+   "what": "Marathi with a joiner",
+   "value": "रा\u200dहुल",
+   "ok": true
+  },
+  {
+   "what": "Tamil",
+   "value": "கார்த்திக்",
+   "ok": true
+  },
+  {
+   "what": "Telugu",
+   "value": "రాహుల్",
+   "ok": true
+  },
+  {
+   "what": "Kannada",
+   "value": "ರಾಹುಲ್",
+   "ok": true
+  },
+  {
+   "what": "Malayalam",
+   "value": "രാഹുൽ",
+   "ok": true
+  },
+  {
+   "what": "Bengali",
+   "value": "রাহুল",
+   "ok": true
+  },
+  {
+   "what": "Gujarati",
+   "value": "રાહુલ",
+   "ok": true
+  },
+  {
+   "what": "Punjabi",
+   "value": "ਰਾਹੁਲ",
+   "ok": true
+  },
+  {
+   "what": "Urdu",
+   "value": "راہل",
+   "ok": true
+  },
+  {
+   "what": "an accent",
+   "value": "José",
+   "ok": true
+  },
+  {
+   "what": "one letter",
+   "value": "R",
+   "ok": true
+  },
+  {
+   "what": "spaces collapsed to fit",
+   "value": "  Rahul    Dravid  ",
+   "ok": true
+  },
+  {
+   "what": "20 characters",
+   "value": "Abcdefghij Klmnopqrs",
+   "ok": true
+  },
+  {
+   "what": "21 characters",
+   "value": "Abcdefghij Klmnopqrst",
+   "ok": false,
+   "problem": "long"
+  },
+  {
+   "what": "empty",
+   "value": "",
+   "ok": false,
+   "problem": "missing"
+  },
+  {
+   "what": "only spaces",
+   "value": "   ",
+   "ok": false,
+   "problem": "missing"
+  },
+  {
+   "what": "null",
+   "value": null,
+   "ok": false,
+   "problem": "missing"
+  },
+  {
+   "what": "a number for a name",
+   "value": 7,
+   "ok": false,
+   "problem": "missing"
+  },
+  {
+   "what": "a digit",
+   "value": "Rahul2",
+   "ok": false,
+   "problem": "digits"
+  },
+  {
+   "what": "a phone number",
+   "value": "9876543210",
+   "ok": false,
+   "problem": "digits"
+  },
+  {
+   "what": "a short number",
+   "value": "Amit 98",
+   "ok": false,
+   "problem": "digits"
+  },
+  {
+   "what": "Devanagari digits",
+   "value": "राहुल ९८",
+   "ok": false,
+   "problem": "digits"
+  },
+  {
+   "what": "Tamil digits",
+   "value": "Ravi ௯௮",
+   "ok": false,
+   "problem": "digits"
+  },
+  {
+   "what": "full-width digits",
+   "value": "Ravi ９８",
+   "ok": false,
+   "problem": "digits"
+  },
+  {
+   "what": "Arabic-Indic digits",
+   "value": "راہل ٩٨",
+   "ok": false,
+   "problem": "digits"
+  },
+  {
+   "what": "a link",
+   "value": "amit.in",
+   "ok": false,
+   "problem": "link"
+  },
+  {
+   "what": "a www link",
+   "value": "www.amit",
+   "ok": false,
+   "problem": "link"
+  },
+  {
+   "what": "a dot com",
+   "value": "rahul.com",
+   "ok": false,
+   "problem": "link"
+  },
+  {
+   "what": "an initial then a name starting In",
+   "value": "J.Ingle",
+   "ok": true
+  },
+  {
+   "what": "an at sign",
+   "value": "rahul@upi",
+   "ok": false,
+   "problem": "chars"
+  },
+  {
+   "what": "a slash",
+   "value": "Rahul/Amit",
+   "ok": false,
+   "problem": "chars"
+  },
+  {
+   "what": "a colon",
+   "value": "http:Rahul",
+   "ok": false,
+   "problem": "chars"
+  },
+  {
+   "what": "an emoji",
+   "value": "Rahul 🔥",
+   "ok": false,
+   "problem": "chars"
+  },
+  {
+   "what": "a comma",
+   "value": "Rahul, Amit",
+   "ok": false,
+   "problem": "chars"
+  },
+  {
+   "what": "an underscore",
+   "value": "rahul_k",
+   "ok": false,
+   "problem": "chars"
+  },
+  {
+   "what": "a plus",
+   "value": "Rahul +",
+   "ok": false,
+   "problem": "chars"
+  },
+  {
+   "what": "brackets",
+   "value": "Rahul (GK)",
+   "ok": false,
+   "problem": "chars"
+  },
+  {
+   "what": "only dots",
+   "value": "...",
+   "ok": false,
+   "problem": "chars"
+  },
+  {
+   "what": "only a hyphen",
+   "value": "-",
+   "ok": false,
+   "problem": "chars"
+  },
+  {
+   "what": "a line break inside",
+   "value": "Rahul\nAmit",
+   "ok": true
+  },
+  {
+   "what": "a danda",
+   "value": "राहुल।",
+   "ok": false,
+   "problem": "chars"
+  },
+  {
+   "what": "Chinese",
+   "value": "王伟",
+   "ok": false,
+   "problem": "chars"
+  },
+  {
+   "what": "Cyrillic",
+   "value": "Иван",
+   "ok": false,
+   "problem": "chars"
+  }
+ ],
+ "fields": [
+  {
+   "what": "no names",
+   "key": "confirmed_names",
+   "value": [],
+   "ok": true
+  },
+  {
+   "what": "two names",
+   "key": "confirmed_names",
+   "value": [
+    "Rahul",
+    "Amit"
+   ],
+   "ok": true
+  },
+  {
+   "what": "the same name twice",
+   "key": "confirmed_names",
+   "value": [
+    "Rahul",
+    "Rahul"
+   ],
+   "ok": true
+  },
+  {
+   "what": "20 names",
+   "key": "confirmed_names",
+   "value": [
+    "Friend a",
+    "Friend b",
+    "Friend c",
+    "Friend d",
+    "Friend e",
+    "Friend f",
+    "Friend g",
+    "Friend h",
+    "Friend i",
+    "Friend j",
+    "Friend k",
+    "Friend l",
+    "Friend m",
+    "Friend n",
+    "Friend o",
+    "Friend p",
+    "Friend q",
+    "Friend r",
+    "Friend s",
+    "Friend t"
+   ],
+   "ok": true
+  },
+  {
+   "what": "21 names",
+   "key": "confirmed_names",
+   "value": [
+    "Friend a",
+    "Friend b",
+    "Friend c",
+    "Friend d",
+    "Friend e",
+    "Friend f",
+    "Friend g",
+    "Friend h",
+    "Friend i",
+    "Friend j",
+    "Friend k",
+    "Friend l",
+    "Friend m",
+    "Friend n",
+    "Friend o",
+    "Friend p",
+    "Friend q",
+    "Friend r",
+    "Friend s",
+    "Friend t",
+    "Friend u"
+   ],
+   "ok": false
+  },
+  {
+   "what": "a name with a digit among good ones",
+   "key": "confirmed_names",
+   "value": [
+    "Rahul",
+    "Amit 2"
+   ],
+   "ok": false
+  },
+  {
+   "what": "names not a list",
+   "key": "confirmed_names",
+   "value": "Rahul",
+   "ok": false
+  },
+  {
+   "what": "a null in the names",
+   "key": "confirmed_names",
+   "value": [
+    "Rahul",
+    null
+   ],
+   "ok": false
+  },
+  {
+   "what": "names null",
+   "key": "confirmed_names",
+   "value": null,
+   "ok": false
+  },
+  {
+   "what": "no more",
+   "key": "confirmed_extra",
+   "value": 0,
+   "ok": true
+  },
+  {
+   "what": "30 more",
+   "key": "confirmed_extra",
+   "value": 30,
+   "ok": true
+  },
+  {
+   "what": "31 more",
+   "key": "confirmed_extra",
+   "value": 31,
+   "ok": false
+  },
+  {
+   "what": "fewer than none",
+   "key": "confirmed_extra",
+   "value": -1,
+   "ok": false
+  },
+  {
+   "what": "half a person",
+   "key": "confirmed_extra",
+   "value": 1.5,
+   "ok": false
+  },
+  {
+   "what": "a count as text",
+   "key": "confirmed_extra",
+   "value": "2",
+   "ok": false
+  },
+  {
+   "what": "a count null",
+   "key": "confirmed_extra",
+   "value": null,
+   "ok": false
+  },
+  {
+   "what": "no tags",
+   "key": "confirmed_tags",
+   "value": [],
+   "ok": true
+  },
+  {
+   "what": "two usernames",
+   "key": "confirmed_tags",
+   "value": [
+    "ravi_k",
+    "priya23"
+   ],
+   "ok": true
+  },
+  {
+   "what": "a username with a capital",
+   "key": "confirmed_tags",
+   "value": [
+    "Ravi"
+   ],
+   "ok": false
+  },
+  {
+   "what": "a username too short",
+   "key": "confirmed_tags",
+   "value": [
+    "ab"
+   ],
+   "ok": false
+  },
+  {
+   "what": "a username starting with a digit",
+   "key": "confirmed_tags",
+   "value": [
+    "9ravi"
+   ],
+   "ok": false
+  },
+  {
+   "what": "an account id for a tag",
+   "key": "confirmed_tags",
+   "value": [
+    "aaaaaaaa-aaaa-4aaa-8aaa-000000000002"
+   ],
+   "ok": false
+  },
+  {
+   "what": "21 tags",
+   "key": "confirmed_tags",
+   "value": [
+    "player_a",
+    "player_b",
+    "player_c",
+    "player_d",
+    "player_e",
+    "player_f",
+    "player_g",
+    "player_h",
+    "player_i",
+    "player_j",
+    "player_k",
+    "player_l",
+    "player_m",
+    "player_n",
+    "player_o",
+    "player_p",
+    "player_q",
+    "player_r",
+    "player_s",
+    "player_t",
+    "player_u"
+   ],
+   "ok": false
+  },
+  {
+   "what": "tags not a list",
+   "key": "confirmed_tags",
+   "value": "ravi_k",
+   "ok": false
+  },
+  {
+   "what": "no untags",
+   "key": "confirmed_untag",
+   "value": [],
+   "ok": true
+  },
+  {
+   "what": "one untag",
+   "key": "confirmed_untag",
+   "value": [
+    "cccccccc-cccc-4ccc-8ccc-000000000001"
+   ],
+   "ok": true
+  },
+  {
+   "what": "an untag that is no id",
+   "key": "confirmed_untag",
+   "value": [
+    "ravi_k"
+   ],
+   "ok": false
+  },
+  {
+   "what": "untags not a list",
+   "key": "confirmed_untag",
+   "value": 3,
+   "ok": false
+  }
+ ]
+}

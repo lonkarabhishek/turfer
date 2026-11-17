@@ -169,7 +169,9 @@ export function shapeSuggestions(raw: unknown): TurfSuggestion[] {
 /**
  * Upcoming games at this turf. GameCard reads the venue from game.turfs,
  * which the page already knows. The RPC leaves host_phone out; it is
- * dropped here too in case an older function version still sends it.
+ * dropped here too in case an older function version still sends it,
+ * and so are the names of the friends a host confirmed (the game's own
+ * page shows those; a card has the count in current_players).
  */
 export function shapeGames(raw: unknown, venue: { id: string; name: string; address: string }): Game[] {
   if (!Array.isArray(raw)) return [];
@@ -178,7 +180,7 @@ export function shapeGames(raw: unknown, venue: { id: string; name: string; addr
     .filter((g) => typeof g.id === "string")
     .map((g) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { host_phone, ...rest } = g;
+      const { host_phone, confirmed_names, ...rest } = g;
       return { ...(rest as unknown as Game), turfs: { id: venue.id, name: venue.name, address: venue.address } };
     });
 }

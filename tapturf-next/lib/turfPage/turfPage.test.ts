@@ -144,6 +144,10 @@ test("games: venue attached, host phone never passed on", () => {
   assert.deepEqual(g.turfs, venue);
   assert.equal(g.price_per_player, 100);
   assert.deepEqual(shapeGames("nope", venue), []);
+  // The names of a host's confirmed friends show on the game's own page only: a turf page's card has the count.
+  const [c] = shapeGames([{ id: "g2", turf_id: "t1", sport: "football", current_players: 4, max_players: 10, confirmed_names: ["Rahul"], confirmed_extra: 2 }], venue);
+  assert.equal("confirmed_names" in c, false);
+  assert.equal(c.current_players, 4);
 });
 
 test("trending: only the pick in this turf's own city", () => {

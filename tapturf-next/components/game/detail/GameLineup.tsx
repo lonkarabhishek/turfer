@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Info, Share2, UserPlus } from "lucide-react";
 import { VerifiedTickFor } from "@/components/account/VerifiedTick";
 import type { SpotsInfo } from "@/lib/utils/game";
+import { guestCount, moreChip, type Confirmed } from "@/lib/games/confirmed";
+import type { GameTag } from "@/lib/games/types";
 import type { GameParticipant } from "@/types/game";
 import { Avatar } from "./Avatar";
 
@@ -15,10 +17,18 @@ const WIDE = 16;
  * Who's playing: the players who joined (as today: name, photo, tick),
  * the host and you marked, then a dashed "Your spot?" chip that does what
  * the main button does, when you can still ask. The count is said once,
- * plainly; a near-empty game is an invitation, never urgency.
+ * plainly; a near-empty game is an invitation, never urgency. The friends
+ * the host confirmed (lib/games/confirmed.ts) come after the players, set
+ * apart: plain name chips with no photo or tick under "Confirmed with
+ * <host>", and "+2 more" for the people without a name and for tagged
+ * players who have not said yes (only the host is shown who those are,
+ * marked Waiting). The count above includes them all.
  */
 export function GameLineup({
   participants,
+  confirmed,
+  waitingTags = [],
+  hostFirst,
   creatorId,
   viewerId,
   current,
@@ -34,6 +44,12 @@ export function GameLineup({
   shared,
 }: {
   participants: GameParticipant[];
+  /** The friends the host says are in (games.confirmed_*); nobody before 20261117_game_confirmed.sql. */
+  confirmed: Confirmed;
+  /** The host's own view: the tagged players who have not answered. Empty for everyone else. */
+  waitingTags?: readonly GameTag[];
+  /** The host's first name ("the host" when there is none). */
+  hostFirst: string;
   creatorId: string;
   viewerId: string | null;
   current: number;
@@ -57,6 +73,9 @@ export function GameLineup({
   const toggleOnPhone = n > PHONE;
   const toggleWide = n > WIDE;
   const over = ended || cancelled;
+  const more = moreChip(confirmed, waitingTags.length);
+  const guests = guestCount(confirmed) > 0;
+  const guestChip = "h-9 max-w-full rounded-full border border-dashed border-primary-300 bg-primary-50 inline-flex items-center gap-1.5 text-[14px] text-primary-800";
   return (
     <section aria-labelledby="lineup-h">
       <div className="flex items-baseline justify-between gap-3">
@@ -91,6 +110,35 @@ export function GameLineup({
             );
           })}
         </ul>
+      )}
+      {guests && (
+        <div className="mt-3">
+          <p id="lineup-confirmed" className="text-[13px] font-semibold text-primary-500">
+            Confirmed with {isHost ? "you" : hostFirst}
+          </p>
+          <ul aria-labelledby="lineup-confirmed" className="mt-1.5 flex flex-wrap gap-2">
+            {confirmed.names.map((name, i) => (
+              <li key={`n${i}`} className={`${guestChip} px-3`}>
+                <span className="min-w-0 truncate">{name}</span>
+              </li>
+            ))}
+            {waitingTags.map((t) => (
+              <li key={t.id} className={`${guestChip} pl-1 pr-2`}>
+                <Avatar src={t.photo} name={t.name} size={26} />
+                <span className="min-w-0 truncate">{t.name}</span>
+                <span className="text-[12px] font-semibold bg-white border border-primary-200 text-primary-700 px-2 rounded-full leading-5">Waiting</span>
+              </li>
+            ))}
+            {more && <li className={`${guestChip} px-3 font-semibold`}>{more}</li>}
+          </ul>
+          <p className="mt-1.5 text-[13px] text-primary-500">
+            {isHost
+              ? waitingTags.length > 0
+                ? "Only you see who is waiting. They show here once they say yes."
+                : "Added by you. Change them from Edit game."
+              : `Added by ${hostFirst}. They haven't joined on TapTurf.`}
+          </p>
+        </div>
       )}
       {(toggleOnPhone || canAsk) && (
         <div className={`mt-2 flex flex-wrap items-center gap-3 ${!canAsk && !toggleWide ? "lg:hidden" : ""}`}>

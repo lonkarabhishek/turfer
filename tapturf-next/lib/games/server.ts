@@ -6,6 +6,7 @@ import { venueMoveNotice } from "../utils/gameVenue";
 import { anonDb } from "./db";
 import { legacyRpc } from "./legacy";
 import { missingVenueColumn, storedVenueCity } from "./otherVenue";
+import { hasConfirmedKeys, missingConfirmedColumn } from "./confirmed";
 import { isUuid, parseChanges, parseCreate, parseNote, parseSeries } from "./payload";
 import { cityInfo } from "../city";
 import type { GameChanges } from "./types";
@@ -69,6 +70,8 @@ function refusal(d: Record<string, unknown>): NextResponse {
       return accountError("limit");
     case "venue_off":
       return VENUE_OFF();
+    case "confirmed_off":
+      return CONFIRMED_OFF();
     default:
       return accountError("unavailable");
   }
@@ -115,6 +118,43 @@ async function venueOff(b: { venue_name?: unknown }): Promise<NextResponse | nul
   return typeof b.venue_name === "string" && !(await venuesReady()) ? VENUE_OFF() : null;
 }
 
+/** Confirmed people while the database takes none (before 20261117_game_confirmed.sql): said plainly, every other create and edit goes on. */
+const CONFIRMED_OFF = () => accountReply({ reason: "confirmed_off" }, "unavailable");
+
+let confirmedSeen = false;
+let confirmedMissingAt = 0;
+
+/** Whether the database takes confirmed people (games.confirmed_names is there); as venuesReady. */
+export async function confirmedReady(): Promise<boolean> {
+  if (confirmedSeen) return true;
+  if (confirmedMissingAt && Date.now() - confirmedMissingAt < 60_000) return false;
+  try {
+    const { error } = await anonDb().from("games").select("confirmed_names").limit(0);
+    if (!error) {
+      confirmedSeen = true;
+      return true;
+    }
+    if (missingConfirmedColumn(error)) {
+      confirmedMissingAt = Date.now();
+      return false;
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+/** For the route tests: forget what confirmedReady saw. */
+export function forgetConfirmedReady(): void {
+  confirmedSeen = false;
+  confirmedMissingAt = 0;
+}
+
+/** A body with confirmed people, while the database takes none: the refusal to send, else null. */
+async function confirmedOff(b: object): Promise<NextResponse | null> {
+  return hasConfirmedKeys(b as Record<string, unknown>) && !(await confirmedReady()) ? CONFIRMED_OFF() : null;
+}
+
 /** One call: the function's ok answer as `ok` makes it, else its refusal. */
 async function run(fn: string, args: Record<string, unknown>, ok: (d: Record<string, unknown>) => object): Promise<NextResponse> {
   const res = await gameRpc(fn, args);
@@ -150,7 +190,7 @@ export async function postGame(req: Request): Promise<NextResponse> {
   // Bytes, not characters: a 200-character address in Devanagari is 600.
   const p = parseCreate(await readSmallJson(req, 8_000));
   if ("bad" in p) return accountReply({ field: p.bad }, "bad");
-  const off = await venueOff(p.ok);
+  const off = (await venueOff(p.ok)) ?? (await confirmedOff(p.ok));
   if (off) return off;
   return run("game_create", { p_user_id: w.userId, p_game: p.ok }, (d) => ({ r: "ok", game: d.game }));
 }
@@ -201,7 +241,7 @@ export async function patchGame(req: Request, gameId: string): Promise<NextRespo
   if (!isUuid(gameId)) return accountError("bad");
   const p = parseChanges(await readSmallJson(req, 8_000));
   if ("bad" in p) return accountReply({ field: p.bad }, "bad");
-  const off = await venueOff(p.ok);
+  const off = (await venueOff(p.ok)) ?? (await confirmedOff(p.ok));
   if (off) return off;
   const notice = await moveNotice(gameId.toLowerCase(), p.ok);
   return run("game_update", { p_user_id: w.userId, p_game_id: gameId.toLowerCase(), p_changes: p.ok, p_move_notice: notice }, (d) => ({
@@ -217,6 +257,50 @@ export async function cancelGame(req: Request, gameId: string): Promise<NextResp
   if ("reply" in w) return w.reply;
   if (!isUuid(gameId)) return accountError("bad");
   return run("game_cancel", { p_user_id: w.userId, p_game_id: gameId.toLowerCase() }, () => ({ r: "ok" }));
+}
+
+/* ------------------------------------------------------------------ */
+/* Tagged players (20261117_game_confirmed.sql)                        */
+/* ------------------------------------------------------------------ */
+
+const text = (x: unknown) => (typeof x === "string" && x ? x : null);
+
+/** Waiting tags as the host reads them: these keys only. */
+function tagViews(x: unknown): { id: string; name: string; photo: string | null; u: string | null }[] {
+  return list(x)
+    .filter((t): t is Record<string, unknown> => !!t && typeof t === "object" && isUuid((t as Record<string, unknown>).id))
+    .map((t) => ({ id: t.id as string, name: text(t.name) ?? "Player", photo: text(t.photo), u: text(t.u) }));
+}
+
+/**
+ * GET /api/games/[id]/tags: the host gets the tagged players still to answer; anyone else only whether they are
+ * one. Before the database has tags: nobody is tagged.
+ */
+export async function getGameTags(req: Request, gameId: string): Promise<NextResponse> {
+  const w = await who(req, allowRead);
+  if ("reply" in w) return w.reply;
+  if (!isUuid(gameId)) return accountError("bad");
+  const res = await accountRpcIfThere("game_tags_for", { p_user_id: w.userId, p_game_id: gameId.toLowerCase() });
+  if ("missing" in res) return accountReply({ host: false, mine: null });
+  if ("unavailable" in res) return accountError("unavailable");
+  const d = res.data;
+  if (d.r !== "ok") return refusal(d);
+  return accountReply(d.host === true ? { host: true, tags: tagViews(d.tags) } : { host: false, mine: d.mine === "pending" ? "pending" : null });
+}
+
+/** POST /api/games/[id]/tags { answer: "yes" | "no" }: the tagged caller says they are in, or that it isn't them. */
+export async function postGameTag(req: Request, gameId: string): Promise<NextResponse> {
+  const w = await who(req, allowWrite);
+  if ("reply" in w) return w.reply;
+  if (!isUuid(gameId)) return accountError("bad");
+  const body = await readSmallJson(req, 500);
+  if (!body || (body.answer !== "yes" && body.answer !== "no") || Object.keys(body).some((k) => k !== "answer")) return accountReply({ field: "answer" }, "bad");
+  const res = await accountRpcIfThere("game_tag_answer", { p_user_id: w.userId, p_game_id: gameId.toLowerCase(), p_yes: body.answer === "yes" });
+  if ("missing" in res) return CONFIRMED_OFF();
+  if ("unavailable" in res) return accountError("unavailable");
+  const d = res.data;
+  if (d.r !== "ok") return refusal(d);
+  return accountReply({ r: "ok", status: d.status === "yes" ? "yes" : "no", current_players: typeof d.current_players === "number" ? d.current_players : null });
 }
 
 /* ------------------------------------------------------------------ */
@@ -244,7 +328,7 @@ export async function postSeries(req: Request): Promise<NextResponse> {
   if ("reply" in w) return w.reply;
   const p = parseSeries(await readSmallJson(req, 10_000));
   if ("bad" in p) return accountReply({ field: p.bad }, "bad");
-  const off = await venueOff(p.ok.game);
+  const off = (await venueOff(p.ok.game)) ?? (await confirmedOff(p.ok.game));
   if (off) return off;
   return runSeries("game_series_create", { p_user_id: w.userId, p_game: p.ok.game, p_repeat: p.ok.repeat }, (d) => ({
     r: "ok",

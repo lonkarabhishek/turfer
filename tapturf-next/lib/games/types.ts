@@ -10,6 +10,8 @@ import type { Repeat, RepeatEnds, RepeatRule } from "./repeat";
  *   POST   /api/games                     create (CreateGameBody)
  *   PATCH  /api/games/[id]                the host's edit, a venue move too (GameChanges)
  *   POST   /api/games/[id]/cancel         the host calls it off
+ *   GET    /api/games/[id]/tags           the host: the tagged players still to answer; anyone else: whether they are one
+ *   POST   /api/games/[id]/tags           { answer: "yes" | "no" }: a tagged player's answer
  *   GET    /api/games/[id]/requests       the host: every request; anyone else: their own
  *   POST   /api/games/[id]/requests       ask to join ({ note })
  *   PATCH  /api/game-requests/[id]        the host: { action: "accept" | "decline" }
@@ -51,7 +53,20 @@ export type CreateGameBody = Partial<TypedVenueFields> & {
   turf_booked?: boolean;
   /** "" or +91 and 10 digits: the number players can WhatsApp. */
   host_phone?: string;
-};
+} & ConfirmedFields;
+
+/**
+ * Already confirmed (lib/games/confirmed.ts, 20261117_game_confirmed.sql): friends' names as the host typed them,
+ * how many more without a name, and TapTurf players to tag by their public username. All take a spot at once.
+ */
+export type ConfirmedFields = Partial<{
+  confirmed_names: string[];
+  confirmed_extra: number;
+  confirmed_tags: string[];
+}>;
+
+/** A tagged player still to answer, as the game's host reads them. u: their public username, when tagging is still on. */
+export type GameTag = { id: string; name: string; photo: string | null; u: string | null };
 
 /** What the edit sheet can change. A move: another listed turf (turf_id), or a typed venue (all its fields at once, never with turf_id). */
 export type GameChanges = Partial<TypedVenueFields> & Partial<{
@@ -65,7 +80,9 @@ export type GameChanges = Partial<TypedVenueFields> & Partial<{
   skill_level: Game["skill_level"];
   /** A move: another listed turf. */
   turf_id: string;
-}>;
+  /** Waiting tags to take back, by id (GameTag.id). */
+  confirmed_untag: string[];
+}> & ConfirmedFields;
 
 /** Starting a repeat: the first game (its date is the first day) and how it repeats (lib/games/repeat.ts). */
 export type CreateSeriesBody = { game: CreateGameBody; repeat: Repeat };
@@ -106,9 +123,10 @@ export type SeriesInfo = Pick<GameSeries, "id" | "rule" | "starts_on" | "ends" |
 /**
  * Why a games route said no (the body's reason, next to its error).
  * many: 3 repeats running already; not_ready: the database has no repeats yet;
- * venue_off: the database takes no typed venues yet (before 20261103_game_other_venue.sql).
+ * venue_off: the database takes no typed venues yet (before 20261103_game_other_venue.sql);
+ * confirmed_off: nor confirmed people (before 20261117_game_confirmed.sql).
  */
-export type GameRefusal = "gone" | "not_host" | "own" | "closed" | "full" | "joined" | "pending" | "answered" | "too_few" | "venue" | "many" | "not_ready" | "venue_off";
+export type GameRefusal = "gone" | "not_host" | "own" | "closed" | "full" | "joined" | "pending" | "answered" | "too_few" | "venue" | "many" | "not_ready" | "venue_off" | "confirmed_off";
 
 export type GameErrorBody = { error: string; reason?: GameRefusal; field?: string; players?: number; status?: string };
 
@@ -116,6 +134,8 @@ export type GameResponse = { r: "ok"; game: Game; notified?: number };
 export type RequestsForResponse =
   | { host: true; requests: GameRequest[] }
   | { host: false; mine: { id: string; status: GameRequest["status"] } | null };
+export type TagsForResponse = { host: true; tags: GameTag[] } | { host: false; mine: "pending" | null };
+export type TagAnsweredResponse = { r: "ok"; status: "yes" | "no"; current_players: number | null };
 export type RequestSentResponse = { r: "ok"; request: { id: string; status: GameRequest["status"]; created_at: string } };
 export type RequestAnsweredResponse = { r: "ok"; status: "accepted" | "declined"; current_players: number };
 export type RequestsResponse = { requests: GameRequest[] };

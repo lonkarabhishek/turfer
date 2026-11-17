@@ -39,6 +39,14 @@ export interface Game {
   created_at: string;
   /** The repeat that put this game up (20261102_game_series.sql), if any; absent before that file. */
   series_id?: string | null;
+  /**
+   * The friends its host says are in already (20261117_game_confirmed.sql, lib/games/confirmed.ts): names the host
+   * typed, people without a name, and tagged TapTurf players who have not answered (a number only: who they are is
+   * the host's to read). current_players counts all three. Absent before that file; names are left out of every list.
+   */
+  confirmed_names?: string[];
+  confirmed_extra?: number;
+  confirmed_tagged?: number;
   // Joined data from turfs table
   turfs?: {
     id: string;
@@ -104,4 +112,8 @@ export interface CreateGameData {
   notes?: string;
   isPrivate?: boolean;
   turfBooked?: boolean;
+  /** Already confirmed (lib/games/confirmed.ts): names, people without one, and TapTurf players to tag by username. */
+  confirmedNames?: string[];
+  confirmedExtra?: number;
+  confirmedTags?: string[];
 }

@@ -1,12 +1,14 @@
 import { normalRepeat, repeatProblem, type Repeat } from "./repeat";
 import { VENUE_KEYS, hasVenueKeys, venueFieldOk, venueOf, type VenueKey } from "./otherVenue";
+import { confirmedFieldOk, confirmedOf } from "./confirmed";
 import type { CreateGameBody, CreateSeriesBody, GameChanges } from "./types";
 
 /**
  * The games routes' bodies, checked before the database checks them again
  * (20261030_games_lockdown.sql private.game_field_problem has the same
- * rules, and 20261103_game_other_venue.sql those of a typed venue,
- * lib/games/otherVenue.ts), and the few rules the fallback
+ * rules, 20261103_game_other_venue.sql those of a typed venue,
+ * lib/games/otherVenue.ts, and 20261117_game_confirmed.sql those of the
+ * confirmed people, lib/games/confirmed.ts), and the few rules the fallback
  * (lib/games/legacy.ts) needs. Pure; relative imports only (npm run test:games).
  */
 
@@ -40,10 +42,10 @@ export function isDay(x: unknown): x is string {
 
 const isTime = (x: unknown): x is string => typeof x === "string" && /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(x);
 
-const CREATE_FIELDS = ["turf_id", "sport", "skill_level", "max_players", "date", "start_time", "end_time", "price_per_player", "description", "turf_booked", "host_phone", ...VENUE_KEYS] as const;
+const CREATE_FIELDS = ["turf_id", "sport", "skill_level", "max_players", "date", "start_time", "end_time", "price_per_player", "description", "turf_booked", "host_phone", ...VENUE_KEYS, "confirmed_names", "confirmed_extra", "confirmed_tags"] as const;
 // And a place: turf_id, or a typed venue (placeProblem).
 const CREATE_NEEDS = ["sport", "skill_level", "max_players", "date", "start_time", "end_time", "price_per_player"] as const;
-export const CHANGE_FIELDS = ["date", "start_time", "end_time", "max_players", "price_per_player", "description", "turf_booked", "skill_level", "turf_id", ...VENUE_KEYS] as const;
+export const CHANGE_FIELDS = ["date", "start_time", "end_time", "max_players", "price_per_player", "description", "turf_booked", "skill_level", "turf_id", ...VENUE_KEYS, "confirmed_names", "confirmed_extra", "confirmed_tags", "confirmed_untag"] as const;
 
 /**
  * The first field of a body that is not allowed or not well formed, or
@@ -84,6 +86,11 @@ export function fieldProblem(p: unknown, allowed: readonly string[]): string | n
         case "venue_city":
         case "venue_maps_url":
           return venueFieldOk(k, v);
+        case "confirmed_names":
+        case "confirmed_extra":
+        case "confirmed_tags":
+        case "confirmed_untag":
+          return confirmedFieldOk(k, v);
         default:
           return false;
       }
@@ -126,9 +133,14 @@ export function parseCreate(body: Record<string, unknown> | null, today = istTod
     null;
   if (problem) return { bad: problem };
   if ((b.date as string) < today || (b.date as string) > addDays(today, DAYS_AHEAD)) return { bad: "date" };
+  // The host and everyone the host says is in must fit (the database checks it again).
+  const people = confirmedOf(b);
+  const asked = (people.confirmed_names?.length ?? 0) + (people.confirmed_extra ?? 0) + (people.confirmed_tags?.length ?? 0);
+  if (1 + asked > (b.max_players as number)) return { bad: "confirmed" };
   return {
     ok: {
       ...(withPlace(b) as CreateGameBody),
+      ...people,
       sport: (b.sport as string).trim(),
       ...(typeof b.description === "string" ? { description: b.description.trim() } : {}),
     },
@@ -145,6 +157,7 @@ export function parseChanges(body: Record<string, unknown> | null): { ok: GameCh
   return {
     ok: {
       ...(withPlace(b) as GameChanges),
+      ...confirmedOf(b),
       ...(typeof b.description === "string" ? { description: b.description.trim() } : {}),
     },
   };
