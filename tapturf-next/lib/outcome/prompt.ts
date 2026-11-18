@@ -1,10 +1,14 @@
 import { KINDS, istDay, type Kind } from "./outcome";
+import { askedTime, type AskedTime } from "../slotAsk/ask";
 
 /**
  * When the "Did you get a slot?" card may show (components/outcome/OutcomeCard.tsx),
  * all of it here so it can't nag: the rules, and what the device remembers
  * for them. A Call or WhatsApp tap that opened the dialer or WhatsApp is
  * noted for this tab (sessionStorage, TAP_KEY; a newer tap replaces it).
+ * A tap that sent "Ask for a slot" (lib/slotAsk/) also notes the day and
+ * time asked for, so the card can ask about that slot and skip its own
+ * time questions.
  * The card asks about it once, when the player comes back: the page was
  * hidden, or the window lost focus, after the tap, and they return between
  * MIN_AWAY_MS and MAX_AGE_MS after it. A return sooner than that is not a
@@ -51,6 +55,8 @@ export type Tap = {
   /** The page was hidden, or the window lost focus, since the tap. */
   left: boolean;
   signedIn: boolean;
+  /** The time an "Ask for a slot" tap asked about (India's date and time of the start); absent for a plain Call or WhatsApp tap. */
+  ask?: AskedTime;
 };
 
 export type Memory = {
@@ -69,10 +75,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const time = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v > 0;
 
 /** A new tap: it replaces whatever was waiting (only the latest tap counts). Null when it names no turf. */
-export function newTap(t: { turf: string; name: string; kind: Kind; source: string; signedIn: boolean }, now: number): Tap | null {
+export function newTap(t: { turf: string; name: string; kind: Kind; source: string; signedIn: boolean; ask?: unknown }, now: number): Tap | null {
   const name = t.name.replace(/\s+/g, " ").trim().slice(0, 120);
   if (!UUID.test(t.turf) || !name || !KINDS.includes(t.kind)) return null;
-  return { turf: t.turf.toLowerCase(), name, kind: t.kind, source: /^[a-z0-9_]{1,40}$/.test(t.source) ? t.source : "unknown", at: now, left: false, signedIn: t.signedIn };
+  const ask = askedTime(t.ask);
+  return { turf: t.turf.toLowerCase(), name, kind: t.kind, source: /^[a-z0-9_]{1,40}$/.test(t.source) ? t.source : "unknown", at: now, left: false, signedIn: t.signedIn, ...(ask ? { ask } : {}) };
 }
 
 /** The stored tap; null for none or anything that isn't one (it is then cleared by the caller). */
@@ -81,7 +88,7 @@ export function readTap(text: string | null): Tap | null {
   try {
     const o = JSON.parse(text) as Record<string, unknown>;
     if (!o || typeof o !== "object" || typeof o.turf !== "string" || typeof o.name !== "string" || typeof o.source !== "string" || !time(o.at)) return null;
-    const t = newTap({ turf: o.turf, name: o.name, kind: o.kind as Kind, source: o.source, signedIn: o.signedIn === true }, o.at);
+    const t = newTap({ turf: o.turf, name: o.name, kind: o.kind as Kind, source: o.source, signedIn: o.signedIn === true, ask: o.ask }, o.at);
     return t && { ...t, left: o.left === true };
   } catch {
     return null;

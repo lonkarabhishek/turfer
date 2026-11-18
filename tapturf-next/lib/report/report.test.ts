@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readReportToken, reportKey, reportToken, reportUrl, REPORT_TOKEN_VERSION } from "./token";
 import { outreachMessage, timesText } from "./message";
-import { beforeText, dayLabel, headline, REPORT_COPY, reportPage, SAID_MIN, saidHoursText, saidText, toReport, toSaid } from "./report";
+import { askAxis, asksHoursText, asksText, beforeText, dayLabel, headline, REPORT_COPY, reportPage, SAID_MIN, saidHoursText, saidText, toAsks, toReport, toSaid, topAskHours } from "./report";
 import { getReport, REPORT_HEADERS, reportState } from "./server";
 import { offKey } from "../email/token";
 import { claimCopyProblem } from "../turfPage/claimPrompts";
@@ -280,6 +280,93 @@ test("the route: what players told us is shown from 3 answers; when that read is
   assert.equal(thrown.status, 200, "a read that throws never takes the report down");
 });
 
+/* ── The slots players asked for (20261118_slot_asks.sql) ── */
+
+const ASKS = { r: "ok", days: 30, since: "2026-10-14", today: "2026-11-12", asks: 14, prev: 6, hours: [{ hour: 6, n: 1 }, { hour: 19, n: 6 }, { hour: 20, n: 4 }, { hour: 21, n: 3 }] };
+
+test("the message: asks lead when there are any; counts of asks, never of people or slots given", () => {
+  assert.equal(
+    outreachMessage({ name: "Kings Turf", taps: 52, views: 300, reportUrl: LINK, asks: 14 }),
+    "Hi, this is TapTurf (tapturf.in). In the last 30 days, players asked for a slot at Kings Turf 14 times from its page on TapTurf, and tapped Call or WhatsApp 52 times in all.\n\nYour free report: https://www.tapturf.in/report/abc\n\nYou can claim your page for free to keep your prices, hours and photos right.",
+  );
+  assert.match(outreachMessage({ name: "Kings Turf", taps: 1, views: 3, reportUrl: LINK, asks: 1 }), /players asked for a slot at Kings Turf 1 time from its page on TapTurf\.\n/, "every tap was an ask: the taps are not said again");
+  assert.match(outreachMessage({ name: "Kings Turf", taps: 0, views: 3, reportUrl: LINK, asks: 2 }), /asked for a slot at Kings Turf 2 times from its page on TapTurf\.\n/);
+  assert.match(outreachMessage({ name: "Kings Turf", taps: 12, views: 3, reportUrl: LINK, asks: 3, claimed: true }), /3 times from its page on TapTurf, and tapped Call or WhatsApp 12 times in all\.\n\n.*\n\nYou can see these numbers any time on myTapturf\.$/);
+  for (const asks of [0, undefined, NaN, -2]) assert.equal(outreachMessage({ name: "Kings Turf", taps: 12, views: 300, reportUrl: LINK, asks }), outreachMessage({ name: "Kings Turf", taps: 12, views: 300, reportUrl: LINK }), "no asks: the message as it was");
+  for (const m of [outreachMessage({ name: "A", taps: 9, views: 5, reportUrl: LINK, asks: 4 }), outreachMessage({ name: "A", taps: 4, views: 5, reportUrl: LINK, asks: 4, claimed: true })]) {
+    assert.ok(m.split("\n").includes(`Your free report: ${LINK}`));
+    assert.doesNotMatch(m, /called you|booking|\bbook\b|booked|customers|leads|people|requests?|[—–]/i);
+  }
+});
+
+test("the slots players asked for: a whole answer or nothing", () => {
+  assert.deepEqual(toAsks(ASKS), { asks: 14, prev: 6, hours: [{ hour: 6, n: 1 }, { hour: 19, n: 6 }, { hour: 20, n: 4 }, { hour: 21, n: 3 }] });
+  assert.deepEqual(toAsks({ ...ASKS, hours: [...ASKS.hours].reverse() })?.hours.map((h) => h.hour), [6, 19, 20, 21], "by hour, whatever order they came in");
+  assert.deepEqual(toAsks({ ...ASKS, asks: 0, prev: 0, hours: [] }), { asks: 0, prev: 0, hours: [] });
+  const bad: unknown[] = [null, "x", [], {}, { r: "not_found" }, { ...ASKS, days: 7 }, { ...ASKS, asks: -1 }, { ...ASKS, asks: "14" }, { ...ASKS, prev: null }, { ...ASKS, hours: null },
+    { ...ASKS, asks: 15 }, { ...ASKS, hours: [{ hour: 24, n: 14 }] }, { ...ASKS, hours: [{ hour: 19, n: 7 }, { hour: 19, n: 7 }] }, { ...ASKS, hours: [{ hour: 19, n: 0 }, { hour: 20, n: 14 }] }, { ...ASKS, hours: [null] }];
+  for (const b of bad) assert.equal(toAsks(b), null, JSON.stringify(b)?.slice(0, 80));
+});
+
+test("the slots players asked for: the words count asks, never people", () => {
+  const a = toAsks(ASKS)!;
+  assert.equal(asksText(a), "Players asked for a slot 14 times in the last 30 days.");
+  assert.equal(asksText({ asks: 1, prev: 0, hours: [{ hour: 19, n: 1 }] }), "Players asked for a slot 1 time in the last 30 days.");
+  assert.deepEqual(topAskHours(a), [19, 20, 21]);
+  assert.equal(asksHoursText(a), "Most asked: 7 PM, 8 PM and 9 PM.");
+  assert.equal(asksHoursText({ asks: 2, prev: 0, hours: [{ hour: 6, n: 1 }, { hour: 22, n: 1 }] }), "Most asked: 6 AM and 10 PM.", "a tie goes to the earlier hour");
+  assert.equal(asksHoursText({ asks: 1, prev: 0, hours: [{ hour: 0, n: 1 }] }), "Most asked: 12 AM.");
+  assert.equal(asksHoursText({ asks: 0, prev: 0, hours: [] }), null);
+  assert.deepEqual(askAxis(a), [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1], "5 AM to 1 AM, in a day's order");
+  assert.deepEqual(askAxis({ asks: 1, prev: 0, hours: [{ hour: 3, n: 1 }] }).slice(-5), [0, 1, 2, 3, 4], "the small hours only when one was asked for");
+  for (const w of [REPORT_COPY.asksTitle, REPORT_COPY.asksStat, REPORT_COPY.asksChart, REPORT_COPY.asksNote, asksText(a)]) assert.doesNotMatch(w.replace("not people", ""), /book|customer|people|requests?|leads?|confirmed/i, w);
+  assert.match(REPORT_COPY.asksNote, /times players asked, not people/);
+  assert.equal(REPORT_COPY.asksTitle, "Slots players asked for");
+});
+
+test("the page: the block shows from 1 ask, with the 30 days before and a bar by hour; without asks the page is exactly as it was", () => {
+  const report = toReport(RAW)!;
+  const plain = reportPage({ state: "ok", report }).html;
+  for (const asks of [null, undefined, toAsks({ ...ASKS, asks: 0, prev: 9, hours: [] })]) assert.equal(reportPage({ state: "ok", report, asks }).html, plain, "no ask in the 30 days: nothing about it");
+  const html = reportPage({ state: "ok", report, asks: toAsks(ASKS) }).html;
+  const text = visible(html);
+  assert.ok(text.includes("Slots players asked for"));
+  assert.ok(text.includes("Players asked for a slot 14 times in the last 30 days. Most asked: 7 PM, 8 PM and 9 PM."));
+  assert.ok(text.includes("14 Times players asked for a slot 6 in the 30 days before"), text);
+  assert.ok(text.includes("6 AM") && text.includes("12 PM") && text.includes("9 PM") && text.includes("12 AM"), "hours on the axis");
+  // One bar per hour of the axis; its height is the hour's asks against the most asked hour's; an hour nobody asked for has none.
+  const start = html.indexOf(`<div class="card">\n<h2>Slots players asked for</h2>`);
+  const end = html.indexOf("</div>\n", html.indexOf(`<p class="note">`, start)) + "</div>\n".length;
+  const card = html.slice(start, end);
+  assert.equal((card.match(/<span class="hb"/g) ?? []).length, 21);
+  assert.deepEqual([...card.matchAll(/title="([^"]+)">(?:<b>(\d+)<\/b>)?(?:<i style="height:(\d+)px">)?/g)].filter((m) => m[3]).map((m) => [m[1], m[2] ?? null, Number(m[3])]), [["6 AM: 1 time", null, 11], ["7 PM: 6 times", "6", 64], ["8 PM: 4 times", "4", 43], ["9 PM: 3 times", "3", 32]]);
+  assert.match(card, /role="img" aria-label="Bar chart of the start times players asked for in the last 30 days\. 6 AM: 1, 7 PM: 6, 8 PM: 4, 9 PM: 3\."/);
+  assert.equal(html.slice(0, start) + html.slice(end), plain, "everything else on the page is unchanged");
+  assert.doesNotMatch(html, /<script|<img|https?:\/\//i, "still no script, nothing fetched");
+  assert.doesNotMatch(visible(card), /book|customers|people who|requests/i);
+  // One ask: shown.
+  assert.ok(visible(reportPage({ state: "ok", report, asks: toAsks({ ...ASKS, asks: 1, prev: 0, hours: [{ hour: 19, n: 1 }] }) }).html).includes("Players asked for a slot 1 time in the last 30 days. Most asked: 7 PM."));
+  // It sits before what players told us.
+  const both = reportPage({ state: "ok", report, asks: toAsks(ASKS), said: toSaid(SAID) }).html;
+  assert.ok(both.indexOf("Slots players asked for") < both.indexOf("What players told us") && both.indexOf("What players told us") < both.indexOf("Claim your page"));
+});
+
+test("the route: the block is read with the report; before 20261118_slot_asks.sql, or when that read fails, the report still shows", async () => {
+  const t = reportToken(KEY, TURF);
+  const page = async (asks: unknown) => {
+    const res = await getReport(t, { accountKey: "test-account-key", rpc: async (fn: string) => (fn === "owner_report" ? { data: RAW } : fn === "owner_report_asks" ? (asks as { data: Record<string, unknown> }) : { missing: true as const }) });
+    return [res.status, visible(await res.text()).includes("Slots players asked for")];
+  };
+  assert.deepEqual(await page({ data: ASKS }), [200, true]);
+  assert.deepEqual(await page({ data: { ...ASKS, asks: 0, hours: [] } }), [200, false], "no asks: nothing about it");
+  assert.deepEqual(await page({ data: { ...ASKS, asks: 99 } }), [200, false], "parts that disagree are not shown");
+  assert.deepEqual(await page({ missing: true }), [200, false], "before the file");
+  assert.deepEqual(await page({ unavailable: true }), [200, false]);
+  assert.deepEqual(await page({ data: { r: "not_found" } }), [200, false]);
+  const thrown = await getReport(t, { accountKey: "test-account-key", rpc: async (fn: string) => { if (fn === "owner_report") return { data: RAW }; throw new Error("down"); } });
+  assert.equal(thrown.status, 200);
+});
+
 /* ── The route ── */
 
 const okRpc = (data: Record<string, unknown>) => {
@@ -291,7 +378,7 @@ test("the route: a good link reads that turf's report and shows it, never cached
   const db = okRpc(RAW);
   const res = await getReport(reportToken(KEY, TURF), { accountKey: "test-account-key", rpc: db.rpc });
   assert.equal(res.status, 200);
-  assert.deepEqual(db.calls, [{ fn: "owner_report", args: { p_turf_id: TURF } }, { fn: "owner_report_said", args: { p_turf_id: TURF } }], "the counts, and what players told us, for that turf alone");
+  assert.deepEqual(db.calls, [{ fn: "owner_report", args: { p_turf_id: TURF } }, { fn: "owner_report_said", args: { p_turf_id: TURF } }, { fn: "owner_report_asks", args: { p_turf_id: TURF } }], "the counts, what players told us and the slots they asked for, for that turf alone");
   assert.equal(res.headers.get("cache-control"), "private, no-store");
   assert.equal(res.headers.get("x-robots-tag"), "noindex, nofollow");
   assert.equal(res.headers.get("referrer-policy"), "no-referrer");

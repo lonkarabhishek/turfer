@@ -1,6 +1,7 @@
 import { step } from "./visitor";
 import { gaEvent } from "./ga";
 import { rememberContactTap } from "../outcome/device";
+import type { AskedTime } from "../slotAsk/ask";
 
 /**
  * Record a Call / WhatsApp tap on a turf.
@@ -34,10 +35,12 @@ export function logContactClick(opts: {
   turfName?: string;
   /** Whether this tap opens the dialer or WhatsApp. Default: signedIn. */
   opens?: boolean;
+  /** "Ask for a slot" (lib/slotAsk/): the day and time asked for, so the card asks about that slot. Changes nothing that is counted. */
+  ask?: AskedTime;
 }) {
   if (typeof window === "undefined") return;
   if (opts.turfName && (opts.opens ?? opts.signedIn)) {
-    rememberContactTap({ turfId: opts.turfId, turfName: opts.turfName, kind: opts.kind, source: opts.source, signedIn: opts.signedIn });
+    rememberContactTap({ turfId: opts.turfId, turfName: opts.turfName, kind: opts.kind, source: opts.source, signedIn: opts.signedIn, ask: opts.ask });
   }
   step("contact_click");
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -4,6 +4,7 @@ import type { AspectId } from "@/lib/reviews/catalog";
 import type { AspectCount, ReportFields } from "@/lib/reviews/types";
 import { hoursPatch, parseOwner, type OwnerSlots, type SlotChange } from "@/lib/availability/slots";
 import { parseAdminSlots, type AdminSlots } from "@/lib/my/adminSlots";
+import { parseOwnerAsks, type OwnerAsks } from "@/lib/my/slotAsks";
 
 /**
  * Browser side of myTapturf. Every owner call goes to a database
@@ -223,6 +224,20 @@ export async function getAdminSlots(turfId: string): Promise<AdminSlots | { erro
     throw e;
   }
   return parseAdminSlots(raw) ?? { error: "malformed" };
+}
+
+/**
+ * How often players used "Ask for a slot" on the turf's page, for the
+ * Analytics tab (owner_slot_asks, 20261118_slot_asks.sql; a read of its own
+ * beside owner_dashboard). Null before the migration, for a refusal or when
+ * the call fails: the tab then shows nothing about it.
+ */
+export async function getOwnerSlotAsks(turfId: string, days: number): Promise<OwnerAsks | null> {
+  try {
+    return parseOwnerAsks(await ownerRpc<unknown>("owner_slot_asks", { p_turf_id: turfId, p_days: days }));
+  } catch {
+    return null;
+  }
 }
 
 /** Mark hours free or booked (one batch, at most MAX_CHANGES). The answer is the owner's view after it. */

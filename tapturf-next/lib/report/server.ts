@@ -1,5 +1,5 @@
 import { accountKey, accountRpcIfThere } from "../account/server";
-import { reportPage, toReport, toSaid, type ReportState } from "./report";
+import { reportPage, toAsks, toReport, toSaid, type ReportState } from "./report";
 import { readReportToken, reportKey } from "./token";
 
 /**
@@ -8,7 +8,9 @@ import { readReportToken, reportKey } from "./token";
  * from public.owner_report with the server key (20261113_owner_outreach.sql),
  * read each time, and what players told us from public.owner_report_said
  * (20261113_contact_outcomes.sql; before that file, or when that read
- * fails, the report is shown without it). Never cached by anyone but the browser's own back button
+ * fails, the report is shown without it), and the slots players asked for
+ * from public.owner_report_asks (20261118_slot_asks.sql; the same: absent
+ * before that file or when it fails). Never cached by anyone but the browser's own back button
  * (private, no-store), never indexed (X-Robots-Tag, and the page's own
  * meta), and the page has no script at all. Relative imports only
  * (npm run test:outreach).
@@ -31,12 +33,13 @@ export async function reportState(token: unknown, deps: { accountKey?: string | 
   const named = readReportToken(reportKey(ak), token);
   if (!named) return { state: "bad" };
   const rpc = deps.rpc ?? (accountRpcIfThere as Rpc);
-  const [res, said] = await Promise.all([rpc("owner_report", { p_turf_id: named.turfId }), rpc("owner_report_said", { p_turf_id: named.turfId }).catch(() => ({ unavailable: true as const }))]);
+  const quietly = (fn: string) => rpc(fn, { p_turf_id: named.turfId }).catch(() => ({ unavailable: true as const }));
+  const [res, said, asks] = await Promise.all([rpc("owner_report", { p_turf_id: named.turfId }), quietly("owner_report_said"), quietly("owner_report_asks")]);
   if (!("data" in res)) return { state: "error" };
   if (res.data?.r === "not_found") return { state: "bad" };
   const report = toReport(res.data);
   // The link names one turf: an answer about another is never shown.
-  return report && report.turf.id === named.turfId ? { state: "ok", report, said: "data" in said ? toSaid(said.data) : null } : { state: "error" };
+  return report && report.turf.id === named.turfId ? { state: "ok", report, said: "data" in said ? toSaid(said.data) : null, asks: "data" in asks ? toAsks(asks.data) : null } : { state: "error" };
 }
 
 export async function getReport(token: unknown, deps?: Parameters<typeof reportState>[1]): Promise<Response> {

@@ -165,6 +165,7 @@ test("cleanHost: a real name only, lowercased, no www., no port, capped; never a
 test("utmSource: names and hosts it knows; anything else is not read", () => {
   assert.equal(utmSource("chatgpt.com"), "ai");
   assert.equal(utmSource("WhatsApp"), "whatsapp");
+  assert.equal(utmSource("whatsapp-ask"), "whatsapp", "the link in an Ask for a slot message");
   assert.equal(utmSource("ig"), "instagram");
   assert.equal(utmSource("perplexity"), "ai");
   assert.equal(utmSource("google"), "google");

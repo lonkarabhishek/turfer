@@ -7,7 +7,7 @@ import { X } from "lucide-react";
 import { useAsk } from "@/components/ask/AskProvider";
 import { useCookieBanner } from "@/lib/consent";
 import { loadMemory, loadTap, saveMemory, saveTap } from "@/lib/outcome/device";
-import { DAYS, HOURS, OUTCOME_COPY as C, hourLabel, outcomeBody, shortName, startHour, thanksFor, type Day, type OutcomeAnswer, type Reason } from "@/lib/outcome/outcome";
+import { DAYS, HOURS, OUTCOME_COPY as C, askedDayText, askedLabel, askedSlot, hourLabel, outcomeBody, shortName, startHour, thanksFor, type Day, type OutcomeAnswer, type Reason } from "@/lib/outcome/outcome";
 import { afterAnswer, afterAsk, afterClose, decide, leftAfterTap, quietPath, type Tap } from "@/lib/outcome/prompt";
 import type { OutcomeReply } from "@/lib/outcome/route";
 
@@ -17,7 +17,9 @@ import type { OutcomeReply } from "@/lib/outcome/route";
  * WhatsApp (lib/outcome/prompt.ts decides when, and keeps it from
  * nagging). Not a modal: no backdrop, no focus trap, the page stays usable;
  * ✕ or Esc closes it (and nothing is asked for three days). One question
- * at a time, tapped, never typed. The answer is sent once, at the end
+ * at a time, tapped, never typed. After "Ask for a slot" (lib/slotAsk/) the
+ * tap carries the time asked for: the card asks about that slot, and Yes
+ * or "Slot was full" needs no time picked. The answer is sent once, at the end
  * (POST /api/contact-outcome), with nothing about the player; the card
  * never waits on it. While the cookie card, the Ask panel or any sheet is
  * open it waits its turn. It sits above whatever holds the bottom edge (the
@@ -64,6 +66,8 @@ export function OutcomeCard() {
   const [step, setStep] = useState<Step>("ask");
   const [draft, setDraft] = useState<Draft>({ outcome: "dismissed", reason: null, day: null, hour: null });
   const [free, setFree] = useState<{ href: string; city: string } | null>(null);
+  // After "Ask for a slot": the asked day as the card says it ("today", "Sat 21 Nov"), worked out when the card shows.
+  const [askedDay, setAskedDay] = useState("");
   const [leaving, setLeaving] = useState(false);
   const [lift, setLift] = useState(0);
   const titleId = useId();
@@ -102,6 +106,7 @@ export function OutcomeCard() {
     setDraft({ outcome: "dismissed", reason: null, day: null, hour: null });
     setFree(null);
     setLeaving(false);
+    setAskedDay(d.tap.ask ? askedDayText(d.tap.ask, now) : "");
     setTap(d.tap);
   }, []);
 
@@ -195,6 +200,14 @@ export function OutcomeCard() {
     [tap, send, fadeIn],
   );
 
+  /** After "Ask for a slot": the answer's slot is the time asked for, as India's day stands now. */
+  const finishAsked = useCallback(
+    (d: Draft) => {
+      if (tap?.ask) finish({ ...d, ...askedSlot(tap.ask, Date.now()) });
+    },
+    [tap, finish],
+  );
+
   /** ✕ or Esc: what was said so far is sent (nothing said: dismissed), and nothing is asked for three days. */
   const close = useCallback(() => {
     if (!tap || leaving) return;
@@ -244,7 +257,10 @@ export function OutcomeCard() {
 
   if (!tap || quietPath(pathname)) return null;
 
+  // After "Ask for a slot" the time is known: Yes and "Slot was full" skip the time questions.
+  const asked = tap.ask ?? null;
   const start = (outcome: "got_slot" | "not_this_time") => {
+    if (outcome === "got_slot" && asked) return finishAsked({ outcome, reason: null, day: null, hour: null });
     setDraft({ outcome, reason: null, day: null, hour: null });
     setStep(outcome === "got_slot" ? "when" : "why");
   };
@@ -252,6 +268,7 @@ export function OutcomeCard() {
   const why = (reason: Reason) => {
     const d: Draft = { outcome: "not_this_time", reason, day: null, hour: null };
     if (reason !== "full") return finish(d);
+    if (asked) return finishAsked(d);
     setDraft(d);
     setStep("when");
   };
@@ -281,10 +298,17 @@ export function OutcomeCard() {
           <div key={step} className={step === "ask" ? "" : "outcome-step"}>
           {step === "ask" && (
             <>
-              <p id={titleId} className="text-[15px] leading-snug text-primary-900">
-                <span className="block text-[13px] text-primary-500 [overflow-wrap:anywhere]">{C.ask(shortName(tap.name))}</span>
-                <span className="font-semibold">{C.askLine}</span>
-              </p>
+              {asked ? (
+                <p id={titleId} className="text-[15px] leading-snug text-primary-900">
+                  <span className="block text-[13px] text-primary-500">{C.askedAbout(askedDay)}</span>
+                  <span className="font-semibold [overflow-wrap:anywhere]">{C.askSlot(askedLabel(asked), shortName(tap.name))}</span>
+                </p>
+              ) : (
+                <p id={titleId} className="text-[15px] leading-snug text-primary-900">
+                  <span className="block text-[13px] text-primary-500 [overflow-wrap:anywhere]">{C.ask(shortName(tap.name))}</span>
+                  <span className="font-semibold">{C.askLine}</span>
+                </p>
+              )}
               <div className="mt-2.5 -mr-8 flex flex-wrap gap-2">
                 <button type="button" className={YES} onClick={() => start("got_slot")}>
                   {C.yes}

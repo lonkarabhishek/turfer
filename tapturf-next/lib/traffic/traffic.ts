@@ -238,6 +238,8 @@ const UTM_NAMES: Record<string, TrafficSource> = {
   whatsapp: "whatsapp",
   wa: "whatsapp",
   whatsapp_status: "whatsapp",
+  // The link in an "Ask for a slot" message (lib/slotAsk/message.ts): opened from the turf's WhatsApp chat.
+  "whatsapp-ask": "whatsapp",
   instagram: "instagram",
   ig: "instagram",
   facebook: "facebook",

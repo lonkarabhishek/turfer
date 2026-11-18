@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { DAYS, HOURS, KINDS, OUTCOMES, OUTCOME_COPY, REASONS, hourLabel, istDay, outcomeBody, parseOutcome, shortName, startHour, thanksFor, type OutcomeAnswer } from "./outcome";
+import { DAYS, HOURS, KINDS, OUTCOMES, OUTCOME_COPY, REASONS, askedDayText, askedLabel, askedSlot, hourLabel, istDay, outcomeBody, parseOutcome, shortName, startHour, thanksFor, type OutcomeAnswer } from "./outcome";
 
 // A player's answer to "Did you get a slot?", and the card's words. Made-up turfs.
 
@@ -107,4 +107,30 @@ test("a long turf name is cut to one short line", () => {
   assert.equal(shortName("  Kings   Turf "), "Kings Turf");
   const long = shortName("The Very Long Named Sports Arena And Box Cricket Ground Of Gachibowli");
   assert.ok(long.length <= 40 && long.endsWith("…"));
+});
+
+test("after Ask for a slot: the card asks about the asked time, and the answer's slot is that time", () => {
+  /** Wed 18 Nov 2026, 9:10 PM in India: the player is back from WhatsApp. */
+  const now = Date.parse("2026-11-18T21:10:00+05:30");
+  const C = OUTCOME_COPY;
+  assert.equal(C.askSlot(askedLabel({ date: "2026-11-18", hour: 19, minute: 0 }), "Kings Turf Arena"), "Did you get the 7 PM slot at Kings Turf Arena?");
+  assert.deepEqual([askedLabel({ date: "x", hour: 6, minute: 30 }), askedLabel({ date: "x", hour: 0, minute: 0 }), askedLabel({ date: "x", hour: 12, minute: 15 })], ["6:30 AM", "12 AM", "12:15 PM"]);
+  assert.deepEqual(["2026-11-18", "2026-11-19", "2026-11-21", "2026-12-01"].map((date) => C.askedAbout(askedDayText({ date, hour: 19, minute: 0 }, now))), ["You asked about today.", "You asked about tomorrow.", "You asked about Sat 21 Nov.", "You asked about Tue 1 Dec."]);
+  // What contact_outcome_add can keep: today or tomorrow in India as the answer is given, and the hour.
+  assert.deepEqual(askedSlot({ date: "2026-11-18", hour: 22, minute: 0 }, now), { day: "today", hour: 22 });
+  assert.deepEqual(askedSlot({ date: "2026-11-19", hour: 7, minute: 30 }, now), { day: "tomorrow", hour: 7 });
+  // Midnight and 1 AM are the late night of the day before, as the card's own hour row has them.
+  assert.deepEqual(askedSlot({ date: "2026-11-19", hour: 0, minute: 0 }, now), { day: "today", hour: 0 }, "tonight's 12 AM");
+  assert.deepEqual(askedSlot({ date: "2026-11-20", hour: 1, minute: 0 }, now), { day: "tomorrow", hour: 1 }, "tomorrow night's 1 AM");
+  // Further on (or already past) there is no day the answer can name: stored as "Later" is, with no day and no hour.
+  assert.deepEqual(askedSlot({ date: "2026-11-21", hour: 19, minute: 0 }, now), { day: null, hour: null });
+  assert.deepEqual(askedSlot({ date: "2026-11-17", hour: 19, minute: 0 }, now), { day: null, hour: null });
+  assert.deepEqual(askedSlot({ date: "2026-11-18", hour: 1, minute: 0 }, now), { day: null, hour: null }, "last night's 1 AM");
+  // The day is India's when the answer is given: an ask made for tomorrow is today once midnight has passed.
+  assert.deepEqual(askedSlot({ date: "2026-11-19", hour: 7, minute: 0 }, Date.parse("2026-11-19T00:20:00+05:30")), { day: "today", hour: 7 });
+  // Every slot it gives is an answer the route takes, for both answers that carry a time.
+  for (const date of ["2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-25"]) for (const hour of [0, 1, 2, 5, 12, 19, 23]) {
+    const slot = askedSlot({ date, hour, minute: 0 }, now);
+    for (const a of [ans({ ...slot, kind: "whatsapp", source: "slot_ask" }), ans({ ...slot, kind: "whatsapp", source: "slot_ask", outcome: "not_this_time", reason: "full" })]) assert.deepEqual(parseOutcome(JSON.parse(JSON.stringify(outcomeBody(a)))), a, `${date} ${hour}`);
+  }
 });

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { byOf, claimLabel, noteOf, OUTREACH_STATUSES, outreachCity, outreachDays, outreachFoldLine, saidLine, STATUS_LABEL, toOutreachList, toSaidByTurf, toSaved, wrongNumberLine } from "./outreach";
+import { asksLine, byOf, claimLabel, noteOf, OUTREACH_STATUSES, outreachCity, outreachDays, outreachFoldLine, saidLine, STATUS_LABEL, toAsksByTurf, toOutreachList, toSaidByTurf, toSaved, wrongNumberLine } from "./outreach";
 import { outreachList, outreachSet, type AdminRpc } from "./outreach.server";
 import { callNumber, contactFieldsOf, contactLinks, whatsAppNumber } from "../utils/contact";
 import { readReportToken, reportKey } from "../report/token";
@@ -153,7 +153,7 @@ test("GET: asks for the city and the days, signs each turf's report link, never 
   const res = await outreachList(db.rpc, get("?city=Pune&days=90"), ENV);
   assert.equal(res.status, 200);
   assert.equal(res.headers.get("cache-control"), "private, no-store");
-  assert.deepEqual(db.calls, [{ fn: "admin_owner_outreach", args: { p_city: "pune", p_days: 90 } }, { fn: "admin_contact_outcomes", args: { p_city: "pune", p_days: 90 } }], "the list, and what players said, for the same city and days");
+  assert.deepEqual(db.calls, [{ fn: "admin_owner_outreach", args: { p_city: "pune", p_days: 90 } }, { fn: "admin_contact_outcomes", args: { p_city: "pune", p_days: 90 } }, { fn: "admin_slot_asks", args: { p_city: "pune", p_days: 90 } }], "the list, what players said and their slot asks, for the same city and days");
   const j = await res.json();
   assert.equal(j.ok, true);
   const t = j.list.turfs[0];
@@ -161,8 +161,9 @@ test("GET: asks for the city and the days, signs each turf's report link, never 
   assert.deepEqual(readReportToken(reportKey("test-account-key"), t.report.split("/").pop()), { turfId: T(1) });
   assert.ok(t.message.includes(t.report));
   // Only what the section shows: no raw column names from the database.
-  assert.deepEqual(Object.keys(t).sort(), ["area", "at", "by", "call", "calls", "claim", "id", "message", "name", "note", "path", "report", "said", "status", "views", "wa", "whatsapp"]);
+  assert.deepEqual(Object.keys(t).sort(), ["area", "asks", "at", "by", "call", "calls", "claim", "id", "message", "name", "note", "path", "report", "said", "status", "views", "wa", "whatsapp"]);
   assert.equal(t.said, null, "nobody answered: nothing said");
+  assert.equal(t.asks, null, "nobody asked for a slot: nothing said");
   const d = fakeRpc({ admin_owner_outreach: answer([]) });
   await outreachList(d.rpc, get("?city=../x&days=7"), ENV);
   assert.deepEqual(d.calls[0].args, { p_city: "hyderabad", p_days: 30 });
@@ -215,4 +216,49 @@ test("POST: a bad body never reaches the database", async () => {
   assert.deepEqual([nf.status, (await nf.json()).error], [404, "not_found"]);
   const bad = await outreachSet(fakeRpc({ admin_owner_outreach_set: { error: "bad" } }).rpc, post({ turf: T(1), status: "contacted" }));
   assert.equal(bad.status, 400);
+});
+
+/* ── Slot asks (20261118_slot_asks.sql) ── */
+
+const asksRow = (n: number, o: Record<string, unknown> = {}) => ({ id: T(n), asks: 0, asks30: 0, hours: [], ...o });
+
+test("slot asks: the row's line, a count and the hours asked for most", () => {
+  assert.equal(asksLine({ asks: 14, asks30: 14, hours: [19, 20, 21] }), "14 · most asked 7 PM, 8 PM, 9 PM");
+  assert.equal(asksLine({ asks: 1, asks30: 1, hours: [6] }), "1 · most asked 6 AM");
+  assert.equal(asksLine({ asks: 1240, asks30: 300, hours: [0, 12] }), "1,240 · most asked 12 AM, 12 PM");
+  assert.equal(asksLine({ asks: 3, asks30: 3, hours: [] }), "3");
+});
+
+test("slot asks: read by turf id; a turf nobody asked, or anything that isn't an answer, says nothing", () => {
+  const m = toAsksByTurf({ turfs: [asksRow(1, { asks: 14, asks30: 9, hours: [{ hour: 19, n: 6 }, { hour: 20, n: 5 }, { hour: 21, n: 2 }, { hour: 6, n: 1 }] }), asksRow(2), asksRow(3, { asks: 2, asks30: 5, hours: [{ hour: 24, n: 1 }, { hour: 7, n: 0 }, { hour: 8, n: 2 }, { hour: 8, n: 1 }, null] }), { id: "nope", asks: 4 }, null] });
+  assert.deepEqual([...m.keys()], [T(1), T(3)]);
+  assert.deepEqual(m.get(T(1)), { asks: 14, asks30: 9, hours: [19, 20, 21] }, "three hours at most, in the order sent");
+  assert.deepEqual(m.get(T(3)), { asks: 2, asks30: 2, hours: [8] }, "the last 30 days are never more than the window; an hour that isn't one is left out");
+  for (const bad of [null, "x", [], {}, { turfs: "x" }, { error: "forbidden" }]) assert.equal(toAsksByTurf(bad).size, 0);
+});
+
+test("slot asks: joined to the list by turf id; the message leads with the last 30 days' asks, whatever the window", () => {
+  const asked = toAsksByTurf({ turfs: [asksRow(1, { asks: 40, asks30: 14, hours: [{ hour: 19, n: 20 }] }), asksRow(3, { asks: 2, asks30: 0, hours: [{ hour: 6, n: 2 }] })] });
+  const l = toOutreachList(answer([row(1, { name: "Kings Turf", calls: 60, whatsapp: 50, taps30: 52, views30: 240 }), row(2, { taps30: 5 }), row(3, { taps30: 4 })], { days: 90 }), link, new Map(), asked)!;
+  const t = (n: number) => l.turfs.find((x) => x.id === T(n))!;
+  assert.deepEqual(t(1).asks, { asks: 40, asks30: 14, hours: [19] });
+  assert.equal(t(2).asks, null);
+  assert.match(t(1).message!, /^Hi, this is TapTurf \(tapturf\.in\)\. In the last 30 days, players asked for a slot at Kings Turf 14 times from its page on TapTurf, and tapped Call or WhatsApp 52 times in all\.\n\nYour free report: /);
+  assert.match(t(2).message!, /players tapped Call or WhatsApp 5 times on Turf 2's page/, "no asks: the message as it was");
+  assert.match(t(3).message!, /players tapped Call or WhatsApp 4 times on Turf 3's page/, "asks only before the last 30 days: the message as it was");
+  // The order is still by taps: asks change no ranking.
+  assert.deepEqual(l.turfs.map((x) => x.id), [T(1), T(2), T(3)]);
+});
+
+test("GET: slot asks ride along; before 20261118_slot_asks.sql, or when that read fails, the list is as it was", async () => {
+  const list = answer([row(1, { taps30: 9 }), row(2)]);
+  const withAsks = await (await outreachList(fakeRpc({ admin_owner_outreach: list, admin_slot_asks: { turfs: [asksRow(1, { asks: 5, asks30: 5, hours: [{ hour: 20, n: 3 }, { hour: 7, n: 2 }] })] } }).rpc, get(), ENV)).json();
+  assert.deepEqual(withAsks.list.turfs.find((t: { id: string }) => t.id === T(1)).asks, { asks: 5, asks30: 5, hours: [20, 7] });
+  assert.match(withAsks.list.turfs.find((t: { id: string }) => t.id === T(1)).message, /players asked for a slot at Turf 1 5 times from its page on TapTurf, and tapped Call or WhatsApp 9 times in all\./);
+  const plain = await (await outreachList(fakeRpc({ admin_owner_outreach: list }).rpc, get(), ENV)).json();
+  for (const a of [{ __error: { code: "PGRST202" } }, { __error: { code: "57014" } }, new Error("down"), { error: "forbidden" }, null, "x"]) {
+    const res = await outreachList(fakeRpc({ admin_owner_outreach: list, admin_slot_asks: a }).rpc, get(), ENV);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), plain, "the list, with nothing about asks");
+  }
 });

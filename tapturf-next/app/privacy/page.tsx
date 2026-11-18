@@ -102,7 +102,9 @@ const SECTIONS: LegalSection[] = [
           play at it), and when you tap Call or WhatsApp on a turf page. After you tap Call or WhatsApp, we may
           ask you once, when you are back on TapTurf, whether you got a slot; your answer (and the time, if you
           pick one) is stored without your name, number or account: only the turf, what you answered and whether
-          you were signed in. When you host a game you can say who is in already: a friend&rsquo;s name you
+          you were signed in. When you use Ask for a slot on a turf page, we keep the day, time, sport and
+          group size you asked that turf about, without your name, number or account; the message itself goes
+          from your WhatsApp to the turf, and we never see the chat. When you host a game you can say who is in already: a friend&rsquo;s name you
           type shows on that game&rsquo;s page to anyone, so type only a first name or nickname, and it is not
           linked to any account. A TapTurf player you tag gets one notification, and their name and photo
           show on that game&rsquo;s page at once, as added by you; they can remove themselves any time before
@@ -506,7 +508,7 @@ const SECTIONS: LegalSection[] = [
         your cookie choice (section 5), banners you closed, whether you dismissed the &ldquo;install app&rdquo;
         prompt, whether we already asked you to pick a username, the TapTurf profiles you tagged recently, the
         WhatsApp number you last gave players for a game, the matches and tournaments you score with our
-        free tools, which live scores and tournaments it opened in the last two days and when it last opened the map (so a reload is not counted as another view), and, so we can ask whether you got a slot without asking too often, the turf you last tapped Call or WhatsApp on (until you close the tab; it is sent to us only with your answer, if you give one) and when we last asked or you answered. Only if you accept cookies does it also keep Google Analytics&rsquo; cookies, the short
+        free tools, which live scores and tournaments it opened in the last two days and when it last opened the map (so a reload is not counted as another view), and, so we can ask whether you got a slot without asking too often, the turf you last tapped Call or WhatsApp on (until you close the tab; it is sent to us only with your answer, if you give one) and when we last asked or you answered. If you asked a turf for a slot, the day and time you asked about are kept with that, and what you picked waits in the tab while you sign in (until you send it or close the tab). Only if you accept cookies does it also keep Google Analytics&rsquo; cookies, the short
         visit note described under &ldquo;When you sign up&rdquo; and the random tag described under
         &ldquo;When you use our free tools&rdquo;; choosing Reject deletes them. For a live link or a live tournament it also keeps the key that lets only this browser update
         it; our server stores just a one-way hash of the key. While you are signed in, your browser also runs

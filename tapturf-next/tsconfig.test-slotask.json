@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2022",
+    "moduleResolution": "node",
+    "rootDir": ".",
+    "outDir": ".test-out/slotask",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "lib": ["es2023", "dom"],
+    "types": ["node"],
+    "paths": { "@/*": ["./*"] }
+  },
+  "files": ["lib/slotAsk/message.test.ts", "lib/slotAsk/choices.test.ts", "lib/slotAsk/route.test.ts"]
+}

@@ -110,11 +110,54 @@ export function startHour(day: Day, now: number): number {
 }
 
 // ---------------------------------------------------------------------------
+// A tap that asked for a slot (lib/slotAsk/): the card already knows the time
+
+/** The time a slot ask was for: India's calendar date of the start, and its hour and minute (lib/slotAsk/ask.ts AskedTime). */
+type Asked = { date: string; hour: number; minute: number };
+
+const DAY_MS = 86_400_000;
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const addDays = (date: string, n: number) => new Date(Date.parse(`${date}T00:00:00Z`) + n * DAY_MS).toISOString().slice(0, 10);
+
+/** "7 PM", "6:30 AM": the asked start as the question says it. */
+export function askedLabel(a: Asked): string {
+  return a.minute ? hourLabel(a.hour).replace(" ", `:${String(a.minute).padStart(2, "0")} `) : hourLabel(a.hour);
+}
+
+/** "today", "tomorrow" or "Sat 21 Nov": the asked day as the card says it, by India's calendar at `now`. */
+export function askedDayText(a: Asked, now: number): string {
+  const today = istDay(now);
+  if (a.date === today) return "today";
+  if (a.date === addDays(today, 1)) return "tomorrow";
+  const d = new Date(`${a.date}T00:00:00Z`);
+  return `${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+}
+
+/**
+ * The asked time as an answer's slot (what POST /api/contact-outcome and
+ * contact_outcome_add take: 'today' or 'tomorrow' in India at the moment
+ * of the answer, and an hour, where 0 and 1 are the late night of that
+ * day). An ask for a day further on, or one already past, has no day the
+ * answer can name: it is stored as the card's own "Later" is, with no day
+ * and no hour (the ask itself is kept with its date in private.slot_asks).
+ */
+export function askedSlot(a: Asked, now: number): { day: Day | null; hour: number | null } {
+  const night = a.hour < 2 ? addDays(a.date, -1) : a.date;
+  const today = istDay(now);
+  const day: Day | null = night === today ? "today" : night === addDays(today, 1) ? "tomorrow" : null;
+  return { day, hour: day ? a.hour : null };
+}
+
+// ---------------------------------------------------------------------------
 // The card's words. Never "book" or "booking" (npm run test:outcome checks).
 
 export const OUTCOME_COPY = {
   ask: (name: string) => `Back from ${name}?`,
   askLine: "Did you get a slot?",
+  /** After "Ask for a slot": the card knows the time. */
+  askSlot: (time: string, name: string) => `Did you get the ${time} slot at ${name}?`,
+  askedAbout: (day: string) => `You asked about ${day}.`,
   yes: "Yes! 🎉",
   no: "Not this time",
   deciding: "Still deciding",

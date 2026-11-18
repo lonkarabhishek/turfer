@@ -19,7 +19,7 @@ test("policy: the friends a host says are in already, and tagging", () => {
   assert.doesNotMatch(things, /until they say yes only you see who you tagged/, "the sentence from before is gone");
   // No new site-wide notice for it (the site owner's call); the policy's date moves.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-17");
+  assert.equal(PRIVACY_UPDATED, "2026-11-18");
 });
 
 test("policy notice: a new id, so people who dismissed the last one see it", () => {
@@ -34,7 +34,7 @@ test("policy notice: emails, and where the policy says it", () => {
     "If your account has an email Google confirmed, TapTurf now emails you about your games: a welcome, join requests and answers, game changes and reminders. Resend sends them for us. Turn each kind off on the Me tab or with the link in any email. We don't track opens or taps, and we never email about booking requests.",
   );
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-17");
+  assert.equal(PRIVACY_UPDATED, "2026-11-18");
   assert.equal(PRIVACY_NOTICE.anchor, "emails");
   const at = privacyPage.indexOf(`id="${PRIVACY_NOTICE.anchor}"`);
   assert.ok(at >= 0, `the policy has #${PRIVACY_NOTICE.anchor}`);
@@ -162,6 +162,21 @@ test("policy: asking whether you got a slot after a Call or WhatsApp tap, and wh
   // No new site-wide notice for it: the answer names nobody. The date already covers the day it was written.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
   assert.ok(PRIVACY_UPDATED >= "2026-11-12");
+});
+
+test("policy: Ask for a slot, what is kept and what never reaches us", () => {
+  const page = privacyPage.replace(/\s+/g, " ");
+  const at = page.indexOf("<strong>Things you do on TapTurf.</strong>");
+  const things = page.slice(at, page.indexOf("</p>", at));
+  assert.match(things, /When you use Ask for a slot on a turf page, we keep the day, time, sport and group size you asked that turf about, without your name, number or account; the message itself goes from your WhatsApp to the turf, and we never see the chat\./);
+  assert.match(page, /If you asked a turf for a slot, the day and time you asked about are kept with that, and what you picked waits in the tab while you sign in \(until you send it or close the tab\)\./, "the browser's notes, under Stored on your device");
+  // What the sentence says is what the table holds (20261118_slot_asks.sql): nothing that says who asked.
+  const sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20261118_slot_asks.sql"), "utf8");
+  const table = sql.slice(sql.indexOf("create table if not exists private.slot_asks ("), sql.indexOf(");", sql.indexOf("create table if not exists private.slot_asks (")));
+  assert.deepEqual([...table.matchAll(/^  (\w+) /gm)].map((m) => m[1]), ["id", "turf_id", "slot_date", "slot_hour", "slot_minute", "minutes", "sport", "players", "signed_in", "created_at"]);
+  // No new site-wide notice for it (an ask names nobody); the policy's date moves to the day it ships.
+  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_UPDATED, "2026-11-18");
 });
 
 test("policy notice: the notice it replaced still reaches anyone who never dismissed it", () => {

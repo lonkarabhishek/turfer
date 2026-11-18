@@ -1,5 +1,6 @@
 import type { Kind } from "./outcome";
 import { MEMORY_KEY, TAP_KEY, newTap, readMemory, readTap, type Memory, type Tap } from "./prompt";
+import type { AskedTime } from "../slotAsk/ask";
 
 /**
  * The device's side of "Did you get a slot?" (lib/outcome/prompt.ts has the
@@ -34,12 +35,13 @@ function put(store: "session" | "local", key: string, value: string | null): boo
  * Note a Call or WhatsApp tap that opened the dialer or WhatsApp, for the
  * card to ask about when the player is back. Called from
  * logContactClick (lib/analytics/contactClicks.ts), the one place every
- * such tap goes through. Never throws, never waits.
+ * such tap goes through. `ask`: the day and time an "Ask for a slot" tap
+ * asked about. Never throws, never waits.
  */
-export function rememberContactTap(t: { turfId: string; turfName: string; kind: Kind; source: string; signedIn: boolean }): void {
+export function rememberContactTap(t: { turfId: string; turfName: string; kind: Kind; source: string; signedIn: boolean; ask?: AskedTime }): void {
   if (typeof window === "undefined") return;
   try {
-    const tap = newTap({ turf: t.turfId, name: t.turfName, kind: t.kind, source: t.source, signedIn: t.signedIn }, Date.now());
+    const tap = newTap({ turf: t.turfId, name: t.turfName, kind: t.kind, source: t.source, signedIn: t.signedIn, ask: t.ask }, Date.now());
     if (tap) put("session", TAP_KEY, JSON.stringify(tap));
   } catch {
     /* nothing remembered: nothing asked */

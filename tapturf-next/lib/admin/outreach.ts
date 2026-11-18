@@ -16,7 +16,9 @@ import { outreachMessage } from "../report/message";
  * says what players told us after tapping ("Did you get a slot?",
  * 20261113_contact_outcomes.sql, admin_contact_outcomes; lib/outcome/): a
  * second read, joined here by turf id, and simply absent before that file
- * is applied.
+ * is applied. And how often players used "Ask for a slot" on its page and
+ * for which start hours (20261118_slot_asks.sql, admin_slot_asks;
+ * lib/slotAsk/): a third read, joined the same way, absent before its file.
  */
 
 export const OUTREACH_STATUSES = ["not_contacted", "contacted", "interested", "not_interested", "wrong_number"] as const;
@@ -65,7 +67,37 @@ export type OutreachRow = {
   at: string | null;
   /** What players said after tapping, in the list's window; null when nobody answered. */
   said: PlayersSaid | null;
+  /** "Ask for a slot" on this turf's page, in the list's window; null when nobody asked. */
+  asks: SlotAsks | null;
 };
+
+/** One turf's slot asks (admin_slot_asks): how many in the window, how many in the last 30 days (what the message and the report say), and the start hours asked for most. */
+export type SlotAsks = { asks: number; asks30: number; hours: number[] };
+
+/** admin_slot_asks' answer by turf id; empty for anything that isn't one (the rows then say nothing about asks). */
+export function toAsksByTurf(raw: unknown): Map<string, SlotAsks> {
+  const out = new Map<string, SlotAsks>();
+  const turfs = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>).turfs : null;
+  if (!Array.isArray(turfs)) return out;
+  for (const x of turfs as Record<string, unknown>[]) {
+    if (!x || typeof x.id !== "string" || !UUID.test(x.id)) continue;
+    const asks = count(x.asks);
+    if (asks < 1) continue;
+    const hours: number[] = [];
+    for (const h of Array.isArray(x.hours) ? (x.hours as Record<string, unknown>[]) : []) {
+      if (h && typeof h.hour === "number" && Number.isInteger(h.hour) && h.hour >= 0 && h.hour <= 23 && count(h.n) > 0 && !hours.includes(h.hour)) hours.push(h.hour);
+    }
+    out.set(x.id.toLowerCase(), { asks, asks30: Math.min(asks, count(x.asks30)), hours: hours.slice(0, 3) });
+  }
+  return out;
+}
+
+const hourLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? "AM" : "PM"}`;
+
+/** "14 · most asked 7 PM, 8 PM, 9 PM": the row's line after "Slot asks:". A count of asks, not of people. */
+export function asksLine(a: SlotAsks): string {
+  return `${a.asks.toLocaleString("en-IN")}${a.hours.length ? ` · most asked ${a.hours.map(hourLabel).join(", ")}` : ""}`;
+}
 
 /** Players' own answers to "Did you get a slot?" for one turf, as counts (admin_contact_outcomes). */
 export type PlayersSaid = { gotSlot: number; full: number; price: number; noReply: number; wrongNumber: number; justAsking: number };
@@ -139,10 +171,11 @@ export function toSaved(raw: unknown): OutreachSaved | null {
 /**
  * admin_owner_outreach's answer as the section's list; null for anything
  * that isn't one. `reportUrl` signs a turf's report link (null when it
- * can't); `said` is what players told us, by turf id (toSaidByTurf). The order is the function's: most taps, then most views, then
+ * can't); `said` is what players told us, by turf id (toSaidByTurf), and
+ * `asked` their slot asks (toAsksByTurf). The order is the function's: most taps, then most views, then
  * by name; kept here too, so the list is right whatever sent it.
  */
-export function toOutreachList(raw: unknown, reportUrl: (turfId: string) => string | null, said: Map<string, PlayersSaid> = new Map()): OutreachList | null {
+export function toOutreachList(raw: unknown, reportUrl: (turfId: string) => string | null, said: Map<string, PlayersSaid> = new Map(), asked: Map<string, SlotAsks> = new Map()): OutreachList | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
   if (typeof o.city !== "string" || !Array.isArray(o.turfs)) return null;
@@ -157,6 +190,7 @@ export function toOutreachList(raw: unknown, reportUrl: (turfId: string) => stri
     const claim: Claim = x.claim === "active" || x.claim === "pending" ? x.claim : null;
     const report = reportUrl(x.id);
     const saved = toSaved(x);
+    const asks = asked.get(x.id.toLowerCase()) ?? null;
     turfs.push({
       id: x.id,
       path: turfPath({ id: x.id, slug: str(x.slug) }),
@@ -169,12 +203,13 @@ export function toOutreachList(raw: unknown, reportUrl: (turfId: string) => stri
       call: links.call ? { e164: links.call.e164, local: links.call.local, landline: links.call.type === "landline" } : null,
       wa: links.whatsapp ? { digits: links.whatsapp.digits, local: links.whatsapp.local } : null,
       report,
-      message: report ? outreachMessage({ name, taps: count(x.taps30), views: count(x.views30), reportUrl: report, claimed: claim === "active" }) : null,
+      message: report ? outreachMessage({ name, taps: count(x.taps30), views: count(x.views30), reportUrl: report, claimed: claim === "active", asks: asks?.asks30 ?? 0 }) : null,
       status: saved?.status ?? "not_contacted",
       note: saved?.note ?? null,
       by: saved?.by ?? null,
       at: saved?.at ?? null,
       said: said.get(x.id.toLowerCase()) ?? null,
+      asks,
     });
   }
   turfs.sort((a, b) => b.calls + b.whatsapp - (a.calls + a.whatsapp) || b.views - a.views || a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.id.localeCompare(b.id));

@@ -16,8 +16,12 @@ import { hourLabel } from "../outcome/outcome";
  * SAID_MIN players answered "Did you get a slot?" in the 30 days
  * (public.owner_report_said, 20261113_contact_outcomes.sql; lib/outcome/),
  * one more line says how many of them got a slot and the hours they named
- * most: "players who told us", never everyone who tapped. Relative imports
- * only (npm run test:outreach).
+ * most: "players who told us", never everyone who tapped. From one "Ask
+ * for a slot" in the 30 days (public.owner_report_asks,
+ * 20261118_slot_asks.sql; lib/slotAsk/), a block says how many times
+ * players asked for a slot, against the 30 days before, with a small bar
+ * of the start hours they asked for: times asked, never people, and never
+ * what was agreed after. Relative imports only (npm run test:outreach).
  */
 
 export type ReportCounts = { views: number; calls: number; whatsapp: number; ask: number };
@@ -100,6 +104,50 @@ export function saidHoursText(s: ReportSaid): string | null {
   return `${h.length === 1 ? "The hour they asked for most" : "The hours they asked for most"}: ${list}.`;
 }
 
+/** The slots players asked for (lib/slotAsk/): how many asks in the 30 days and in the 30 before, and each start hour asked for with its count. */
+export type ReportAsks = { asks: number; prev: number; hours: { hour: number; n: number }[] };
+
+/** owner_report_asks' {r: ok, ...} as what the page may show; null for anything that isn't a whole answer (the hours must add up to the count, as the chart's bars do). */
+export function toAsks(raw: unknown): ReportAsks | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  if (o.r !== "ok" || o.days !== REPORT_DAYS || !isCount(o.asks) || !isCount(o.prev) || !Array.isArray(o.hours)) return null;
+  const hours: { hour: number; n: number }[] = [];
+  for (const h of o.hours as Record<string, unknown>[]) {
+    if (!h || !isCount(h.hour) || h.hour > 23 || !isCount(h.n) || h.n < 1 || hours.some((x) => x.hour === h.hour)) return null;
+    hours.push({ hour: h.hour, n: h.n });
+  }
+  if (hours.reduce((n, h) => n + h.n, 0) !== o.asks) return null;
+  return { asks: o.asks, prev: o.prev, hours: hours.sort((a, b) => a.hour - b.hour) };
+}
+
+/** "Players asked for a slot 14 times in the last 30 days." A count of asks, never of people. */
+export function asksText(a: ReportAsks): string {
+  return `Players asked for a slot ${timesText(a.asks)} in the last ${REPORT_DAYS} days.`;
+}
+
+/** The start hours asked for most, at most three, most first (a tie to the earlier hour). */
+export function topAskHours(a: ReportAsks): number[] {
+  return [...a.hours].sort((x, y) => y.n - x.n || x.hour - y.hour).slice(0, 3).map((h) => h.hour);
+}
+
+/** "Most asked: 7 PM, 8 PM and 9 PM." Null when there is no hour. */
+export function asksHoursText(a: ReportAsks): string | null {
+  const h = topAskHours(a).map(hourLabel);
+  if (!h.length) return null;
+  return `Most asked: ${h.length === 1 ? h[0] : `${h.slice(0, -1).join(", ")} and ${h[h.length - 1]}`}.`;
+}
+
+/**
+ * The hours the bar shows, in a day's order: 5 AM to 1 AM (the hours turfs
+ * are open, as the "Did you get a slot?" hour row has them), with 2, 3 and
+ * 4 AM between 1 AM and 5 AM only when a player asked for one of them.
+ */
+export function askAxis(a: ReportAsks): number[] {
+  const small = [2, 3, 4].some((h) => a.hours.some((x) => x.hour === h));
+  return [...Array.from({ length: 19 }, (_, i) => i + 5), 0, 1, ...(small ? [2, 3, 4] : [])];
+}
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** "2026-11-12" as "12 Nov" (the day as stored, India's; no clock involved). */
 export function dayLabel(day: string): string {
@@ -137,6 +185,10 @@ export const REPORT_COPY = {
   claimedLead: "Its owner or manager can update it and see these numbers any time on myTapturf.",
   claimedButton: "Open myTapturf",
   seePage: "See your page on TapTurf",
+  asksTitle: "Slots players asked for",
+  asksStat: "Times players asked for a slot",
+  asksChart: "By start time",
+  asksNote: "On your page a player picks a day and a time, and WhatsApp opens with the question written to you. We count each time that happens: times players asked, not people, and not what was agreed after.",
   saidTitle: "What players told us",
   saidNote: "After a player taps Call or WhatsApp, we sometimes ask if they got a slot. Only some answer, so this is those players' own word, not everyone who tapped.",
   footer: "This report is counts from TapTurf's own pages only. It has no player's name or number. Questions? Write to info@tapturf.in.",
@@ -163,6 +215,39 @@ function chart(r: OwnerReport): string {
   return `<div class="bars" role="img" aria-label="${escapeHtml(alt)}">${bars}</div>
 <div class="axis"><span>${escapeHtml(dayLabel(r.since))}</span><span>Most in a day: ${num(max)}</span><span>${escapeHtml(dayLabel(r.today))}</span></div>
 <div class="legend"><span><i class="ca"></i>Call</span><span><i class="wa"></i>WhatsApp</span></div>`;
+}
+
+const ASK_BAR_PX = 64;
+
+/** The card about the slots players asked for; nothing at all before the first ask. One series, so no legend: the heading names it. */
+function asksCard(a: ReportAsks | null): string {
+  if (!a || a.asks < 1) return "";
+  const axis = askAxis(a);
+  const by = new Map(a.hours.map((h) => [h.hour, h.n]));
+  const max = Math.max(...a.hours.map((h) => h.n));
+  const top = topAskHours(a);
+  const bars = axis
+    .map((h) => {
+      const n = by.get(h) ?? 0;
+      const px = n === 0 ? 0 : Math.max(4, Math.round((n / max) * ASK_BAR_PX));
+      // The count stands over the hours asked for most only; every bar says its own on hover or a long press.
+      return `<span class="hb" title="${escapeHtml(`${hourLabel(h)}: ${timesText(n)}`)}">${n && top.includes(h) ? `<b>${num(n)}</b>` : ""}${px ? `<i style="height:${px}px"></i>` : ""}</span>`;
+    })
+    .join("");
+  // A tick every three hours, under its own bar.
+  const ticks = axis.map((h) => `<span>${h % 3 === 0 ? escapeHtml(hourLabel(h)) : ""}</span>`).join("");
+  const hours = asksHoursText(a);
+  const alt = `Bar chart of the start times players asked for in the last ${REPORT_DAYS} days. ${a.hours.map((h) => `${hourLabel(h.hour)}: ${h.n}`).join(", ")}.`;
+  return `<div class="card">
+<h2>${escapeHtml(REPORT_COPY.asksTitle)}</h2>
+<p class="text">${escapeHtml(asksText(a))}${hours ? ` ${escapeHtml(hours)}` : ""}</p>
+<div class="stats one">${stat(REPORT_COPY.asksStat, a.asks, a.prev)}</div>
+<p class="cap">${escapeHtml(REPORT_COPY.asksChart)}</p>
+<div class="hbars" role="img" aria-label="${escapeHtml(alt)}">${bars}</div>
+<div class="hticks" aria-hidden="true">${ticks}</div>
+<p class="note">${escapeHtml(REPORT_COPY.asksNote)}</p>
+</div>
+`;
 }
 
 /** The card about players' answers; nothing at all below SAID_MIN answers. */
@@ -206,6 +291,14 @@ h2{margin:0 0 6px;font-size:18px;line-height:1.3;font-weight:700}
 .ca{background:#1D1D1F}
 .wa{background:#16A34A}
 .axis{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:12px;color:#6E6E73}
+.stats.one{grid-template-columns:1fr;margin-top:12px}
+.cap{margin:14px 0 0;font-size:13px;font-weight:600;color:#3F3F46}
+.hbars{display:flex;align-items:flex-end;gap:2px;height:${ASK_BAR_PX + 20}px;margin-top:4px;border-bottom:1px solid #E5E7EB}
+.hb{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}
+.hb i{display:block;width:100%;border-radius:4px 4px 0 0;background:#16A34A}
+.hb b{margin-bottom:2px;font-size:11px;line-height:1;font-weight:700;color:#1D1D1F;font-variant-numeric:tabular-nums}
+.hticks{display:flex;gap:2px;margin-top:5px;font-size:11px;line-height:1.2;color:#6E6E73}
+.hticks span{flex:1;min-width:0;display:flex;justify-content:center;white-space:nowrap}
 .legend{display:flex;gap:16px;margin-top:10px;font-size:13px;color:#3F3F46}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
 .quiet,.note{margin:10px 0 0;font-size:14px;line-height:1.5;color:#6E6E73}
@@ -223,7 +316,7 @@ footer{margin:16px 4px 0;font-size:13px;line-height:1.5;color:#6E6E73}
 ${body}
 </main></body></html>`;
 
-export type ReportState = { state: "ok"; report: OwnerReport; said?: ReportSaid | null } | { state: "bad" } | { state: "error" };
+export type ReportState = { state: "ok"; report: OwnerReport; said?: ReportSaid | null; asks?: ReportAsks | null } | { state: "bad" } | { state: "error" };
 
 /** The page, and the status it answers with: 404 for a link we didn't sign (or a turf that is gone), 503 when the counts can't be read. */
 export function reportPage(s: ReportState): { status: number; html: string } {
@@ -261,7 +354,7 @@ ${stat(C.stats.ask, r.now.ask, r.prev.ask)}
 ${chart(r)}
 <p class="note">${escapeHtml(C.meaning)}</p>
 </div>
-${saidCard(s.said ?? null)}${cta}
+${asksCard(s.asks ?? null)}${saidCard(s.said ?? null)}${cta}
 <a class="link" href="${escapeHtml(turfPath(r.turf))}">${escapeHtml(C.seePage)}</a>
 <footer>${escapeHtml(C.footer)}</footer>`;
   return { status: 200, html: shell(`${r.turf.name}: your TapTurf report`, body) };

@@ -200,6 +200,11 @@ export default async function TurfDetailPage({
   });
   // Members-only clubs (NIWEC): no "Call to Book", show how to get in.
   const membersOnly = turf.membership_required === true;
+  // "Ask for a slot" (components/turf/SlotAskSheet.tsx) where the page's WhatsApp button shows: the hours the page
+  // shows, the sports it lists, and whether Free slots can be marked. Not for a members' club (guests ask about access first).
+  const slotAsk = membersOnly
+    ? null
+    : { hours: { opening_hours: turf.opening_hours, start_time: turf.start_time, end_time: turf.end_time, is_24x7: turf.is_24x7, closed_days: turf.closed_days }, sports: turf.sports ?? [], claimed };
   // Is this turf its city's Most Trending Turf this week?
   const trending = turf.city && isCity(turf.city) ? page.trending : null;
   const isTrending = !!trending;
@@ -535,6 +540,7 @@ export default async function TurfDetailPage({
                   address={turf.address}
                   callLabel={membersOnly ? "Call to ask" : "Call to Book"}
                   pageUrl={turfUrl(turf)}
+                  ask={slotAsk}
                 />
               ) : (
                 <NoContactNotice links={noContact} />
@@ -587,6 +593,7 @@ export default async function TurfDetailPage({
           variant="fixed-bottom"
           pageUrl={turfUrl(turf)}
           note={bookingLine(membersOnly, hasContact)}
+          ask={slotAsk}
         />
       ) : (
         <NoContactNotice variant="fixed-bottom" links={noContact} />

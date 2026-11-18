@@ -166,3 +166,23 @@ test("the waiting tap: read back as written; nonsense is none", () => {
   for (const bad of [null, "", "x", "[]", "null", "{}", JSON.stringify({ ...t, turf: "x" }), JSON.stringify({ ...t, at: "now" }), JSON.stringify({ ...t, kind: "sms" }), JSON.stringify({ ...t, name: 5 })])
     assert.equal(readTap(bad), null, String(bad));
 });
+
+test("a tap that asked for a slot keeps the time it asked about, and nothing else", () => {
+  const asked = { date: "2026-11-21", hour: 19, minute: 0 };
+  const t = newTap({ turf: T(1), name: "Kings Turf Arena", kind: "whatsapp", source: "slot_ask", signedIn: true, ask: { ...asked, sport: "football", players: 10, name: "Asha" } }, NOW)!;
+  assert.deepEqual(t.ask, asked, "only the day and the time");
+  assert.deepEqual(readTap(JSON.stringify(t)), t, "read back as written");
+  assert.deepEqual(readTap(JSON.stringify(leftAfterTap(t)))?.ask, asked);
+  // A plain Call or WhatsApp tap has none, and a time that isn't one is left off (the tap is still asked about, the plain way).
+  assert.ok(!("ask" in newTap({ turf: T(1), name: "Kings Turf Arena", kind: "call", source: "turf_bar", signedIn: true }, NOW)!));
+  for (const bad of [{ date: "21 Nov", hour: 19 }, { date: "2026-11-21", hour: 24 }, "7 PM", 19, null]) {
+    const x = newTap({ turf: T(1), name: "Kings Turf Arena", kind: "whatsapp", source: "slot_ask", signedIn: true, ask: bad }, NOW)!;
+    assert.ok(x && !("ask" in x), JSON.stringify(bad));
+  }
+  // Every rule that keeps the card from nagging treats it as any tap.
+  const back = { ...t, left: true };
+  assert.equal(decide({ tap: back, memory: { ...EMPTY_MEMORY, answered: {} }, now: NOW + 5 * MIN, path: "/turf/kings" }).do, "ask");
+  assert.equal(decide({ tap: back, memory: { ...EMPTY_MEMORY, answered: {} }, now: NOW + 3_000, path: "/turf/kings" }).do, "wait");
+  assert.equal(decide({ tap: back, memory: afterAnswer({ ...EMPTY_MEMORY, answered: {} }, T(1), NOW), now: NOW + 5 * MIN, path: "/turf/kings" }).do, "forget");
+  assert.equal(decide({ tap: back, memory: afterClose({ ...EMPTY_MEMORY, answered: {} }, NOW), now: NOW + 5 * MIN, path: "/turf/kings" }).do, "forget");
+});

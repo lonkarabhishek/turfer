@@ -5,7 +5,8 @@ import Link from "next/link";
 import { ArrowLeft, CalendarCheck, Check, Circle, ExternalLink, Loader2, Star } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { DailyChart } from "@/components/admin/DailyChart";
-import { getOwnerSlots, ownerRpc, type OwnerDashboard, type OwnerTurf } from "@/lib/my/client";
+import { getOwnerSlotAsks, getOwnerSlots, ownerRpc, type OwnerDashboard, type OwnerTurf } from "@/lib/my/client";
+import { OWNER_ASKS_COPY, askHourLabel, topAsked, type OwnerAsks } from "@/lib/my/slotAsks";
 import { MY_LIST_HREF, TURF_TABS, turfTabHref, turfView, type TurfTab } from "@/lib/my/turfTabs";
 import { EditListing } from "./EditListing";
 import { OwnerPhotos } from "./OwnerPhotos";
@@ -78,6 +79,18 @@ export function MyTurf({ id }: { id: string }) {
     const t = setTimeout(() => void load(), 0);
     return () => clearTimeout(t);
   }, [user, load]);
+
+  // "Ask for a slot" on the turf's page, for Analytics: a read of its own beside the dashboard (nothing before
+  // 20261118_slot_asks.sql, or when it fails). Kept with the period it was read for.
+  const [asks, setAsks] = useState<{ days: number; data: OwnerAsks | null } | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    void getOwnerSlotAsks(id, days).then((data) => alive && setAsks({ days, data }));
+    return () => {
+      alive = false;
+    };
+  }, [user, id, days]);
 
   // Free slots: read at the same time as the dashboard, so the section is there when the page draws
   // (components/my/FreeSlots.tsx adopts it once, then keeps its own). Once per sign-in.
@@ -310,6 +323,8 @@ export function MyTurf({ id }: { id: string }) {
           Calls and WhatsApp are taps on your buttons on TapTurf. Compared with the {data.days} days before.
         </p>
 
+        {asks?.days === days && asks.data && asks.data.asks > 0 && <SlotAsksBlock asks={asks.data} />}
+
         <section className="mt-6 grid md:grid-cols-2 gap-3">
           <div className="rounded-2xl border border-primary-200 bg-white p-4">
             <DailyChart label="Page views" points={data.series.map((d) => ({ date: d.day, count: d.views }))} />
@@ -400,6 +415,35 @@ function toTabs(el: HTMLElement | null) {
   const header = document.querySelector("header")?.getBoundingClientRect().height ?? 56;
   const top = Math.max(0, el.getBoundingClientRect().top + window.scrollY - header - 12);
   if (window.scrollY > top) window.scrollTo({ top, behavior: "instant" });
+}
+
+/** Analytics: how often players used "Ask for a slot" on the page, and the start times they asked for most (lib/my/slotAsks.ts). Shown from one ask. */
+function SlotAsksBlock({ asks }: { asks: OwnerAsks }) {
+  const top = topAsked(asks);
+  const max = Math.max(1, ...top.map((h) => h.n));
+  return (
+    <section className="mt-6" aria-labelledby="slot-asks-h" data-owner-asks="">
+      <h2 id="slot-asks-h" className="text-[15px] font-bold text-primary-900">
+        {OWNER_ASKS_COPY.title}
+      </h2>
+      <div className="mt-2 grid gap-3 md:grid-cols-2">
+        <Stat label={OWNER_ASKS_COPY.stat} value={asks.asks} prev={asks.prev} />
+        <div className="rounded-2xl border border-primary-200 bg-white p-4">
+          <p className="text-[12px] font-semibold text-primary-500">{OWNER_ASKS_COPY.top}</p>
+          <ul className="mt-2 space-y-1.5">
+            {top.map((h) => (
+              <li key={h.hour} className="flex items-center gap-2 text-[13px] tabular-nums">
+                <span className="w-12 shrink-0 font-semibold text-primary-900">{askHourLabel(h.hour)}</span>
+                <span className="h-2.5 rounded-r-[4px] bg-accent-600" style={{ width: `${Math.max(4, Math.round((h.n / max) * 60))}%` }} aria-hidden />
+                <span className="text-primary-600">{h.n.toLocaleString("en-IN")}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <p className="mt-2 text-[12px] text-primary-400">{OWNER_ASKS_COPY.note(asks.days)}</p>
+    </section>
+  );
 }
 
 function Stat({ label, value, prev }: { label: string; value: number; prev: number }) {
