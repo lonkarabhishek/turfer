@@ -196,6 +196,21 @@ test("policy: the medal on your photo, who sees it and how to turn it off", () =
   assert.equal(PRIVACY_UPDATED, "2026-11-20");
 });
 
+test("policy: a host can delete a game they posted, and what is kept", () => {
+  const page = privacyPage.replace(/\s+/g, " ");
+  const at = page.indexOf("<strong>Things you do on TapTurf.</strong>");
+  const things = page.slice(at, page.indexOf("</p>", at));
+  assert.match(things, /You can delete a game you posted: it comes off TapTurf at once, and its record is kept privately \(so the players who were in it can be told, and a mistake can be undone\) until you ask us to erase it\./);
+  // What the sentence says is what the database does (20261122_game_remove.sql): the row stays, hidden from every read, and nothing new is kept about anybody.
+  const sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20261122_game_remove.sql"), "utf8");
+  assert.match(sql, /alter policy "Anyone can read games" on public\.games using \(removed_at is null\);/, "hidden from the browser's and the server's reads");
+  assert.deepEqual([...sql.matchAll(/^alter table public\.games add column if not exists (\w+) /gm)].map((m) => m[1]), ["removed_at", "removed_status"], "kept: when it was taken off and the state it was in");
+  assert.doesNotMatch(sql, /create table/i, "no new table: nothing else is stored");
+  // No new site-wide notice for it (nothing new is collected or shared); the policy's date moves to the day it ships.
+  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_UPDATED, "2026-11-20");
+});
+
 test("policy: tools used signed in count toward medals, and the profile shows how many you played with, never who", () => {
   const page = privacyPage.replace(/\s+/g, " ");
   const para = (id: string) => {

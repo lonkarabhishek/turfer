@@ -7,11 +7,13 @@ import {
   answerTagCall,
   createGameCall,
   createSeriesCall,
+  deleteGameCall,
   gameProblem,
   incomingRequestsCall,
   myRequestsCall,
   mySeriesCall,
   postUpdateCall,
+  removalCall,
   removeUpdateCall,
   requestsForGameCall,
   sendRequestCall,
@@ -27,6 +29,7 @@ import { missingVenueColumn } from "@/lib/games/otherVenue";
 import { TAG_COPY } from "@/lib/games/confirmed";
 import { PLAYED_COPY } from "@/lib/games/played";
 import { updatesOf, type GameUpdate } from "@/lib/games/updates";
+import { parseRemoval, REMOVE_COPY, type Removal } from "@/lib/games/remove";
 import type { CreateGameBody, GameChanges, GameErrorBody, GameSeries, GameTag, SeriesInfo } from "@/lib/games/types";
 import type { Game, GameRequest, GameParticipant, CreateGameData } from "@/types/game";
 import { NO_BADGES } from "@/lib/profile/playerBadge";
@@ -164,9 +167,26 @@ export async function getMyRequestForGame(getToken: GetToken, gameId: string) {
   return { data: r.ok.host ? null : r.ok.mine, error: null };
 }
 
+/** When a read found no removed_at column (before 20261122_game_remove.sql): not asked for again for a minute. */
+let noRemovedAt = 0;
+
+/**
+ * The games this person hosts, newest first. Their rows also carry removed_at (null on every row that is read:
+ * a deleted game is not), which is how the Me tab knows the database can delete a game (lib/games/remove.ts
+ * removeReady) with no read of its own; a database without the column is read as before.
+ */
 export async function getUserGames(userId: string) {
   const supabase = createClient();
-  const { data, error } = await listed((columns) => supabase.from("games").select(columns).eq("creator_id", userId).order("created_at", { ascending: false }));
+  const read = (columns: string) => supabase.from("games").select(columns).eq("creator_id", userId).order("created_at", { ascending: false });
+  let res: Listed | null = null;
+  if (Date.now() - noRemovedAt > 60_000) {
+    res = (await read(`${LIST_COLUMNS}, removed_at`)) as unknown as Listed;
+    if (res.error?.code === "42703") {
+      noRemovedAt = Date.now();
+      res = null;
+    }
+  }
+  const { data, error } = res ?? (await listed(read));
 
   if (error || !data) return { data: [] as Game[], error: error?.message || null };
 
@@ -292,6 +312,21 @@ export async function getSeriesInfo(ids: (string | null | undefined)[]): Promise
 export async function updateGame(getToken: GetToken, gameId: string, updates: GameChanges) {
   const r = outcome(await updateGameCall(getToken, gameId, updates), "game");
   return "error" in r ? { data: null, error: r.error } : { data: r.ok.game, error: null };
+}
+
+// ── Deleting a game ────────────────────────────────────
+
+/** What deleting this game would do, for its host (GET /api/games/<id>/removal), or the page's words for why it can't be said. */
+export async function getGameRemoval(getToken: GetToken, gameId: string): Promise<{ data: Removal; error: null } | { data: null; error: string }> {
+  const a = await removalCall(getToken, gameId);
+  const removal = a.status === 200 ? parseRemoval(a.body) : null;
+  return removal ? { data: removal, error: null } : { data: null, error: gameProblem(a) ?? REMOVE_COPY.failed };
+}
+
+/** The host deletes their game: called off first when it hasn't started (told: how many people heard), then gone from TapTurf. */
+export async function deleteGame(getToken: GetToken, gameId: string): Promise<{ told: number; error: null } | { told: null; error: string }> {
+  const r = outcome(await deleteGameCall(getToken, gameId), "r");
+  return "error" in r ? { told: null, error: r.error } : { told: typeof r.ok.told === "number" ? r.ok.told : 0, error: null };
 }
 
 // ── Already confirmed: tags ────────────────────────────

@@ -8,6 +8,7 @@ import { legacyRpc } from "./legacy";
 import { missingVenueColumn, storedVenueCity } from "./otherVenue";
 import { hasConfirmedKeys, missingConfirmedColumn } from "./confirmed";
 import { updateProblem } from "./updates";
+import { parseRemoval, removedView } from "./remove";
 import { isUuid, parseChanges, parseCreate, parseNote, parseSeries } from "./payload";
 import { cityInfo } from "../city";
 import type { GameChanges } from "./types";
@@ -75,6 +76,8 @@ function refusal(d: Record<string, unknown>): NextResponse {
       return CONFIRMED_OFF();
     case "most":
       return accountReply({ reason: "updates_full" }, "not_allowed");
+    case "others":
+      return accountReply({ reason: "others", players: typeof d.players === "number" ? d.players : 0 }, "not_allowed");
     default:
       return accountError("unavailable");
   }
@@ -264,6 +267,44 @@ export async function cancelGame(req: Request, gameId: string): Promise<NextResp
   if ("reply" in w) return w.reply;
   if (!isUuid(gameId)) return accountError("bad");
   return run("game_cancel", { p_user_id: w.userId, p_game_id: gameId.toLowerCase() }, () => ({ r: "ok" }));
+}
+
+/* ------------------------------------------------------------------ */
+/* Deleting a game (20261122_game_remove.sql, lib/games/remove.ts)     */
+/* ------------------------------------------------------------------ */
+
+/** Deleting while the database can't (before 20261122_game_remove.sql): said plainly; nothing else changes. No fallback. */
+const REMOVE_OFF = () => accountReply({ reason: "remove_off" }, "unavailable");
+
+/**
+ * GET /api/games/[id]/removal: what deleting this game would do, for its host: whether it can go, its state and
+ * how many people would be told (lib/games/remove.ts Removal). Changes nothing.
+ */
+export async function getGameRemoval(req: Request, gameId: string): Promise<NextResponse> {
+  const w = await who(req, allowRead);
+  if ("reply" in w) return w.reply;
+  if (!isUuid(gameId)) return accountError("bad");
+  const res = await accountRpcIfThere("game_remove_check", { p_user_id: w.userId, p_game_id: gameId.toLowerCase() });
+  if ("missing" in res) return REMOVE_OFF();
+  if ("unavailable" in res) return accountError("unavailable");
+  if (res.data.r !== "ok") return refusal(res.data);
+  const removal = parseRemoval(res.data);
+  return removal ? accountReply(removal) : accountError("unavailable");
+}
+
+/**
+ * DELETE /api/games/[id]: the host deletes their game. One not started is called off first (its players and
+ * waiting requests are told, as for a cancel), then it is hidden from everyone; one played with other people
+ * is refused (reason others). The row is kept, hidden.
+ */
+export async function deleteGame(req: Request, gameId: string): Promise<NextResponse> {
+  const w = await who(req, allowWrite);
+  if ("reply" in w) return w.reply;
+  if (!isUuid(gameId)) return accountError("bad");
+  const res = await accountRpcIfThere("game_remove", { p_user_id: w.userId, p_game_id: gameId.toLowerCase() });
+  if ("missing" in res) return REMOVE_OFF();
+  if ("unavailable" in res) return accountError("unavailable");
+  return res.data.r === "ok" ? accountReply(removedView(res.data)) : refusal(res.data);
 }
 
 /* ------------------------------------------------------------------ */

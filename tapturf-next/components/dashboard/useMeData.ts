@@ -59,7 +59,7 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
   const readToken = quietToken(signedInWith);
   const [state, setState] = useState<{ for: string; created: Game[]; joined: Game[]; requests: GameRequest[] } | null>(null);
   // Read after the lists, from them (a query each, only when there is something to name).
-  const [extraFor, setExtraFor] = useState<{ for: string; incoming: GameRequest[]; games: Map<string, GameLine> } | null>(null);
+  const [extraFor, setExtraFor] = useState<{ for: string; incoming: GameRequest[]; games: Map<string, GameLine>; gone: ReadonlySet<string> } | null>(null);
   const [unreadFor, setUnreadFor] = useState<{ for: string; n: number } | null>(null);
   const [turfsFor, setTurfsFor] = useState<{ for: string; n: number | null } | null>(null);
   const [gamesRead, setGamesRead] = useState(0);
@@ -93,9 +93,12 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
       const asked = [...new Set(r.data.map((q) => q.game_id))];
       void Promise.all([getPendingRequestsFor(readToken, hosting), getGameLines(asked)])
         .then(([inc, lines]) => {
-          if (alive) setExtraFor({ for: userId, incoming: inc.data, games: new Map(lines.data.map((g) => [g.id, g])) });
+          if (!alive) return;
+          const games = new Map(lines.data.map((g) => [g.id, g]));
+          // A game asked for and not read, in a read that worked, is off TapTurf (its host deleted it): its request is not listed.
+          setExtraFor({ for: userId, incoming: inc.data, games, gone: new Set(lines.error ? [] : asked.filter((id) => !games.has(id))) });
         })
-        .catch(() => alive && setExtraFor({ for: userId, incoming: [], games: new Map() }));
+        .catch(() => alive && setExtraFor({ for: userId, incoming: [], games: new Map(), gone: new Set() }));
     });
     void getUnreadCount(readToken)
       .then(({ data, error }) => alive && !error && setUnreadFor({ for: userId, n: data }))
@@ -129,7 +132,11 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
   const mine = state && state.for === userId ? state : null;
   const created = useMemo(() => mine?.created ?? [], [mine]);
   const joined = useMemo(() => mine?.joined ?? [], [mine]);
-  const requests = useMemo(() => mine?.requests ?? [], [mine]);
+  const extra = extraFor && extraFor.for === userId ? extraFor : null;
+  const requests = useMemo(() => {
+    const all = mine?.requests ?? [];
+    return extra?.gone.size ? all.filter((q) => !extra.gone.has(q.game_id)) : all;
+  }, [mine, extra]);
 
   const upcoming = useMemo(() => {
     const ids = new Set<string>();
@@ -137,7 +144,6 @@ export function useMeData(userId: string, signedInWith: SignedInWith | null): Me
     return ids.size;
   }, [created, joined]);
 
-  const extra = extraFor && extraFor.for === userId ? extraFor : null;
   const incoming = useMemo(() => extra?.incoming ?? [], [extra]);
 
   const setRequests = useCallback((r: GameRequest[]) => setState((s) => (s ? { ...s, requests: r } : s)), []);

@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ArrowLeft, Megaphone, Trophy, X, Loader2, Pencil, Save, Send, UserCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Megaphone, Trophy, X, Loader2, Pencil, Save, Send, Trash2, UserCheck } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { quietToken } from "@/lib/account/client";
 import {
@@ -28,6 +30,7 @@ import { confirmedIn, confirmedReady, namedTags, tagButtons, type ShownTag } fro
 import { speedOf } from "@/lib/games/progress";
 import { UPDATES_COPY, UPDATE_CHARS, canPostUpdate, updateProblem, updateProblemText, updatesList, updatesReady } from "@/lib/games/updates";
 import { activityLog } from "@/lib/games/activity";
+import { REMOVE_BLOCKED, REMOVE_COPY, removeOffer } from "@/lib/games/remove";
 import { cleanVenueName } from "@/lib/utils/bookingApps";
 import type { GameTag, SeriesInfo } from "@/lib/games/types";
 import { NO_BADGES, badgeOf, type PlayerBadges } from "@/lib/profile/playerBadge";
@@ -77,6 +80,9 @@ import { GameScore } from "./detail/GameScore";
 import { GameActivity } from "./detail/GameActivity";
 import { SeriesStopSheet } from "./SeriesStopSheet";
 
+// The confirm step of "Delete game": fetched on the host's first tap.
+const DeleteGameSheet = dynamic(() => import("./DeleteGameSheet").then((m) => m.DeleteGameSheet), { ssr: false });
+
 const field = "w-full min-h-12 border border-primary-200 rounded-xl px-4 py-3 text-base md:text-sm text-primary-900 focus:outline-none focus:ring-2 focus:ring-accent-600 focus:border-accent-600 bg-primary-50";
 const label = "block text-[14px] font-medium text-primary-700 mb-1";
 
@@ -99,6 +105,7 @@ export function GameDetailClient({
   tagged?: readonly ShownTag[];
 }) {
   const { user, login, getToken, signedInWith } = useAuth();
+  const router = useRouter();
   // Reads on load never sign anyone out; the actions use getToken.
   const readToken = quietToken(signedInWith);
   const [game, setGame] = useState<Game | null>(null);
@@ -151,6 +158,8 @@ export function GameDetailClient({
   const [updateBusy, setUpdateBusy] = useState(false);
   const [updateError, setUpdateError] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
+  // The host's "Delete game" confirm step (lib/games/remove.ts).
+  const [deleteOpen, setDeleteOpen] = useState(false);
   // "2 h ago": the clock, read when the page mounts and again each minute.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -525,6 +534,8 @@ export function GameDetailClient({
   // What the host has said, newest first, and whether they can add to it now.
   const updates = updatesList(game, hostNote(game));
   const canPost = isHost && canPostUpdate(game) && status !== "expired" && !cancelled && game.status !== "completed";
+  // Delete, for the host: offered, or (a game played with other people) one line why not; nothing before the database can.
+  const deleteOffer = isHost ? removeOffer(game, participantsLoaded ? participants.filter((p) => p.user_id !== game.creator_id).length : undefined, now) : "none";
   const log = activityLog({ game, hostFirst, participants, clean: cleanVenueName });
   const buttons = tagButtons(!!myTag?.shown);
 
@@ -1087,8 +1098,38 @@ export function GameDetailClient({
                 </>
               )}
             </button>
+
+            {deleteOffer !== "none" && (
+              <div className="mt-5 border-t border-primary-200 pt-3">
+                {deleteOffer === "offer" ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditModal(false);
+                      setDeleteOpen(true);
+                    }}
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-full text-[15px] font-semibold text-hot-600 hover:bg-hot-500/10"
+                  >
+                    <Trash2 className="w-4 h-4" aria-hidden />
+                    {REMOVE_COPY.action}
+                  </button>
+                ) : (
+                  <p className="py-1 text-[14px] leading-snug text-primary-600">{REMOVE_BLOCKED}</p>
+                )}
+              </div>
+            )}
           </div>
         </ViewportOverlay>
+      )}
+
+      {deleteOpen && isHost && (
+        <DeleteGameSheet
+          game={game}
+          venue={where?.name}
+          onClose={() => setDeleteOpen(false)}
+          // Its page is gone: on to the host's games, which say so.
+          onDeleted={(told) => router.replace(`/dashboard?tab=games&deleted=${told}`)}
+        />
       )}
     </div>
   );

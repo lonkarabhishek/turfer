@@ -112,7 +112,9 @@ const SECTIONS: LegalSection[] = [
           tab and no host can tag you, and your name stops showing on games you were tagged in. After a game
           you were tagged in and didn&rsquo;t answer, your Passport asks whether you played: yes adds the game
           to your Passport and to the people you played with, no takes you off its lineup. A game&rsquo;s page
-          also lists its activity, such as when it was posted or changed and when each player joined. We also
+          also lists its activity, such as when it was posted or changed and when each player joined. You can
+          delete a game you posted: it comes off TapTurf at once, and its record is kept privately (so the
+          players who were in it can be told, and a mistake can be undone) until you ask us to erase it. We also
           record the time and method of
           each sign-in to spot abuse and to see how many people use the site.
         </p>
