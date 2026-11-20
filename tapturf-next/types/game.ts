@@ -56,6 +56,11 @@ export interface Game {
    */
   updates?: unknown;
   activity?: unknown;
+  /**
+   * Null on every game that is read: a game its host deleted (20261122_game_remove.sql) is hidden from every read.
+   * The key being there at all says the database can delete games (lib/games/remove.ts removeReady); absent before that file.
+   */
+  removed_at?: string | null;
   // Joined data from turfs table
   turfs?: {
     id: string;

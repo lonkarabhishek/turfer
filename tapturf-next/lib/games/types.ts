@@ -10,6 +10,8 @@ import type { Repeat, RepeatEnds, RepeatRule } from "./repeat";
  *   POST   /api/games                     create (CreateGameBody)
  *   PATCH  /api/games/[id]                the host's edit, a venue move too (GameChanges)
  *   POST   /api/games/[id]/cancel         the host calls it off
+ *   GET    /api/games/[id]/removal        the host: what deleting it would do (lib/games/remove.ts Removal)
+ *   DELETE /api/games/[id]                the host deletes it: called off if it hasn't started (its players are told), then hidden from everyone
  *   GET    /api/games/[id]/tags           the host: the tagged players still to answer; anyone else: whether they are one
  *   POST   /api/games/[id]/tags           { answer }: a tagged player's answer: "yes" | "no" before the game, "played" | "not_played" once it is over
  *   POST   /api/games/[id]/updates        { text }: the host posts an update (its players and waiting requests are told)
@@ -131,9 +133,11 @@ export type SeriesInfo = Pick<GameSeries, "id" | "rule" | "starts_on" | "ends" |
  * many: 3 repeats running already; not_ready: the database has no repeats yet;
  * venue_off: the database takes no typed venues yet (before 20261103_game_other_venue.sql);
  * confirmed_off: nor confirmed people (before 20261117_game_confirmed.sql);
- * updates_off: nor updates (before 20261118_game_updates.sql); updates_full: the game has 20 already.
+ * updates_off: nor updates (before 20261118_game_updates.sql); updates_full: the game has 20 already;
+ * others: a game played with other people can't be deleted (players: how many);
+ * remove_off: the database deletes no games yet (before 20261122_game_remove.sql).
  */
-export type GameRefusal = "gone" | "not_host" | "own" | "closed" | "full" | "joined" | "pending" | "answered" | "too_few" | "venue" | "many" | "not_ready" | "venue_off" | "confirmed_off" | "updates_off" | "updates_full";
+export type GameRefusal = "gone" | "not_host" | "own" | "closed" | "full" | "joined" | "pending" | "answered" | "too_few" | "venue" | "many" | "not_ready" | "venue_off" | "confirmed_off" | "updates_off" | "updates_full" | "others" | "remove_off";
 
 export type GameErrorBody = { error: string; reason?: GameRefusal; field?: string; players?: number; status?: string };
 

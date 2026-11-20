@@ -22,6 +22,8 @@ import {
   postGameUpdate,
   deleteGameUpdate,
   forgetUpdatesReady,
+  deleteGame,
+  getGameRemoval,
 } from "./server";
 import { dbProfile, googleSession, installNet, net, phoneToken, req, testEnv } from "../account/testkit";
 
@@ -770,4 +772,80 @@ test("the edit sheet's note: left out of an edit once the database has updates, 
   assert.equal(res.status, 200, "the rest of the edit goes through");
   assert.deepEqual(net.calls("game_update")[2].args.p_changes, { max_players: 14 }, "without the note: what the host adds now is an update, with its time");
   forgetUpdatesReady();
+});
+
+/* ---------------- deleting a game (20261122_game_remove.sql) ---------------- */
+
+test("delete: the host's own, as the verified account; who was told comes back, these keys only", async () => {
+  signedIn();
+  net.rpc.game_remove = () => ({ r: "ok", removed: true, state: "upcoming", told: 4, creator_id: "acc-1", host_phone: "x" });
+  const res = await deleteGame(req(`/api/games/${GAME}`, { method: "DELETE", token: phoneToken() }), GAME.toUpperCase());
+  assert.deepEqual([res.status, await json(res)], [200, { r: "ok", state: "upcoming", told: 4 }]);
+  assert.equal(res.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual(net.calls("game_remove")[0].args, { p_key: "test-account-key", p_user_id: "acc-1", p_game_id: GAME }, "with the server key, as the resolved account, the id in lower case");
+  assert.equal(net.calls("game_cancel").length, 0, "the route calls nothing else: the database calls the game off itself");
+  // Deleting again (the database answers ok, nothing removed): still ok, nobody told.
+  net.rpc.game_remove = () => ({ r: "ok", removed: false });
+  assert.deepEqual(await json(await deleteGame(req(`/api/games/${GAME}`, { method: "DELETE", token: phoneToken() }), GAME)), { r: "ok", state: null, told: 0 });
+  // A body naming somebody else changes nothing: the route reads none.
+  const calls = net.calls("game_remove").length;
+  await deleteGame(req(`/api/games/${GAME}`, { method: "DELETE", token: phoneToken(), body: { user_id: "acc-2", p_user_id: "acc-2" } }), GAME);
+  assert.equal(net.calls("game_remove").at(-1)?.args.p_user_id, "acc-1");
+  assert.equal(net.calls("game_remove").length, calls + 1);
+});
+
+test("delete: no sign-in, a bad id or a refusal never deletes; played with others says so with how many", async () => {
+  signedIn();
+  net.rpc.game_remove = () => ({ r: "ok", removed: true, state: "off", told: 0 });
+  assert.equal((await deleteGame(req(`/api/games/${GAME}`, { method: "DELETE" }), GAME)).status, 401, "signed in only");
+  assert.equal((await deleteGame(req("/api/games/x", { method: "DELETE", token: phoneToken() }), "x")).status, 400, "not a game id");
+  assert.equal(net.calls("game_remove").length, 0, "neither reached the database");
+  net.rpc.account_resolve = () => ({ r: "new" });
+  assert.equal((await deleteGame(req(`/api/games/${GAME}`, { method: "DELETE", token: phoneToken() }), GAME)).status, 404, "a sign-in with no account yet");
+  assert.equal(net.calls("game_remove").length, 0);
+  signedIn();
+  for (const [answer, status, body] of [
+    [{ r: "others", players: 3 }, 409, { reason: "others", players: 3, error: "not_allowed" }],
+    [{ r: "not_host" }, 409, { reason: "not_host", error: "not_allowed" }],
+    [{ r: "gone" }, 400, { reason: "gone", error: "bad" }],
+    [{ r: "closed" }, 409, { reason: "closed", error: "not_allowed" }],
+    [{ r: "bad" }, 400, { error: "bad" }],
+    [{ r: "unavailable" }, 503, { error: "unavailable" }],
+    [{ r: "something_new" }, 503, { error: "unavailable" }],
+  ] as const) {
+    net.rpc.game_remove = () => answer;
+    const no = await deleteGame(req(`/api/games/${GAME}`, { method: "DELETE", token: phoneToken() }), GAME);
+    assert.deepEqual([no.status, await json(no)], [status, body], answer.r);
+  }
+});
+
+test("delete, before the database can (no 20261122_game_remove.sql): said plainly, and nothing else is tried", async () => {
+  signedIn();
+  net.rpc.game_remove = missing;
+  net.rpc.game_remove_check = missing;
+  const off = await deleteGame(req(`/api/games/${GAME}`, { method: "DELETE", token: phoneToken() }), GAME);
+  assert.deepEqual([off.status, await json(off)], [503, { reason: "remove_off", error: "unavailable" }]);
+  const ask = await getGameRemoval(req(`/api/games/${GAME}/removal`, { token: phoneToken() }), GAME);
+  assert.deepEqual([ask.status, await json(ask)], [503, { reason: "remove_off", error: "unavailable" }]);
+  assert.equal(net.calls("game_cancel").length, 0, "no fallback: the game is not called off instead");
+});
+
+test("what deleting would do: the host's read, these keys only, and it changes nothing", async () => {
+  signedIn();
+  net.rpc.game_remove_check = () => ({ r: "ok", can: true, repeat: false, state: "upcoming", players: 3, requests: 1, tags: 2, creator_id: "acc-1", names: ["Ravi"] });
+  const res = await getGameRemoval(req(`/api/games/${GAME}/removal`, { token: phoneToken() }), GAME.toUpperCase());
+  assert.deepEqual([res.status, await json(res)], [200, { can: true, state: "upcoming", players: 3, requests: 1, tags: 2, repeat: false }], "numbers only: nobody is named");
+  assert.equal(res.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual(net.calls("game_remove_check")[0].args, { p_key: "test-account-key", p_user_id: "acc-1", p_game_id: GAME });
+  assert.equal(net.calls("game_remove").length, 0, "asking deletes nothing");
+  net.rpc.game_remove_check = () => ({ r: "ok", can: false, repeat: true, state: "played", players: 2, requests: 0, tags: 0 });
+  assert.deepEqual(await json(await getGameRemoval(req(`/api/games/${GAME}/removal`, { token: phoneToken() }), GAME)), { can: false, state: "played", players: 2, requests: 0, tags: 0, repeat: true });
+  assert.equal((await getGameRemoval(req(`/api/games/${GAME}/removal`), GAME)).status, 401, "signed in only");
+  assert.equal((await getGameRemoval(req("/api/games/x/removal", { token: phoneToken() }), "x")).status, 400);
+  for (const [answer, status, body] of [[{ r: "not_host" }, 409, { reason: "not_host", error: "not_allowed" }], [{ r: "gone" }, 400, { reason: "gone", error: "bad" }],
+    [{ r: "ok", state: "sideways", can: true }, 503, { error: "unavailable" }], [{ r: "ok", state: "off" }, 503, { error: "unavailable" }]] as const) {
+    net.rpc.game_remove_check = () => answer;
+    const no = await getGameRemoval(req(`/api/games/${GAME}/removal`, { token: phoneToken() }), GAME);
+    assert.deepEqual([no.status, await json(no)], [status, body], JSON.stringify(answer));
+  }
 });

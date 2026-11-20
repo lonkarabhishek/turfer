@@ -19,6 +19,7 @@ import type {
   UnreadResponse,
   UpdatesResponse,
 } from "./types";
+import { REMOVE_BLOCKED, REMOVE_COPY, type Removal, type Removed } from "./remove";
 
 /**
  * Browser side of games, repeats, join requests and notifications: calls to the
@@ -66,6 +67,9 @@ const at = (id: string) => encodeURIComponent(id);
 export const createGameCall = (getToken: GetToken, game: CreateGameBody) => call<GameResponse>(getToken, "/api/games", json("POST", game));
 export const updateGameCall = (getToken: GetToken, gameId: string, changes: GameChanges) => call<GameResponse>(getToken, `/api/games/${at(gameId)}`, json("PATCH", changes));
 export const cancelGameCall = (getToken: GetToken, gameId: string) => call<{ r: "ok" }>(getToken, `/api/games/${at(gameId)}/cancel`, json("POST", {}));
+/** What deleting the game would do, for its host; then the delete itself (lib/games/remove.ts). */
+export const removalCall = (getToken: GetToken, gameId: string) => call<Removal>(getToken, `/api/games/${at(gameId)}/removal`);
+export const deleteGameCall = (getToken: GetToken, gameId: string) => call<Removed>(getToken, `/api/games/${at(gameId)}`, { method: "DELETE" });
 export const tagsForGameCall = (getToken: GetToken, gameId: string) => call<TagsForResponse>(getToken, `/api/games/${at(gameId)}/tags`);
 export const answerTagCall = (getToken: GetToken, gameId: string, yes: boolean) =>
   call<TagAnsweredResponse>(getToken, `/api/games/${at(gameId)}/tags`, json("POST", { answer: yes ? "yes" : "no" }));
@@ -161,6 +165,10 @@ export function gameProblem(a: GameAnswer<unknown>): string | null {
       return "Updates aren't on just yet. Try again in a little while.";
     case "updates_full":
       return "This game has 20 updates, the most it can have. Remove one to post another.";
+    case "others":
+      return REMOVE_BLOCKED;
+    case "remove_off":
+      return REMOVE_COPY.off;
   }
   if (b.error === "bad") return (b.field && FIELD_TEXT[b.field]) || "Something there doesn't look right. Check it and try again.";
   if (b.error === "sign_in") return "Your login ended. Please log in again.";

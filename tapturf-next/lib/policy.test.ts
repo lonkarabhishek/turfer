@@ -19,7 +19,7 @@ test("policy: the friends a host says are in already, and tagging", () => {
   assert.doesNotMatch(things, /until they say yes only you see who you tagged/, "the sentence from before is gone");
   // No new site-wide notice for it (the site owner's call); the policy's date moves.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-20");
+  assert.equal(PRIVACY_UPDATED, "2026-11-21");
 });
 
 test("policy notice: a new id, so people who dismissed the last one see it", () => {
@@ -34,7 +34,7 @@ test("policy notice: emails, and where the policy says it", () => {
     "If your account has an email Google confirmed, TapTurf now emails you about your games: a welcome, join requests and answers, game changes and reminders. Resend sends them for us. Turn each kind off on the Me tab or with the link in any email. We don't track opens or taps, and we never email about booking requests.",
   );
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-20");
+  assert.equal(PRIVACY_UPDATED, "2026-11-21");
   assert.equal(PRIVACY_NOTICE.anchor, "emails");
   const at = privacyPage.indexOf(`id="${PRIVACY_NOTICE.anchor}"`);
   assert.ok(at >= 0, `the policy has #${PRIVACY_NOTICE.anchor}`);
@@ -176,7 +176,7 @@ test("policy: Ask for a slot, what is kept and what never reaches us", () => {
   assert.deepEqual([...table.matchAll(/^  (\w+) /gm)].map((m) => m[1]), ["id", "turf_id", "slot_date", "slot_hour", "slot_minute", "minutes", "sport", "players", "signed_in", "created_at"]);
   // No new site-wide notice for it (an ask names nobody); the policy's date moves to the day it ships.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-20");
+  assert.equal(PRIVACY_UPDATED, "2026-11-21");
 });
 
 test("policy: the medal on your photo, who sees it and how to turn it off", () => {
@@ -193,7 +193,22 @@ test("policy: the medal on your photo, who sees it and how to turn it off", () =
   assert.match(sql, /join public\.usernames n on n\.user_id = b\.user_id and n\.taggable/);
   // No new site-wide notice for it (the medals were on the public profile already); the policy's date moves to the day it ships.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-20");
+  assert.equal(PRIVACY_UPDATED, "2026-11-21");
+});
+
+test("policy: a host can delete a game they posted, and what is kept", () => {
+  const page = privacyPage.replace(/\s+/g, " ");
+  const at = page.indexOf("<strong>Things you do on TapTurf.</strong>");
+  const things = page.slice(at, page.indexOf("</p>", at));
+  assert.match(things, /You can delete a game you posted: it comes off TapTurf at once, and its record is kept privately \(so the players who were in it can be told, and a mistake can be undone\) until you ask us to erase it\./);
+  // What the sentence says is what the database does (20261122_game_remove.sql): the row stays, hidden from every read, and nothing new is kept about anybody.
+  const sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20261122_game_remove.sql"), "utf8");
+  assert.match(sql, /alter policy "Anyone can read games" on public\.games using \(removed_at is null\);/, "hidden from the browser's and the server's reads");
+  assert.deepEqual([...sql.matchAll(/^alter table public\.games add column if not exists (\w+) /gm)].map((m) => m[1]), ["removed_at", "removed_status"], "kept: when it was taken off and the state it was in");
+  assert.doesNotMatch(sql, /create table/i, "no new table: nothing else is stored");
+  // No new site-wide notice for it (nothing new is collected or shared); the policy's date moves to the day it ships.
+  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_UPDATED, "2026-11-21");
 });
 
 test("policy notice: the notice it replaced still reaches anyone who never dismissed it", () => {
