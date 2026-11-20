@@ -1,4 +1,5 @@
 import type { PlayedGame } from "./history";
+import { medalOf, type PlayerBadge } from "./playerBadge";
 
 /**
  * Played with: the people who were in the same played games as this
@@ -44,6 +45,8 @@ export type PlayedWithPerson = {
   last: string;
   /** +91 and 10 digits, only when they share it and played with the viewer. */
   whatsapp: string | null;
+  /** The medal on their photo (lib/profile/playerBadge.ts): their best one and how many they have. Only with a public profile. */
+  badge?: { medal: string; medals: number } | null;
 };
 
 // The account numbers TapTurf keeps (lib/account/fresh.ts INDIAN_E164_RE).
@@ -56,6 +59,7 @@ export function playedWithList(
   people: ReadonlyMap<string, { name: string | null; photo: string | null }>,
   extras: ReadonlyMap<string, CoPlayerExtra> | null,
   max = 60,
+  badges: ReadonlyMap<string, PlayerBadge> | null = null,
 ): PlayedWithPerson[] {
   const out: PlayedWithPerson[] = [];
   for (const c of list) {
@@ -63,14 +67,18 @@ export function playedWithList(
     const name = p?.name?.trim();
     if (!name) continue;
     const x = extras?.get(c.userId);
+    const b = badges?.get(c.userId.toLowerCase());
+    const badge = b && medalOf(b.medal) && b.medals >= 1 && USERNAME_RE.test(b.username) ? b : null;
     out.push({
       key: `p${out.length + 1}`,
       name,
       photo: p?.photo ?? null,
-      username: x?.username && USERNAME_RE.test(x.username) ? x.username : null,
+      // A badge is only ever sent for a public profile, so it names the same profile when the extras could not.
+      username: x?.username && USERNAME_RE.test(x.username) ? x.username : (badge?.username ?? null),
       together: c.together,
       last: c.last,
       whatsapp: x?.whatsapp && WHATSAPP_RE.test(x.whatsapp) ? x.whatsapp : null,
+      ...(badge ? { badge: { medal: badge.medal, medals: badge.medals } } : {}),
     });
     if (out.length >= max) break;
   }

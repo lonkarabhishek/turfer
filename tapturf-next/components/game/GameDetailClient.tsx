@@ -30,6 +30,7 @@ import { UPDATES_COPY, UPDATE_CHARS, canPostUpdate, updateProblem, updateProblem
 import { activityLog } from "@/lib/games/activity";
 import { cleanVenueName } from "@/lib/utils/bookingApps";
 import type { GameTag, SeriesInfo } from "@/lib/games/types";
+import { NO_BADGES, badgeOf, type PlayerBadges } from "@/lib/profile/playerBadge";
 import { ConfirmedField, draftCount, emptyConfirmed, type ConfirmedDraft } from "./ConfirmedField";
 import {
   durationLabel,
@@ -103,6 +104,8 @@ export function GameDetailClient({
   const [game, setGame] = useState<Game | null>(null);
   const [participants, setParticipants] = useState<GameParticipant[]>([]);
   const [participantsLoaded, setParticipantsLoaded] = useState(false);
+  // The medal on each player's photo (lib/profile/playerBadge.ts): read beside the lineup, for its players, the host and the tagged players named.
+  const [badges, setBadges] = useState<PlayerBadges>(NO_BADGES);
   const [requests, setRequests] = useState<GameRequest[]>([]);
   // This viewer's latest request, read on load (pending or declined survives a reload).
   const [myRequest, setMyRequest] = useState<{ userId: string; id: string; status: GameRequest["status"] } | null>(null);
@@ -168,8 +171,9 @@ export function GameDetailClient({
   };
 
   const loadParticipants = async () => {
-    const { data } = await getGameParticipants(gameId);
+    const { data, badges: b } = await getGameParticipants(gameId, game ? [game.creator_id, ...tagged.map((t) => t.uid)] : []);
     setParticipants(data);
+    setBadges(b);
     setParticipantsLoaded(true);
   };
 
@@ -206,15 +210,16 @@ export function GameDetailClient({
         if (alive) setRequests(data);
       });
     }
-    getGameParticipants(gameId).then(({ data }) => {
+    getGameParticipants(gameId, [game.creator_id, ...tagged.map((t) => t.uid)]).then(({ data, badges: b }) => {
       if (!alive) return;
       setParticipants(data);
+      setBadges(b);
       setParticipantsLoaded(true);
     });
     return () => {
       alive = false;
     };
-  }, [game, user, isHost, gameId, readToken]);
+  }, [game, user, isHost, gameId, readToken, tagged]);
 
   // Tagged players: one small read, only when the game says someone is tagged and waiting, for a signed-in viewer
   // (the host gets who; anyone else only whether it is them).
@@ -668,6 +673,7 @@ export function GameDetailClient({
               hostFirst={hostFirst}
               hostPhoto={game.host_profile_image_url}
               hostId={game.creator_id}
+              hostBadge={badgeOf(badges, game.creator_id)}
               updates={updates}
               now={now}
               canPost={canPost}
@@ -690,6 +696,7 @@ export function GameDetailClient({
               confirmed={confirmedIn(game)}
               waitingTags={waitingTags}
               tagged={named}
+              badges={badges}
               speed={speed}
               hostFirst={hostFirst}
               creatorId={game.creator_id}

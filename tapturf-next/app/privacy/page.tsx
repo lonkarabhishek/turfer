@@ -170,7 +170,11 @@ const SECTIONS: LegalSection[] = [
           joined, and, worked out from your TapTurf games and reviews: how many games you played and hosted,
           at how many turfs, in how many cities and sports, your longest run of weeks in a row with a game,
           the medals those earned and the turfs you reviewed (with your stars). Only counts: never which turfs
-          you played at, when, or with whom. Unless you turn off &ldquo;Let others find and tag me&rdquo;, signed-in people who score live
+          you played at, when, or with whom. If you have a public profile and have earned a medal, your best
+          medal also shows as a small badge on your photo to other players, on the pages of games you host or
+          are in and in the Played with list of people you played with, and it links to your profile; turn
+          off &ldquo;Let others find and tag me&rdquo; and the badge stops showing the next time those pages
+          are opened. Unless you turn off &ldquo;Let others find and tag me&rdquo;, signed-in people who score live
           matches can find you by username or name and tag you as a player, and the tag links to your profile.
           If you run a turf on myTapturf, its page also says &ldquo;Managed by @your-username&rdquo; (see
           above). Turning it off hides your profile page and that line, and takes you out of search, within

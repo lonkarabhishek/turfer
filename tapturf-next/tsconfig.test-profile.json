@@ -12,5 +12,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./*"] }
   },
-  "files": ["lib/profile/profile.test.ts", "lib/profile/routes.test.ts"]
+  "files": ["lib/profile/profile.test.ts", "lib/profile/routes.test.ts", "lib/profile/playerBadge.test.ts"]
 }

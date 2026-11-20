@@ -192,3 +192,53 @@ test("passport: the games they were tagged in and never answered about (Did you 
   assert.equal(body.passport.numbers.games, 2, "none of them counts for anything until they say yes");
   assert.doesNotMatch(JSON.stringify(body), /98000000/);
 });
+
+test("played and passport: the caller's best medal goes to the database for their badge, and never holds a reply up", async () => {
+  for (const handler of [getPlayed, getPassport]) {
+    const sent: [string, string[]][] = [];
+    const { d } = deps();
+    const res = await handler(get("/x"), { ...d, badge: (id, medals) => void sent.push([id, [...medals]]) });
+    assert.equal(res.status, 200);
+    assert.deepEqual(sent, [[ME, ["first-game", "first-host", "first-review"]]], "the verified caller's own earned medals, best first, once");
+    // A send that throws changes nothing about the answer.
+    const boom = await handler(get("/x"), { ...d, badge: () => { throw new Error("down"); } });
+    assert.equal(boom.status, 200);
+    assert.deepEqual(await boom.json(), await (await handler(get("/x"), d)).json(), "the same body as without it");
+    // Signed out, or a read that failed: nothing is sent.
+    sent.length = 0;
+    await handler(get("/x"), { ...deps({ who: "out" }).d, badge: (id, medals) => void sent.push([id, [...medals]]) });
+    await handler(get("/x"), { ...deps({ fail: true }).d, badge: (id, medals) => void sent.push([id, [...medals]]) });
+    assert.deepEqual(sent, []);
+  }
+});
+
+test("passport: the medal on the photo of the people they played with, read beside their names", async () => {
+  const asked: string[][] = [];
+  const { d } = deps({ extras: "on" });
+  const badges = async (ids: readonly string[]) => {
+    asked.push([...ids]);
+    return new Map([
+      ["acc-ravi", { medal: "games-25", medals: 7, username: "ravi" }],
+      // Kiran never played with them: never in the list, whatever comes back.
+      ["acc-kiran", { medal: "games-5", medals: 2, username: "kiran" }],
+    ]);
+  };
+  const body = (await (await getPassport(get("/api/me/passport"), { ...d, badges })).json()) as PassportResponse;
+  assert.deepEqual(asked, [["acc-ravi", "acc-priya"]], "one read, for the people in the list");
+  assert.deepEqual(body.playedWith.map((p) => [p.name, p.badge ?? null]), [
+    ["Ravi Kumar", { medal: "games-25", medals: 7 }],
+    ["Priya Sharma", null],
+  ]);
+  assert.doesNotMatch(JSON.stringify(body), /acc-/, "no account ids");
+  // Before 20261121_player_badges.sql (null), or a read that fails: the list as it was.
+  const plain = (await (await getPassport(get("/api/me/passport"), d)).json()) as PassportResponse;
+  for (const b of [async () => null, async () => { throw new Error("down"); }]) {
+    const res = await getPassport(get("/api/me/passport"), { ...d, badges: b });
+    assert.equal(res.status, 200, "a failed badge read never holds the passport up");
+    assert.deepEqual(((await res.json()) as PassportResponse).playedWith, plain.playedWith);
+  }
+  // The played read never asks about anyone's badge.
+  asked.length = 0;
+  await getPlayed(get("/api/me/played"), { ...d, badges });
+  assert.deepEqual(asked, []);
+});
