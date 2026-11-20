@@ -31,18 +31,18 @@ import { Ball, Field, Rupee, Tick, hasBall } from "./gameCardArt";
 type CardProps = { f: GameCardFacts; shape: GameCardShape; icon: string };
 
 /** Bold as a stroke, in em: the one bundled weight, made semi-bold or heavy. */
-const SEMI = 0.032;
-const HEAVY = 0.058;
+export const SEMI = 0.032;
+export const HEAVY = 0.058;
 
 /** What a stroke of `weight` and letter spacing of `track` (both em) add to each character's width. */
-const spread = (weight: number, track = 0) => weight * 0.6 + track;
+export const spread = (weight: number, track = 0) => weight * 0.6 + track;
 
 // next/og draws "r," kerned but measures it unkerned, which leaves a double gap after it ("Rane Nagar,  Nashik"):
 // a zero-width space (in the font) before the comma or stop keeps the pair apart, so drawn and measured agree.
 const unkern = (s: string) => s.replace(/([,.]) /g, "\u200b$1 ");
 
 /** One text: `weight` em of stroke for bold, `track` em of letter spacing, `lines` to clamp a wrapping text to. */
-function T({ children, size, color, weight = 0, track = 0, lines, style }: { children: string; size: number; color: string; weight?: number; track?: number; lines?: number; style?: CSSProperties }) {
+export function T({ children, size, color, weight = 0, track = 0, lines, style }: { children: string; size: number; color: string; weight?: number; track?: number; lines?: number; style?: CSSProperties }) {
   return (
     <div
       style={{
@@ -233,13 +233,13 @@ const CTA: Record<GameCardSpots["kind"], string> = {
 const scale = (shape: GameCardShape, x4x3: number, x1x1: number) => (shape === "og" ? 1 : shape === "4x3" ? x4x3 : x1x1);
 
 /** "#rrggbb" `t` of the way from `a` to `b`: what a see-through `b` over `a` looks like, as a solid colour. */
-function mix(a: string, b: string, t: number): string {
+export function mix(a: string, b: string, t: number): string {
   const ch = (hex: string, i: number) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
   return `#${[0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t).toString(16).padStart(2, "0")).join("")}`;
 }
 
 /** Mown stripes as one gradient: `n` equal bands along `deg`, band i in the colour `at(i)` gives, with hard edges. */
-function bands(deg: number, n: number, at: (i: number) => string): string {
+export function bands(deg: number, n: number, at: (i: number) => string): string {
   const pct = (i: number) => `${((i / n) * 100).toFixed(2)}%`;
   return `linear-gradient(${deg}deg, ${Array.from({ length: n }, (_, i) => `${at(i)} ${pct(i)}, ${at(i)} ${pct(i + 1)}`).join(", ")})`;
 }
@@ -252,7 +252,7 @@ function BallShadow({ size, color }: { size: number; color: string }) {
 // ─── a: night turf ─────────────────────────────────────────────────────────
 // Deep green under floodlights: the sport's pitch in white lines and its ball on the right, lime for what matters.
 
-const NIGHT = { bg: "#04261A", lit: "#2C5C22", lime: "#B8F23E", white: "#FFFFFF", soft: "#C3CFC8", dim: "#9DB3A6", ring: "#62796D", line: "#4A675A", lineOnly: "#6A8377", shade: "#031C13" };
+export const NIGHT = { bg: "#04261A", lit: "#2C5C22", lime: "#B8F23E", white: "#FFFFFF", soft: "#C3CFC8", dim: "#9DB3A6", ring: "#62796D", line: "#4A675A", lineOnly: "#6A8377", shade: "#031C13" };
 
 function NightTurf({ f, shape, icon }: CardProps) {
   const W = GAME_CARD_SHAPES[shape].width;

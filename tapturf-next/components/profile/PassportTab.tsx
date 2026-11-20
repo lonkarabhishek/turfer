@@ -11,6 +11,7 @@ import { bestFirst, lockedShortlist, toGo, type Medal } from "@/lib/profile/meda
 import { STREAK_WEEKS_SHOWN } from "@/lib/profile/streak";
 import { turfPath } from "@/lib/utils/turfPath";
 import type { PassportResponse } from "@/lib/profile/types";
+import { FlauntMedals } from "./FlauntMedals";
 import { MedalArt } from "./MedalArt";
 import { MedalTile, PassportNumbers, ReviewedList } from "./PassportParts";
 import { PlayedWithList, WhatsAppSwitch } from "./PlayedWith";
@@ -125,8 +126,8 @@ function LockedTile({ m }: { m: Medal }) {
 }
 
 /**
- * Earned medals (what each was for, and when), then "Next up", then the
- * three locked ones closest to done; the rest behind "See all". Before a
+ * Earned medals (what each was for, and when) and "Flaunt my medals",
+ * then "Next up", then the three locked ones closest to done; the rest behind "See all". Before a
  * first game: the three starters.
  */
 function Medals({ medals, games, now }: { medals: Medal[]; games: number; now: number }) {
@@ -145,6 +146,8 @@ function Medals({ medals, games, now }: { medals: Medal[]; games: number; now: n
           ))}
         </ul>
       )}
+      {/* Their medals as an Instagram story picture (FlauntSheet.tsx). Nothing before a first medal: the tiles below say what to earn. */}
+      <FlauntMedals from="passport" count={earned.length} className="mt-3 w-full sm:w-auto" />
       {next && (
         <div className="mt-3 flex items-center gap-3 rounded-2xl bg-primary-900 px-4 py-3 text-white">
           <MedalArt art={next.art} size={44} />

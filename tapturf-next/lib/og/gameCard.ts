@@ -124,13 +124,13 @@ export function ogText(raw: string | null | undefined): { text: string; lost: bo
 }
 
 /** The drawable text, or null when the font cannot draw it whole. */
-function drawable(raw: string | null | undefined): string | null {
+export function drawable(raw: string | null | undefined): string | null {
   const { text, lost } = ogText(raw);
   return !lost && /[\p{L}\p{N}]/u.test(text) ? text : null;
 }
 
 /** At most `max` characters, the cut marked with an ellipsis: after a whole word when one ends in the last third. */
-function clip(s: string, max: number): string {
+export function clip(s: string, max: number): string {
   const chars = [...s];
   if (chars.length <= max) return s;
   const head = chars.slice(0, max - 1).join("");
@@ -279,15 +279,20 @@ export function gameCardFacts(g: CardGame, now: number = Date.now()): GameCardFa
   };
 }
 
+/** FNV-1a of `s`, in base 36: short enough for a URL, and the same wherever it is worked out. */
+export function hash36(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(36);
+}
+
 /** The card's version: FNV-1a of what is drawn, the template and the design, in base 36 (the label and the drawing are the sport's, the note the spots', so those stand for them). */
 export function gameCardVersion(f: GameCardFacts, design: GameCardDesign = CARD_DESIGN): string {
   const s = JSON.stringify([
     GAME_CARD_TEMPLATE, design, f.sport, f.title, f.place, f.day, f.time,
     f.spots.text, f.spots.kind, f.spots.in, f.spots.max, f.price, f.skill, f.booked, f.host,
   ]);
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
-  return (h >>> 0).toString(36);
+  return hash36(s);
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

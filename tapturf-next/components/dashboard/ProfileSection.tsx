@@ -75,7 +75,12 @@ export function ProfileSection({ user, onEditPhoto }: { user: AppUser; onEditPho
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // myTapturf's "Pick a username" comes here (#username): the box, ready to type in.
+  // "Flaunt my medals" with the profile hidden comes to the switch that shows it (#find-and-tag).
   useEffect(() => {
+    if (window.location.hash === "#find-and-tag") {
+      document.getElementById("find-and-tag")?.scrollIntoView({ block: "center" });
+      return;
+    }
     if (window.location.hash !== "#username") return;
     const box = document.getElementById("profile-username");
     box?.scrollIntoView({ block: "center" });
@@ -313,7 +318,7 @@ export function ProfileSection({ user, onEditPhoto }: { user: AppUser; onEditPho
         </div>
 
         {/* Find and tag */}
-        <div>
+        <div id="find-and-tag" className="scroll-mt-24">
           <TagSwitch
             on={taggable}
             disabled={!username.trim()}

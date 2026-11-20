@@ -1,6 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { getGameByIdServer } from "@/lib/queries/games.server";
+import { appMark } from "./appMark";
 import { gameCardFacts, gameCardPath, gameCardVersion, isGameCardShape, isGameId } from "./gameCard";
 import { gameCardPng } from "./gameCardDesigns";
 
@@ -10,7 +9,8 @@ import { gameCardPng } from "./gameCardDesigns";
  * lib/og/gameCardDesigns.tsx.
  *
  * - Nothing third-party: the drawing fetches no font, emoji or picture;
- *   the app icon is read here from public/ (next.config.ts traces it).
+ *   the app icon is read from public/ (lib/og/appMark.ts; next.config.ts
+ *   traces it).
  * - Caching: a URL whose version is the game's current one gets its
  *   picture, kept a day by the CDN (that URL never shows anything else).
  *   Any other URL of a real game (an older version, none, another query)
@@ -19,20 +19,6 @@ import { gameCardPng } from "./gameCardDesigns";
  *   a minute; not a game id or shape: 404, a day.
  * - Under /api, so proxy.ts never runs for it; robots.txt allows it.
  */
-
-let mark: Promise<string> | null = null;
-
-/** The home-screen icon (the logo's stadium and ball on white) as a data URL, read once per process. */
-function appMark(): Promise<string> {
-  mark ??= readFile(join(process.cwd(), "public", "apple-icon.png")).then(
-    (b) => `data:image/png;base64,${b.toString("base64")}`,
-    (e) => {
-      mark = null;
-      throw e;
-    },
-  );
-  return mark;
-}
 
 const notFound = (cache: string) =>
   new Response("Not found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": cache } });
