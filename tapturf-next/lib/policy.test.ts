@@ -19,7 +19,7 @@ test("policy: the friends a host says are in already, and tagging", () => {
   assert.doesNotMatch(things, /until they say yes only you see who you tagged/, "the sentence from before is gone");
   // No new site-wide notice for it (the site owner's call); the policy's date moves.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-21");
+  assert.equal(PRIVACY_UPDATED, "2026-11-20");
 });
 
 test("policy notice: a new id, so people who dismissed the last one see it", () => {
@@ -34,7 +34,7 @@ test("policy notice: emails, and where the policy says it", () => {
     "If your account has an email Google confirmed, TapTurf now emails you about your games: a welcome, join requests and answers, game changes and reminders. Resend sends them for us. Turn each kind off on the Me tab or with the link in any email. We don't track opens or taps, and we never email about booking requests.",
   );
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-21");
+  assert.equal(PRIVACY_UPDATED, "2026-11-20");
   assert.equal(PRIVACY_NOTICE.anchor, "emails");
   const at = privacyPage.indexOf(`id="${PRIVACY_NOTICE.anchor}"`);
   assert.ok(at >= 0, `the policy has #${PRIVACY_NOTICE.anchor}`);
@@ -176,7 +176,7 @@ test("policy: Ask for a slot, what is kept and what never reaches us", () => {
   assert.deepEqual([...table.matchAll(/^  (\w+) /gm)].map((m) => m[1]), ["id", "turf_id", "slot_date", "slot_hour", "slot_minute", "minutes", "sport", "players", "signed_in", "created_at"]);
   // No new site-wide notice for it (an ask names nobody); the policy's date moves to the day it ships.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-21");
+  assert.equal(PRIVACY_UPDATED, "2026-11-20");
 });
 
 test("policy: the medal on your photo, who sees it and how to turn it off", () => {
@@ -193,7 +193,7 @@ test("policy: the medal on your photo, who sees it and how to turn it off", () =
   assert.match(sql, /join public\.usernames n on n\.user_id = b\.user_id and n\.taggable/);
   // No new site-wide notice for it (the medals were on the public profile already); the policy's date moves to the day it ships.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-21");
+  assert.equal(PRIVACY_UPDATED, "2026-11-20");
 });
 
 test("policy: tools used signed in count toward medals, and the profile shows how many you played with, never who", () => {
@@ -216,7 +216,7 @@ test("policy: tools used signed in count toward medals, and the profile shows ho
   assert.match(page, /your profile also shows your game and review counts, how many players you have played with \(a number, never who\), medals and reviewed turfs/);
   // No new site-wide notice (the medals and the counts were on the public profile already; this adds one more count); the policy's date moves to the day it ships.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-21");
+  assert.equal(PRIVACY_UPDATED, "2026-11-20");
 });
 
 test("policy notice: the notice it replaced still reaches anyone who never dismissed it", () => {
