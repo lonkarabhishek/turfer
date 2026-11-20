@@ -2,6 +2,7 @@ import { buildPassport, latestPlayedByTurf, type Passport } from "./passport";
 import { playedGames, type GameRow, type PlayedGame } from "./history";
 import { bestFirst } from "./medals";
 import { coPlayers, playedWithList, type CoPlayerExtra } from "./playedWith";
+import type { PlayerBadge } from "./playerBadge";
 import type { History, WhatsAppResult } from "./server";
 import type { PassportResponse, PlayedResponse, WhatsAppResponse } from "./types";
 import { taggedGames } from "../games/played";
@@ -24,6 +25,13 @@ export type ProfileDeps = {
   whatsapp: (userId: string, on: boolean | null) => Promise<WhatsAppResult>;
   /** The games this account was tagged in and never answered about, as public.game_tags_played sends them (lib/games/played.ts checks them again); null: can't say. */
   tagged?: (userId: string) => Promise<unknown[] | null>;
+  /**
+   * The caller's earned medals, best first, each time they are worked out: the database keeps the best one for the
+   * badge on their photo (lib/profile/playerBadge.ts). Not waited for, and nothing it does changes the answer.
+   */
+  badge?: (userId: string, earnedBestFirst: readonly string[]) => void;
+  /** The medal on the photo of each of these people who has one and a public profile, by account id; null: can't say. */
+  badges?: (ids: readonly string[]) => Promise<ReadonlyMap<string, PlayerBadge> | null>;
   now: () => number;
 };
 
@@ -47,6 +55,15 @@ function summary(passport: Passport, played: readonly PlayedGame[], people: numb
   };
 }
 
+/** The caller's best medal goes to the database for their badge. Never holds a reply up or fails one. */
+function noteBadge(deps: ProfileDeps, userId: string, played: PlayedResponse): void {
+  try {
+    deps.badge?.(userId, played.medals);
+  } catch {
+    // The badge catches up the next time their medals are worked out.
+  }
+}
+
 /** GET /api/me/passport: the Me tab's passport, played-with list and WhatsApp switch. */
 export async function getPassport(req: Request, deps: ProfileDeps): Promise<Response> {
   const who = await deps.who(req, "read");
@@ -65,12 +82,18 @@ export async function getPassport(req: Request, deps: ProfileDeps): Promise<Resp
     const byId = new Map(history.games.map((g) => [g.id, g]));
     const rosters = played.length ? await deps.rosters(played.map((g) => byId.get(g.id) as GameRow)) : new Map<string, string[]>();
     const list = coPlayers(who.userId, played, rosters);
-    const people = list.length ? await deps.people(list.map((c) => c.userId)) : new Map();
+    const ids = list.map((c) => c.userId);
+    // Their names and photos, and beside that read the medal on each one's photo (never holds the list up).
+    const [people, badges] = list.length
+      ? await Promise.all([deps.people(ids), deps.badges ? deps.badges(ids).catch(() => null) : null])
+      : [new Map<string, { name: string | null; photo: string | null }>(), null];
+    const mine = summary(passport, played, list.length);
+    noteBadge(deps, who.userId, mine);
     const body: PassportResponse = {
       passport,
-      playedWith: playedWithList(list, people, extras),
+      playedWith: playedWithList(list, people, extras, 60, badges),
       whatsapp: "ok" in wa ? wa.ok : null,
-      played: summary(passport, played, list.length),
+      played: mine,
       // Never a game they are in the history of already (they answered, or joined the usual way).
       tagged: taggedGames(tagged, now).filter((t) => !byId.has(t.gameId)),
     };
@@ -93,7 +116,9 @@ export async function getPlayed(req: Request, deps: ProfileDeps): Promise<Respon
     // Who was in them, only to count them (the home's Played with tile opens the list itself).
     const byId = new Map(history.games.map((g) => [g.id, g]));
     const rosters = played.length ? await deps.rosters(played.map((g) => byId.get(g.id) as GameRow)) : new Map<string, string[]>();
-    return reply(summary(passport, played, coPlayers(who.userId, played, rosters).length));
+    const mine = summary(passport, played, coPlayers(who.userId, played, rosters).length);
+    noteBadge(deps, who.userId, mine);
+    return reply(mine);
   } catch (e) {
     console.warn("passport: played read failed", e);
     return reply({}, "unavailable");

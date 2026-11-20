@@ -9,6 +9,8 @@ import { guestCount, moreChip, type Confirmed, type ShownTag } from "@/lib/games
 import type { Speed } from "@/lib/games/progress";
 import type { GameTag } from "@/lib/games/types";
 import type { GameParticipant } from "@/types/game";
+import { badgeOf, type PlayerBadges } from "@/lib/profile/playerBadge";
+import { WithMedal } from "@/components/profile/MedalBadge";
 import { PlayersBar } from "../PlayersBar";
 import { Avatar } from "./Avatar";
 
@@ -32,12 +34,16 @@ const WIDE = 16;
  * more" for the people without a name and for tagged players the page
  * can't name (tagged before that file, or with tagging turned off since:
  * the host alone sees those, marked Hidden). The count includes them all.
+ * A player with a medal and a public profile has their best medal on
+ * their photo, and their chip opens that profile (`badges`,
+ * lib/profile/playerBadge.ts); everyone else's chip is as it was.
  */
 export function GameLineup({
   participants,
   confirmed,
   waitingTags = [],
   tagged = [],
+  badges,
   speed,
   hostFirst,
   creatorId,
@@ -61,6 +67,8 @@ export function GameLineup({
   waitingTags?: readonly GameTag[];
   /** Everyone else's view: the tagged players the page names (namedTags()). Empty for the host, and before 20261118_game_tags_shown.sql. */
   tagged?: readonly ShownTag[];
+  /** The medal on a player's photo, by account id: only people with one and a public profile. None before 20261121_player_badges.sql. */
+  badges?: PlayerBadges;
   /** speedOf() for this game: the bar's label, and the fact behind it. */
   speed: Speed;
   /** The host's first name ("the host" when there is none). */
@@ -123,13 +131,32 @@ export function GameLineup({
             const host = p.user_id === creatorId;
             const you = !!viewerId && p.user_id === viewerId;
             const hide = !all && i >= WIDE ? "hidden" : !all && i >= PHONE ? "max-lg:hidden" : "";
+            const badge = badgeOf(badges, p.user_id);
+            const who = (
+              <>
+                <WithMedal badge={badge} size={16}>
+                  <Avatar src={p.profile_image_url} name={p.name || "Player"} size={32} />
+                </WithMedal>
+                <span className="min-w-0 truncate text-[15px] text-primary-900">{p.name || "Player"}</span>
+              </>
+            );
             return (
               <li
                 key={p.user_id}
                 className={`h-11 max-w-full rounded-full border border-primary-200 bg-white pl-1 pr-3 inline-flex items-center gap-2 ${hide}`}
               >
-                <Avatar src={p.profile_image_url} name={p.name || "Player"} size={32} />
-                <span className="min-w-0 truncate text-[15px] text-primary-900">{p.name || "Player"}</span>
+                {badge ? (
+                  // The whole height of the chip, from its left edge: their photo with the medal, and their name, open their profile. Not fetched ahead.
+                  <Link
+                    href={`/u/${badge.username}`}
+                    prefetch={false}
+                    className="min-w-0 h-11 -ml-1 pl-1 inline-flex items-center gap-2 rounded-full hover:underline underline-offset-2 focus-neon"
+                  >
+                    {who}
+                  </Link>
+                ) : (
+                  who
+                )}
                 <VerifiedTickFor id={p.user_id} className="-ml-1" />
                 {host && <span className="text-[12px] font-semibold bg-accent-50 text-accent-800 px-2 rounded-full leading-5">Host</span>}
                 {you && !host && <span className="text-[12px] font-semibold bg-primary-100 text-primary-900 px-2 rounded-full leading-5">You</span>}
@@ -163,14 +190,16 @@ export function GameLineup({
               const you = !!viewerId && t.uid === viewerId;
               const who = (
                 <>
-                  <Avatar src={t.photo} name={t.name} size={26} />
+                  <WithMedal badge={badgeOf(badges, t.uid)} size={14}>
+                    <Avatar src={t.photo} name={t.name} size={26} />
+                  </WithMedal>
                   <span className="min-w-0 truncate">{t.name}</span>
                 </>
               );
               return (
                 <li key={t.id} className={`${guestChip} pl-1 pr-3`}>
                   {t.u ? (
-                    <Link href={`/u/${t.u}`} className="min-w-0 inline-flex items-center gap-1.5 hover:underline underline-offset-2">
+                    <Link href={`/u/${t.u}`} className="min-w-0 h-9 inline-flex items-center gap-1.5 hover:underline underline-offset-2">
                       {who}
                     </Link>
                   ) : (

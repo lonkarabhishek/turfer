@@ -1,4 +1,7 @@
+import Link from "next/link";
 import { Lock, Megaphone, MessageCircle, Phone } from "lucide-react";
+import type { PlayerBadge } from "@/lib/profile/playerBadge";
+import { WithMedal } from "@/components/profile/MedalBadge";
 import { UPDATES_COPY, updateWhen, type UpdateEntry } from "@/lib/games/updates";
 import { VerifiedTickFor } from "@/components/account/VerifiedTick";
 import { waNumber } from "@/lib/utils/gameState";
@@ -13,13 +16,16 @@ import { Avatar } from "./Avatar";
  * game with that note alone looks as it always did; with nothing, players
  * see nothing and the host a quiet "Post an update". The host posts from
  * here and can take an update back; nothing is edited, so the times stay
- * true.
+ * true. A host with a medal and a public profile has their best medal on
+ * their photo, and their photo and name open that profile (`hostBadge`,
+ * lib/profile/playerBadge.ts).
  */
 export function GameHostCard({
   hostName,
   hostFirst,
   hostPhoto,
   hostId,
+  hostBadge = null,
   updates,
   now,
   canPost = false,
@@ -38,6 +44,8 @@ export function GameHostCard({
   hostFirst: string;
   hostPhoto?: string | null;
   hostId: string;
+  /** The medal on the host's photo: only with one and a public profile. None before 20261121_player_badges.sql. */
+  hostBadge?: PlayerBadge | null;
   /** updatesList(): every update, newest first, then the note the game went up with. */
   updates: readonly UpdateEntry[];
   /** For "2 h ago". */
@@ -75,15 +83,28 @@ export function GameHostCard({
   );
   return (
     <section aria-labelledby="host-h" className="rounded-3xl border border-primary-200 bg-white p-5 shadow-soft">
-      <div className="flex items-center gap-3 min-w-0">
-        <Avatar src={hostPhoto} name={hostName} size={48} />
+      <div className="relative flex w-fit max-w-full items-center gap-3 min-w-0">
+        <WithMedal badge={hostBadge} size={20}>
+          <Avatar src={hostPhoto} name={hostName} size={48} />
+        </WithMedal>
         <div className="min-w-0">
           <h2 id="host-h" className="text-[13px] font-normal text-primary-500 leading-tight">
             {isHost ? "You're the host" : "Your host"}
           </h2>
           <p className="flex items-center gap-1 min-w-0 text-[18px] font-bold text-primary-900 leading-snug">
-            <span className="truncate">{hostName || "A TapTurf player"}</span>
-            <VerifiedTickFor id={hostId} />
+            {hostBadge ? (
+              // One link, the name, stretched over the photo and its medal: a tap on either opens their profile. Not fetched ahead.
+              <Link
+                href={`/u/${hostBadge.username}`}
+                prefetch={false}
+                className="truncate rounded hover:underline underline-offset-2 focus-neon after:absolute after:inset-0 after:content-['']"
+              >
+                {hostName || "A TapTurf player"}
+              </Link>
+            ) : (
+              <span className="truncate">{hostName || "A TapTurf player"}</span>
+            )}
+            <VerifiedTickFor id={hostId} className={hostBadge ? "relative" : undefined} />
           </p>
         </div>
       </div>

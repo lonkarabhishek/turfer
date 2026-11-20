@@ -29,6 +29,8 @@ import { PLAYED_COPY } from "@/lib/games/played";
 import { updatesOf, type GameUpdate } from "@/lib/games/updates";
 import type { CreateGameBody, GameChanges, GameErrorBody, GameSeries, GameTag, SeriesInfo } from "@/lib/games/types";
 import type { Game, GameRequest, GameParticipant, CreateGameData } from "@/types/game";
+import { NO_BADGES } from "@/lib/profile/playerBadge";
+import { getPlayerBadges } from "./badges";
 
 // Public reads (games, lineups, turfs) use the anon key, as the pages
 // always have. Every write, and every read of join requests, goes through
@@ -469,7 +471,12 @@ export async function cancelMyRequest(getToken: GetToken, requestId: string) {
   return "error" in r ? { success: false, error: r.error } : { success: true, error: null };
 }
 
-export async function getGameParticipants(gameId: string) {
+/**
+ * A game's lineup. With `badgesFor` (the game page: the host and the tagged players it names), the medal on
+ * each player's photo comes back too, from one more read made beside the names' (lib/queries/badges.ts): never
+ * an error, and no badges before 20261121_player_badges.sql.
+ */
+export async function getGameParticipants(gameId: string, badgesFor?: readonly string[]) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("game_participants")
@@ -477,14 +484,14 @@ export async function getGameParticipants(gameId: string) {
     .eq("game_id", gameId)
     .order("joined_at", { ascending: true });
 
-  if (error || !data) return { data: [] as GameParticipant[], error: error?.message || null };
+  if (error || !data) return { data: [] as GameParticipant[], error: error?.message || null, badges: NO_BADGES };
 
   // Enrich with user data
   const userIds = data.map((p) => p.user_id);
-  const { data: users } = await supabase
-    .from("users")
-    .select("id, name, profile_image_url")
-    .in("id", userIds);
+  const [{ data: users }, badges] = await Promise.all([
+    supabase.from("users").select("id, name, profile_image_url").in("id", userIds),
+    badgesFor ? getPlayerBadges([...userIds, ...badgesFor]) : NO_BADGES,
+  ]);
 
   if (users) {
     const usersMap = Object.fromEntries(users.map((u) => [u.id, u]));
@@ -497,5 +504,5 @@ export async function getGameParticipants(gameId: string) {
     });
   }
 
-  return { data: data as GameParticipant[], error: null };
+  return { data: data as GameParticipant[], error: null, badges };
 }

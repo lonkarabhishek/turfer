@@ -5,6 +5,7 @@ import { cityInfo } from "../city";
 import { cleanVenueName } from "../utils/bookingApps";
 import type { GameRow, ReviewRow, TurfRef } from "./history";
 import type { CoPlayerExtra } from "./playedWith";
+import { BADGE_IDS_MAX, badgeIds, parseBadges, type BadgeSent, type PlayerBadge } from "./playerBadge";
 import type { WhatsAppState } from "./types";
 
 /**
@@ -125,6 +126,46 @@ export async function readTagged(userId: string): Promise<unknown[] | null> {
   const r = await accountRpcIfThere("game_tags_played", { p_user_id: userId });
   if (!("data" in r) || r.data.r !== "ok" || !Array.isArray(r.data.games)) return null;
   return r.data.games as unknown[];
+}
+
+/**
+ * Tell the database this player's best medal and how many they have
+ * (public.player_badge_set, 20261121_player_badges.sql; server key), so a
+ * game's lineup can show it on their photo. missing: before that file.
+ * Never throws; run it after the reply (lib/profile/deps.ts).
+ */
+export async function sendBadge(userId: string, medal: string | null, medals: number): Promise<BadgeSent> {
+  const r = await accountRpcIfThere("player_badge_set", { p_user_id: userId, p_medal: medal, p_medals: medals });
+  if ("missing" in r) return "missing";
+  if ("unavailable" in r) return "failed";
+  if (r.data.r !== "ok") console.warn("passport: player_badge_set answered", r.data.r);
+  return r.data.r === "ok" ? "ok" : "failed";
+}
+
+/**
+ * The medal on the photo of each of these people who has one and a public
+ * profile (public.player_badges_for, which anyone may ask: it answers only
+ * for people with "Let others find and tag me" on). At most two reads of
+ * 60 ids. null: not available (before the file, or it failed); the list
+ * shows without them. Never throws.
+ */
+export async function readBadges(ids: readonly string[]): Promise<Map<string, PlayerBadge> | null> {
+  const all = badgeIds(ids, BADGE_IDS_MAX * 2);
+  if (all.length === 0) return new Map();
+  try {
+    const s = db();
+    const parts = await Promise.all(
+      [all.slice(0, BADGE_IDS_MAX), all.slice(BADGE_IDS_MAX)].filter((part) => part.length > 0).map((part) => s.rpc("player_badges_for", { p_ids: part })),
+    );
+    const out = new Map<string, PlayerBadge>();
+    for (const { data, error } of parts) {
+      if (error) return null;
+      for (const [id, b] of parseBadges(data)) out.set(id, b);
+    }
+    return out;
+  } catch {
+    return null;
+  }
 }
 
 function whatsappState(d: Record<string, unknown>): WhatsAppState | null {

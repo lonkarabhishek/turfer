@@ -11,6 +11,7 @@ import { shortDay } from "@/lib/profile/history";
 import { spacedWhatsapp, whatsappLink, type PlayedWithPerson } from "@/lib/profile/playedWith";
 import { setWhatsapp } from "@/lib/profile/client";
 import type { WhatsAppState } from "@/lib/profile/types";
+import { WithMedal } from "./MedalBadge";
 
 /**
  * Played with, on the Me tab only: the people in the same played games,
@@ -18,6 +19,8 @@ import type { WhatsAppState } from "@/lib/profile/types";
  * they have one. A WhatsApp button shows only for someone who turned
  * sharing on, and only because the server found a game you both played
  * (public.played_with_extras); the page never hides a number it was sent.
+ * Someone with a medal and a public profile has their best medal on their
+ * photo (lib/profile/playerBadge.ts).
  */
 
 export function PlayedWithList({ people, now }: { people: PlayedWithPerson[]; now: number }) {
@@ -35,7 +38,9 @@ export function PlayedWithList({ people, now }: { people: PlayedWithPerson[]; no
         // One text block beside the photo: name, @username when there is one, then the last game together.
         const who = (
           <>
-            <UserAvatar src={p.photo} name={p.name} size={44} />
+            <WithMedal badge={p.badge} size={18}>
+              <UserAvatar src={p.photo} name={p.name} size={44} />
+            </WithMedal>
             <span className="min-w-0">
               <span className="block text-[15px] font-semibold text-primary-900 leading-snug truncate">{p.name}</span>
               {p.username && <span className="block text-[13px] font-medium text-accent-700 leading-snug truncate">@{p.username}</span>}

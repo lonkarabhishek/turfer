@@ -1,6 +1,7 @@
-import { accountError, caller } from "../account/route";
+import { accountError, caller, later } from "../account/route";
 import { createAccountLimiter, resolveAccount } from "../account/server";
-import { readExtras, readHistory, readPeople, readRosters, readTagged, whatsappSwitch } from "./server";
+import { createBadgeSync } from "./playerBadge";
+import { readBadges, readExtras, readHistory, readPeople, readRosters, readTagged, sendBadge, whatsappSwitch } from "./server";
 import type { ProfileDeps } from "./routes";
 
 // The real deps of the passport routes: the caller verified as the account
@@ -14,6 +15,9 @@ const limits = {
   badge: createAccountLimiter(60),
   write: createAccountLimiter(12),
 };
+
+// The medal on a player's photo: what this instance last sent for each player, so the same value is sent once.
+const syncBadge = createBadgeSync(sendBadge);
 
 export const profileDeps: ProfileDeps = {
   who: async (req, kind) => {
@@ -30,5 +34,8 @@ export const profileDeps: ProfileDeps = {
   extras: readExtras,
   whatsapp: whatsappSwitch,
   tagged: readTagged,
+  // After the reply, so the passport never waits for it.
+  badge: (userId, medals) => later(() => syncBadge(userId, medals)),
+  badges: readBadges,
   now: Date.now,
 };
