@@ -1,0 +1,525 @@
+{
+ "note": "One account's uses of the free tools, what public.tool_uses_of answers for it, and what the app makes of that. scripts/sql-tests/tool_medals.check.mjs puts the rows in private.tool_use_log and checks the answer; lib/profile/toolMedals.test.ts reads the answer and checks the progress and the medals. Made-up accounts.",
+ "rows": [
+  {
+   "who": "a",
+   "at": "2026-10-27T04:00:00Z",
+   "tool": "toss",
+   "event": "started"
+  },
+  {
+   "who": "a",
+   "at": "2026-10-27T04:00:02Z",
+   "tool": "toss",
+   "event": "finished"
+  },
+  {
+   "who": "a",
+   "at": "2026-10-27T04:05:00Z",
+   "tool": "toss",
+   "event": "started"
+  },
+  {
+   "who": "a",
+   "at": "2026-10-27T04:05:02Z",
+   "tool": "toss",
+   "event": "finished"
+  },
+  {
+   "who": "a",
+   "at": "2026-10-27T19:00:00Z",
+   "tool": "toss",
+   "event": "started"
+  },
+  {
+   "who": "a",
+   "at": "2026-10-27T19:00:02Z",
+   "tool": "toss",
+   "event": "finished"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-03T13:00:00Z",
+   "tool": "toss",
+   "event": "started"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-03T13:00:02Z",
+   "tool": "toss",
+   "event": "finished"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-10T13:00:00Z",
+   "tool": "toss",
+   "event": "started"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-10T13:00:02Z",
+   "tool": "toss",
+   "event": "finished"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-17T13:00:00Z",
+   "tool": "toss",
+   "event": "started"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-17T13:00:02Z",
+   "tool": "toss",
+   "event": "finished"
+  },
+  {
+   "who": "a",
+   "at": "2026-10-27T05:00:00Z",
+   "tool": "live_scorer",
+   "event": "started",
+   "code": "aaaaaaaaaaaa"
+  },
+  {
+   "who": "a",
+   "at": "2026-10-27T06:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished",
+   "code": "aaaaaaaaaaaa"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-03T14:00:00Z",
+   "tool": "live_scorer",
+   "event": "started"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-03T15:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-10T14:00:00Z",
+   "tool": "live_scorer",
+   "event": "started",
+   "code": "aaaaaaaaaaaa"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-10T15:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished",
+   "code": "aaaaaaaaaaaa"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-12T14:00:00Z",
+   "tool": "live_scorer",
+   "event": "started",
+   "code": "cccccccccccc"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-05T14:00:00Z",
+   "tool": "live_scoreboard",
+   "event": "started",
+   "code": "bbbbbbbbbbbb"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-05T15:00:00Z",
+   "tool": "live_scoreboard",
+   "event": "finished",
+   "code": "bbbbbbbbbbbb"
+  },
+  {
+   "who": "a",
+   "at": "2026-10-27T06:10:00Z",
+   "tool": "scorecard_maker",
+   "event": "finished"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-03T15:10:00Z",
+   "tool": "scorecard_maker",
+   "event": "finished"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-03T15:20:00Z",
+   "tool": "scorecard_maker",
+   "event": "finished"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-10T15:10:00Z",
+   "tool": "scorecard_maker",
+   "event": "finished"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-10T15:20:00Z",
+   "tool": "scorecard_maker",
+   "event": "finished"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-03T12:00:00Z",
+   "tool": "team_generator",
+   "event": "started"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-10T16:00:00Z",
+   "tool": "tournament_scorer",
+   "event": "started"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-10T16:05:00Z",
+   "tool": "tournament_scorer",
+   "event": "finished"
+  },
+  {
+   "who": "a",
+   "at": "2026-11-10T16:30:00Z",
+   "tool": "tournament_scorer",
+   "event": "finished"
+  },
+  {
+   "who": "b",
+   "at": "2026-10-10T10:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished",
+   "code": "dddddddddddd"
+  },
+  {
+   "who": "b",
+   "at": "2026-10-11T10:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished"
+  },
+  {
+   "who": "b",
+   "at": "2026-10-12T10:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished"
+  },
+  {
+   "who": "b",
+   "at": "2026-10-13T10:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished"
+  },
+  {
+   "who": "b",
+   "at": "2026-10-14T10:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished"
+  },
+  {
+   "who": "b",
+   "at": "2026-10-15T10:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished"
+  },
+  {
+   "who": "b",
+   "at": "2026-10-16T10:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished"
+  },
+  {
+   "who": "b",
+   "at": "2026-10-17T10:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished"
+  },
+  {
+   "who": "b",
+   "at": "2026-10-18T10:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished"
+  },
+  {
+   "who": "b",
+   "at": "2026-10-19T10:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished"
+  },
+  {
+   "who": "b",
+   "at": "2026-10-20T10:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished"
+  },
+  {
+   "who": "b",
+   "at": "2026-10-21T10:00:00Z",
+   "tool": "live_scorer",
+   "event": "finished"
+  },
+  {
+   "who": "b",
+   "at": "2026-10-12T10:00:00Z",
+   "tool": "nrr_calculator",
+   "event": "finished"
+  },
+  {
+   "who": "b",
+   "at": "2026-10-12T11:00:00Z",
+   "tool": "team_generator",
+   "event": "finished"
+  },
+  {
+   "who": "device",
+   "at": "2026-10-20T10:00:00Z",
+   "tool": "toss",
+   "event": "finished"
+  },
+  {
+   "who": "device",
+   "at": "2026-10-21T10:00:00Z",
+   "tool": "toss",
+   "event": "finished"
+  },
+  {
+   "who": "device",
+   "at": "2026-10-22T10:00:00Z",
+   "tool": "toss",
+   "event": "finished"
+  },
+  {
+   "who": "device",
+   "at": "2026-10-23T10:00:00Z",
+   "tool": "toss",
+   "event": "finished"
+  },
+  {
+   "who": "device",
+   "at": "2026-10-24T10:00:00Z",
+   "tool": "toss",
+   "event": "finished"
+  },
+  {
+   "who": "device",
+   "at": "2026-10-25T10:00:00Z",
+   "tool": "toss",
+   "event": "finished"
+  },
+  {
+   "who": "device",
+   "at": "2026-10-21T10:00:00Z",
+   "tool": "nrr_calculator",
+   "event": "finished"
+  },
+  {
+   "who": "guest",
+   "at": "2026-10-22T10:00:00Z",
+   "tool": "team_generator",
+   "event": "finished"
+  },
+  {
+   "who": "guest",
+   "at": "2026-10-22T11:00:00Z",
+   "tool": "live_scoreboard",
+   "event": "finished"
+  }
+ ],
+ "answer": {
+  "a": {
+   "r": "ok",
+   "tools": [
+    {
+     "t": "live_scoreboard",
+     "first": "2026-11-05",
+     "days": [
+      ["2026-11-05", 1]
+     ]
+    },
+    {
+     "t": "live_scorer",
+     "first": "2026-10-27",
+     "days": [
+      ["2026-10-27", 1],
+      ["2026-11-03", 1],
+      ["2026-11-10", 1]
+     ]
+    },
+    {
+     "t": "scorecard_maker",
+     "first": "2026-10-27",
+     "days": [
+      ["2026-10-27", 1],
+      ["2026-11-03", 2],
+      ["2026-11-10", 2]
+     ]
+    },
+    {
+     "t": "team_generator",
+     "first": "2026-11-03",
+     "days": []
+    },
+    {
+     "t": "toss",
+     "first": "2026-10-27",
+     "days": [
+      ["2026-10-27", 2],
+      ["2026-10-28", 1],
+      ["2026-11-03", 1],
+      ["2026-11-10", 1],
+      ["2026-11-17", 1]
+     ]
+    },
+    {
+     "t": "tournament_scorer",
+     "first": "2026-11-10",
+     "days": [
+      ["2026-11-10", 2]
+     ]
+    }
+   ],
+   "live": [
+    "2026-10-27",
+    "2026-11-05"
+   ]
+  },
+  "b": {
+   "r": "ok",
+   "tools": [
+    {
+     "t": "live_scorer",
+     "first": "2026-10-10",
+     "days": [
+      ["2026-10-10", 1],
+      ["2026-10-11", 1],
+      ["2026-10-12", 1],
+      ["2026-10-13", 1],
+      ["2026-10-14", 1],
+      ["2026-10-15", 1],
+      ["2026-10-16", 1],
+      ["2026-10-17", 1],
+      ["2026-10-18", 1],
+      ["2026-10-19", 1],
+      ["2026-10-20", 1],
+      ["2026-10-21", 1]
+     ]
+    },
+    {
+     "t": "nrr_calculator",
+     "first": "2026-10-12",
+     "days": [
+      ["2026-10-12", 1]
+     ]
+    },
+    {
+     "t": "team_generator",
+     "first": "2026-10-12",
+     "days": [
+      ["2026-10-12", 1]
+     ]
+    }
+   ],
+   "live": [
+    "2026-10-10"
+   ]
+  },
+  "nobody": {
+   "r": "ok",
+   "tools": [],
+   "live": []
+  }
+ },
+ "progress": {
+  "a": {
+   "scored": {
+    "have": 4,
+    "days": [
+     "2026-10-27",
+     "2026-11-03",
+     "2026-11-05",
+     "2026-11-10"
+    ]
+   },
+   "cards": {
+    "have": 5,
+    "days": [
+     "2026-10-27",
+     "2026-11-03",
+     "2026-11-03",
+     "2026-11-10",
+     "2026-11-10"
+    ]
+   },
+   "tossDays": {
+    "have": 5,
+    "days": [
+     "2026-10-27",
+     "2026-10-28",
+     "2026-11-03",
+     "2026-11-10",
+     "2026-11-17"
+    ]
+   },
+   "teams": {
+    "have": 0,
+    "days": []
+   },
+   "results": {
+    "have": 2,
+    "days": [
+     "2026-11-10",
+     "2026-11-10"
+    ]
+   },
+   "live": {
+    "have": 2,
+    "days": [
+     "2026-10-27",
+     "2026-11-05"
+    ]
+   },
+   "kit": {
+    "have": 6,
+    "days": [
+     "2026-10-27",
+     "2026-10-27",
+     "2026-10-27",
+     "2026-11-03",
+     "2026-11-05",
+     "2026-11-10"
+    ]
+   }
+  }
+ },
+ "medals": {
+  "a": {
+   "earned": {
+    "tool-scored-1": "2026-10-27",
+    "tool-card-1": "2026-10-27",
+    "tool-card-5": "2026-11-10",
+    "tool-toss-1": "2026-10-27",
+    "tool-toss-5": "2026-11-17",
+    "tool-live-1": "2026-10-27",
+    "tool-kit-3": "2026-10-27",
+    "tool-kit-5": "2026-11-05"
+   },
+   "locked": {
+    "tool-scored-10": "Score 6 more matches, signed in",
+    "tool-teams-1": "Split players into teams, signed in",
+    "tool-table-3": "Add 1 more tournament result, signed in"
+   }
+  },
+  "b": {
+   "earned": {
+    "tool-scored-1": "2026-10-10",
+    "tool-scored-10": "2026-10-19",
+    "tool-teams-1": "2026-10-12",
+    "tool-live-1": "2026-10-10",
+    "tool-kit-3": "2026-10-12"
+   }
+  }
+ }
+}

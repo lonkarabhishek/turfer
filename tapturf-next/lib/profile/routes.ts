@@ -3,6 +3,7 @@ import { playedGames, type GameRow, type PlayedGame } from "./history";
 import { bestFirst } from "./medals";
 import { coPlayers, playedWithList, type CoPlayerExtra } from "./playedWith";
 import type { PlayerBadge } from "./playerBadge";
+import { turfersOf } from "./turfers";
 import type { History, WhatsAppResult } from "./server";
 import type { PassportResponse, PlayedResponse, WhatsAppResponse } from "./types";
 import { taggedGames } from "../games/played";
@@ -42,7 +43,7 @@ function reply(body: object, error?: keyof typeof STATUS): Response {
   return Response.json(error ? { ...body, error } : body, { status: error ? STATUS[error] : 200, headers: PRIVATE });
 }
 
-/** The summary of played games every page shares (PlayedResponse), from the passport. */
+/** The summary of played games every page shares (PlayedResponse), from the passport. people: their Turfers (lib/profile/turfers.ts). */
 function summary(passport: Passport, played: readonly PlayedGame[], people: number): PlayedResponse {
   return {
     turfs: latestPlayedByTurf(played),
@@ -55,8 +56,13 @@ function summary(passport: Passport, played: readonly PlayedGame[], people: numb
   };
 }
 
-/** The caller's best medal goes to the database for their badge. Never holds a reply up or fails one. */
-function noteBadge(deps: ProfileDeps, userId: string, played: PlayedResponse): void {
+/**
+ * The caller's best medal goes to the database for their badge. Never holds a reply up or fails one. Not when the
+ * tool uses could not be read this time: the medals worked out may be short of some, and a badge must not lose its
+ * medal, or its count drop, over one failed read (the next read tells it).
+ */
+function noteBadge(deps: ProfileDeps, userId: string, played: PlayedResponse, history: Pick<History, "toolsFailed">): void {
+  if (history.toolsFailed) return;
   try {
     deps.badge?.(userId, played.medals);
   } catch {
@@ -88,7 +94,7 @@ export async function getPassport(req: Request, deps: ProfileDeps): Promise<Resp
       ? await Promise.all([deps.people(ids), deps.badges ? deps.badges(ids).catch(() => null) : null])
       : [new Map<string, { name: string | null; photo: string | null }>(), null];
     const mine = summary(passport, played, list.length);
-    noteBadge(deps, who.userId, mine);
+    noteBadge(deps, who.userId, mine, history);
     const body: PassportResponse = {
       passport,
       playedWith: playedWithList(list, people, extras, 60, badges),
@@ -113,11 +119,11 @@ export async function getPlayed(req: Request, deps: ProfileDeps): Promise<Respon
     const history = await deps.history(who.userId);
     const passport = buildPassport({ userId: who.userId, ...history, since: who.since, now });
     const played = playedGames(who.userId, history.games, now);
-    // Who was in them, only to count them (the home's Played with tile opens the list itself).
+    // Who was in them, only to count them (the home's Turfers tile opens the list itself).
     const byId = new Map(history.games.map((g) => [g.id, g]));
     const rosters = played.length ? await deps.rosters(played.map((g) => byId.get(g.id) as GameRow)) : new Map<string, string[]>();
-    const mine = summary(passport, played, coPlayers(who.userId, played, rosters).length);
-    noteBadge(deps, who.userId, mine);
+    const mine = summary(passport, played, turfersOf(who.userId, played, rosters));
+    noteBadge(deps, who.userId, mine, history);
     return reply(mine);
   } catch (e) {
     console.warn("passport: played read failed", e);

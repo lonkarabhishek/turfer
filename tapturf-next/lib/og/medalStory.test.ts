@@ -24,7 +24,7 @@ import {
 // The medals' story picture (GET /api/og/medals/<username>): what it says, its version and URL, and what the
 // route answers, with the profile and passport reads faked. Fake people.
 
-const numbers = (n: Partial<PublicPassport["numbers"]> = {}): PublicPassport["numbers"] => ({ games: 0, hosted: 0, turfs: 0, cities: 0, sports: 0, reviews: 0, bestStreak: 0, ...n });
+const numbers = (n: Partial<PublicPassport["numbers"]> = {}): PublicPassport["numbers"] => ({ games: 0, hosted: 0, turfs: 0, cities: 0, sports: 0, reviews: 0, bestStreak: 0, turfers: null, ...n });
 const passport = (ids: readonly string[], n: Partial<PublicPassport["numbers"]> = {}): PublicPassport => ({
   numbers: numbers(n),
   // As publicPassport gives them: earned only, best first.
@@ -82,6 +82,20 @@ test("singular and plural: 1 game, 1 turf, 1 city; 2 of each; reviews when no ga
   assert.equal(storyBrag(numbers({ reviews: 1 })), "1 review");
   assert.equal(storyBrag(numbers({ reviews: 5 })), "5 reviews");
   assert.equal(storyBrag(numbers()), null);
+  // Turfers (how many players they have played with) take the cities' place, so the line stays short.
+  assert.equal(storyBrag(numbers({ games: 12, turfs: 5, cities: 2, turfers: 34 })), "12 games · 34 Turfers · 5 turfs");
+  assert.equal(storyBrag(numbers({ games: 1, turfs: 1, cities: 1, turfers: 1 })), "1 game · 1 Turfer · 1 turf");
+  assert.equal(storyBrag(numbers({ games: 3, turfers: 4 })), "3 games · 4 Turfers", "a typed venue: no turf");
+  assert.equal(storyBrag(numbers({ games: 2, turfs: 2, cities: 2, turfers: 0 })), "2 games · 2 turfs · 2 cities", "nobody is shown 0 Turfers");
+  assert.equal(storyBrag(numbers({ games: 2, turfs: 2, cities: 2, turfers: null })), "2 games · 2 turfs · 2 cities", "the count could not be read: the line as it was");
+  assert.equal(storyBrag(numbers({ reviews: 2, turfers: 9 })), "2 reviews", "no game, no Turfers");
+  // The version follows the line, so a new Turfer is a new picture.
+  const withTurfers = asha(SEVEN, { games: 12, hosted: 3, turfs: 5, cities: 2, sports: 2, reviews: 2, bestStreak: 6, turfers: 34 });
+  assert.equal(withTurfers.brag, "12 games · 34 Turfers · 5 turfs");
+  assert.notEqual(medalStoryVersion(withTurfers), medalStoryVersion(asha()));
+  assert.notEqual(medalStoryVersion(withTurfers), medalStoryVersion(asha(SEVEN, { games: 12, hosted: 3, turfs: 5, cities: 2, sports: 2, reviews: 2, bestStreak: 6, turfers: 35 })));
+  const crowd = asha(SEVEN, { games: 112, turfs: 31, cities: 12, turfers: 1248 });
+  assert.equal(crowd.brag, "112 games · 1248 Turfers · 31 turfs");
   assert.equal(asha(SEVEN, { games: 9, bestStreak: 1 }).streak, null);
   assert.equal(asha(SEVEN, { games: 9, bestStreak: 2 }).streak, "Best streak: 2 weeks in a row");
   assert.equal(asha(["first-game", "first-review"], { games: 1, reviews: 1 }).count, `2 of ${MEDALS.length} medals`);
@@ -96,14 +110,32 @@ test("many medals: the grid holds ten; with more, nine and \"+N more\", and ever
   const twelve = asha(ALL.slice(0, 12), { games: 52 });
   assert.equal(twelve.others.length, STORY_GRID_MAX - 1);
   assert.equal(twelve.more, "+2 more");
-  // All 16.
+  // Every medal there is.
   const all = asha(ALL, { games: 64 });
   assert.equal(all.top.id, "games-50", "the hardest tier leads");
   assert.equal(all.others.length, 9);
-  assert.equal(all.more, "+6 more");
+  const left = MEDALS.length - 10;
+  assert.equal(all.more, `+${left} more`);
   assert.equal(all.count, `${MEDALS.length} of ${MEDALS.length} medals`);
-  assert.equal(1 + all.others.length + 6, MEDALS.length);
+  assert.equal(1 + all.others.length + left, MEDALS.length);
   assert.equal(new Set([all.top.id, ...all.others.map((m) => m.id)]).size, 10, "no medal twice");
+  // The playing medals fill the grid before any tool medal: those are the ones behind "+N more".
+  assert.ok([all.top, ...all.others].every((m) => !m.id.startsWith("tool-")), "playing medals lead the picture");
+
+  // Only tool medals (someone who scores and tosses but has not played a TapTurf game yet): one of them is the top medal.
+  const TOOLS = ALL.filter((id) => id.startsWith("tool-"));
+  assert.ok(TOOLS.length >= 9);
+  const tools = asha(TOOLS, {});
+  assert.equal(tools.top.id, "tool-scored-10", "the harder tier leads, then the catalog");
+  assert.equal(tools.topLabel, "TOP MEDAL");
+  assert.equal(tools.brag, null, "no game and no review: no line of numbers");
+  assert.equal(tools.count, `${TOOLS.length} of ${MEDALS.length} medals`);
+  assert.equal(tools.others.length + (tools.more ? Number(tools.more.replace(/\D/g, "")) : 0), TOOLS.length - 1);
+  const oneTool = asha(["tool-toss-1"], {});
+  assert.deepEqual([oneTool.top.name, oneTool.topLabel, oneTool.top.blurb, oneTool.others.length], ["Heads or Tails", "FIRST MEDAL", "First toss", 0]);
+  // With one playing medal the tool medals fall in behind it, whatever their tier.
+  const mixed = asha(["tool-scored-10", "first-review", "tool-kit-5"], { reviews: 1 });
+  assert.deepEqual([mixed.top.id, ...mixed.others.map((m) => m.id)], ["first-review", "tool-scored-10", "tool-kit-5"]);
 });
 
 test("the grid's rows: one row up to four, then two, the first the longer", () => {

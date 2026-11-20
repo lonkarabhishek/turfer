@@ -168,9 +168,10 @@ const SECTIONS: LegalSection[] = [
           <strong>Your username and public profile.</strong> You can pick a TapTurf username. Your username,
           name and photo then show on your public profile page, tapturf.in/u/your-username, with the month you
           joined, and, worked out from your TapTurf games and reviews: how many games you played and hosted,
-          at how many turfs, in how many cities and sports, your longest run of weeks in a row with a game,
-          the medals those earned and the turfs you reviewed (with your stars). Only counts: never which turfs
-          you played at, when, or with whom. If you have a public profile and have earned a medal, your best
+          at how many turfs, in how many cities and sports, how many different players you have played a
+          TapTurf game with (a number we call Turfers; never who they are, and never a list), your longest
+          run of weeks in a row with a game, the medals you earned and the turfs you reviewed (with your
+          stars). Only counts: never which turfs you played at, when, or with whom. If you have a public profile and have earned a medal, your best
           medal also shows as a small badge on your photo to other players, on the pages of games you host or
           are in and in the Played with list of people you played with, and it links to your profile; turn
           off &ldquo;Let others find and tag me&rdquo; and the badge stops showing the next time those pages
@@ -185,7 +186,8 @@ const SECTIONS: LegalSection[] = [
           <strong>Played with, and your WhatsApp number.</strong> Your Me tab lists the people who were in the
           same TapTurf games as you, once a game has happened (not one that is cancelled or still to come), with
           their name, photo, how many games you played together and when you last did, and a link to their
-          public profile if they have one. Only you see your list; it is never public. Your phone number is
+          public profile if they have one. Only you see your list; it is never public (your public profile
+          shows only how many people are on it, as a number). Your phone number is
           not shown there unless you turn on &ldquo;Let players I&rsquo;ve played with see my WhatsApp&rdquo;
           on the Me tab. It is off until you do, and works only for a number you confirmed with a one-time
           code. While it is on, people who played a TapTurf game with you (both of you in it before it started)
@@ -260,7 +262,9 @@ const SECTIONS: LegalSection[] = [
           names or anything you type), the code of the match&rsquo;s live link if it has one, and the place your
           internet connection points to, else the city you chose on TapTurf. The place is worked out from your
           IP address on that visit and is only approximate; the address itself is never stored. If you are
-          signed in, the record is kept with your TapTurf account. If you are not, and you accepted cookies, it
+          signed in, the record is kept with your TapTurf account. Tools you use while signed in count
+          toward medals, and the medals you earn show on your public profile like the others (only the medal,
+          never which tool you used or when). If you are not signed in, and you accepted cookies, it
           is kept with a random tag your browser makes for this, which says nothing about you or your device;
           if you did not accept, it is kept with no tag at all and your browser keeps nothing. The tag is never
           sent while you are signed in, your browser makes a new one each time you sign in or out, so it is not
@@ -372,7 +376,7 @@ const SECTIONS: LegalSection[] = [
         <p>
           <strong>Your profile.</strong> If you pick a username, your username, name, photo and join month are
           public on your profile page and in player search, and your profile also shows your game and review
-          counts, medals and reviewed turfs (see &ldquo;Your username and public profile&rdquo; above), unless
+          counts, how many players you have played with (a number, never who), medals and reviewed turfs (see &ldquo;Your username and public profile&rdquo; above), unless
           you turn off &ldquo;Let others find and tag me&rdquo;. Your phone number and email are never shown
           there.
         </p>

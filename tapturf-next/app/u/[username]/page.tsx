@@ -12,6 +12,7 @@ import { NotOwner } from "@/components/profile/NotOwner";
 import { ShareProfile } from "@/components/profile/ShareProfile";
 import { MEDALS, STARTER_MEDALS } from "@/lib/profile/medals";
 import { medalLook } from "@/lib/profile/medalShapes";
+import { turfersMeaning, turfersWord } from "@/lib/profile/turfers";
 import { loadPublicPassport, readPublicProfile } from "@/lib/profile/publicProfile";
 
 // A TapTurf player's public profile: username, name, photo, join month
@@ -20,19 +21,21 @@ import { loadPublicPassport, readPublicProfile } from "@/lib/profile/publicProfi
 // turfs, cities and sports, their best weekly streak, the medals they
 // earned and the turfs they reviewed (lib/profile/passport.ts
 // publicPassport: counts only, never where or when they played, or who
-// with). A profile with a medal is dressed in its top medal's colours:
-// the picture in a glowing ring of them with the medal on its corner, a
-// one-line brag, and the top medal shown off with its name, what it was
-// for and "7 of 16 medals". For whoever is looking, "Yours to earn": the
-// three starter medals with a way to /games and to hosting (no numbers,
-// no hurry; hidden from the profile's own player in the browser). Its
-// owner, signed in, gets "Flaunt my medals" (their medals as an Instagram
-// story picture, components/profile/FlauntMedals.tsx) and "Share my
-// profile", both decided in the browser: this render is the same for
-// everyone and reads nothing more than before. Tags on live scorecards
-// link here. Only for people who left "Let others find and tag me" on;
-// an old username 308s to the current one. Kept out of search engines
-// and the sitemap.
+// with). Under the name, for someone with a game, a row of big numbers as
+// a social profile has: Games, Turfers (how many different players they
+// have played with, lib/profile/turfers.ts: a number only, never who and
+// never a list) and Medals. A profile with a medal is dressed in its top
+// medal's colours: the picture in a glowing ring of them with the medal on
+// its corner, and the top medal shown off with its name, what it was for
+// and how many of all the medals are earned. For whoever is looking,
+// "Yours to earn": the three starter medals with a way to /games and to
+// hosting (no numbers, no hurry; hidden from the profile's own player in
+// the browser). Its owner, signed in, gets "Flaunt my medals" (their
+// medals as an Instagram story picture, components/profile/FlauntMedals.tsx)
+// and "Share my profile", both decided in the browser: this render is the
+// same for everyone. Tags on live scorecards link here. Only for people
+// who left "Let others find and tag me" on; an old username 308s to the
+// current one. Kept out of search engines and the sitemap.
 
 // A minute: someone who turns tagging off disappears from here that soon.
 export const revalidate = 60;
@@ -82,15 +85,18 @@ export default async function PlayerProfilePage({ params }: Props) {
   const passport = await loadPublicPassport(u);
   const counts = passport?.numbers;
   const played = !!counts && (counts.games > 0 || counts.reviews > 0);
-  const many = (n: number, one: string, more: string) => `${n} ${n === 1 ? one : more}`;
-  // "5 games · 5 turfs · 2 cities", once there is a game.
-  const brag =
-    counts && counts.games > 0
-      ? [many(counts.games, "game", "games"), counts.turfs ? many(counts.turfs, "turf", "turfs") : null, counts.cities ? many(counts.cities, "city", "cities") : null]
-          .filter(Boolean)
-          .join(" · ")
-      : null;
   const medals = passport?.medals ?? [];
+  const first = name.split(" ")[0];
+  // The row of big numbers under the name, once there is a game: Games, Turfers (only a number above zero that could
+  // be read) and Medals. Nobody is shown "0 Turfers", and a profile with no game has no row at all.
+  const stats: { label: string; value: number; meaning?: string }[] =
+    counts && counts.games > 0
+      ? [
+          { label: counts.games === 1 ? "Game" : "Games", value: counts.games },
+          ...(counts.turfers ? [{ label: turfersWord(counts.turfers), value: counts.turfers, meaning: turfersMeaning(first) }] : []),
+          ...(medals.length > 0 ? [{ label: medals.length === 1 ? "Medal" : "Medals", value: medals.length }] : []),
+        ]
+      : [];
   const top = medals[0] ?? null;
   // The hero dresses in the top medal's own colours (lib/profile/medalShapes.ts).
   const look = top ? medalLook(top.art.tone) : null;
@@ -118,7 +124,20 @@ export default async function PlayerProfilePage({ params }: Props) {
             {verified && <VerifiedTick size="lg" className="ml-1.5 align-[-0.1em]" />}
           </h1>
           <p className="mt-1 text-[15px] text-primary-500">@{u}</p>
-          {brag && <p className="mt-3 inline-flex items-center rounded-full bg-white/80 ring-1 ring-primary-200 px-3.5 py-1 text-[14px] font-semibold text-primary-800 tabular-nums">{brag}</p>}
+          {stats.length > 0 && (
+            <dl data-profile-stats className="mx-auto mt-4 mb-1 flex max-w-[300px] items-stretch justify-center divide-x divide-primary-200/80">
+              {stats.map((st) => (
+                // Number over label, as a social profile's row; a dl keeps "34 Turfers" one fact for a screen reader.
+                <div key={st.label} className="flex min-w-0 flex-1 flex-col-reverse px-2" title={st.meaning}>
+                  <dt className="mt-1 text-[13px] font-medium text-primary-500">
+                    {st.label}
+                    {st.meaning && <span className="sr-only">: {st.meaning.replace(/^[^:]+: /, "")}</span>}
+                  </dt>
+                  <dd className="font-display text-[28px] leading-none text-primary-900 tabular-nums">{st.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
           {verified && <p className="mt-2 text-[13px] font-medium text-sky-700">Verified · Phone and email confirmed</p>}
           {month && <p className="mt-3 text-[13px] text-primary-500">On TapTurf since {month}</p>}
 
@@ -157,59 +176,58 @@ export default async function PlayerProfilePage({ params }: Props) {
       </div>
 
       {passport && played && counts && (
-        <>
-          <section aria-labelledby="u-numbers" className="mt-8">
-            <h2 id="u-numbers" className="mb-3 font-display text-[20px] font-semibold text-primary-900">
-              On TapTurf
+        <section aria-labelledby="u-numbers" className="mt-8">
+          <h2 id="u-numbers" className="mb-3 font-display text-[20px] font-semibold text-primary-900">
+            On TapTurf
+          </h2>
+          <PassportNumbers
+            cols={3}
+            label={`${name}'s numbers`}
+            items={[
+              { label: "Played", value: counts.games, sr: counts.games === 1 ? "game" : "games" },
+              { label: counts.turfs === 1 ? "Turf" : "Turfs", value: counts.turfs },
+              { label: counts.cities === 1 ? "City" : "Cities", value: counts.cities },
+              { label: counts.sports === 1 ? "Sport" : "Sports", value: counts.sports },
+              { label: "Hosted", value: counts.hosted },
+              { label: counts.reviews === 1 ? "Review" : "Reviews", value: counts.reviews },
+            ]}
+          />
+          {counts.bestStreak >= 2 && (
+            <p className="mt-3 text-center text-[14px] text-primary-600">
+              Best streak: <span className="font-semibold text-primary-900">{counts.bestStreak} weeks</span> in a row
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* Earned medals show whatever they were earned from: someone with only tool medals has no game or review to count. */}
+      {medals.length > 0 && (
+        <section aria-labelledby="u-medals" className="mt-8">
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <h2 id="u-medals" className="font-display text-[20px] font-semibold text-primary-900">
+              Medals
             </h2>
-            <PassportNumbers
-              cols={3}
-              label={`${name}'s numbers`}
-              items={[
-                { label: "Played", value: counts.games, sr: counts.games === 1 ? "game" : "games" },
-                { label: counts.turfs === 1 ? "Turf" : "Turfs", value: counts.turfs },
-                { label: counts.cities === 1 ? "City" : "Cities", value: counts.cities },
-                { label: counts.sports === 1 ? "Sport" : "Sports", value: counts.sports },
-                { label: "Hosted", value: counts.hosted },
-                { label: counts.reviews === 1 ? "Review" : "Reviews", value: counts.reviews },
-              ]}
-            />
-            {counts.bestStreak >= 2 && (
-              <p className="mt-3 text-center text-[14px] text-primary-600">
-                Best streak: <span className="font-semibold text-primary-900">{counts.bestStreak} weeks</span> in a row
-              </p>
-            )}
-          </section>
+            <p className="text-[13px] text-primary-500 tabular-nums">
+              {medals.length} of {MEDALS.length} earned
+            </p>
+          </div>
+          <ul className="grid grid-cols-2 min-[360px]:grid-cols-3 gap-2">
+            {medals.map((m) => (
+              <li key={m.id}>
+                <MedalTile art={m.art} name={m.name} line={m.blurb} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
-          {medals.length > 0 && (
-            <section aria-labelledby="u-medals" className="mt-8">
-              <div className="mb-3 flex items-end justify-between gap-3">
-                <h2 id="u-medals" className="font-display text-[20px] font-semibold text-primary-900">
-                  Medals
-                </h2>
-                <p className="text-[13px] text-primary-500 tabular-nums">
-                  {medals.length} of {MEDALS.length} earned
-                </p>
-              </div>
-              <ul className="grid grid-cols-2 min-[360px]:grid-cols-3 gap-2">
-                {medals.map((m) => (
-                  <li key={m.id}>
-                    <MedalTile art={m.art} name={m.name} line={m.blurb} />
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {passport.reviewed.length > 0 && (
-            <section aria-labelledby="u-reviewed" className="mt-8">
-              <h2 id="u-reviewed" className="mb-3 font-display text-[20px] font-semibold text-primary-900">
-                Turfs {name.split(" ")[0]} reviewed
-              </h2>
-              <ReviewedList items={passport.reviewed} />
-            </section>
-          )}
-        </>
+      {passport && passport.reviewed.length > 0 && (
+        <section aria-labelledby="u-reviewed" className="mt-8">
+          <h2 id="u-reviewed" className="mb-3 font-display text-[20px] font-semibold text-primary-900">
+            Turfs {first} reviewed
+          </h2>
+          <ReviewedList items={passport.reviewed} />
+        </section>
       )}
 
       <OwnerVerifyNote username={u} />
@@ -220,7 +238,7 @@ export default async function PlayerProfilePage({ params }: Props) {
           <h2 id="u-earn" className="font-display text-[22px] leading-tight">
             Yours to earn
           </h2>
-          <p className="mt-1 text-[14px] leading-snug text-white/75">Medals are earned from real games and reviews, never given. These three come first.</p>
+          <p className="mt-1 text-[14px] leading-snug text-white/75">Medals are earned from real games, reviews and the free tools, never given. These three come first.</p>
           <ul className="mt-4 grid grid-cols-3 gap-2">
             {starters.map((m) => (
               <li key={m.id} className="flex flex-col items-center rounded-2xl bg-white/[0.07] px-1.5 py-3 text-center ring-1 ring-inset ring-white/10">

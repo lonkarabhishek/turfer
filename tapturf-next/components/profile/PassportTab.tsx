@@ -7,8 +7,9 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { getPassport } from "@/lib/profile/client";
 import { keepPlayed } from "@/lib/profile/playedStore";
 import { shortDay } from "@/lib/profile/history";
-import { bestFirst, lockedShortlist, toGo, type Medal } from "@/lib/profile/medals";
+import { bestFirst, isToolMedal, lockedShortlist, toGo, type Medal } from "@/lib/profile/medals";
 import { STREAK_WEEKS_SHOWN } from "@/lib/profile/streak";
+import { turfersCount, turfersMeaning } from "@/lib/profile/turfers";
 import { turfPath } from "@/lib/utils/turfPath";
 import type { PassportResponse } from "@/lib/profile/types";
 import { FlauntMedals } from "./FlauntMedals";
@@ -57,7 +58,7 @@ export function PassportTab({ onLoaded }: { onLoaded?: (r: PassportResponse) => 
 
   const mine = data && data.for === userId ? data : null;
 
-  // A link to a part (the home's Squad tile: #played-with) lands on it once it is drawn.
+  // A link to a part (the home's Turfers tile: #played-with) lands on it once it is drawn.
   const ready = !!mine && "r" in mine;
   useEffect(() => {
     if (!ready) return;
@@ -97,7 +98,7 @@ export function PassportTab({ onLoaded }: { onLoaded?: (r: PassportResponse) => 
 }
 
 // The aside goes under the title when both don't fit on one line (a 320 px phone).
-function Heading({ id, icon, title, aside }: { id: string; icon: React.ReactNode; title: string; aside?: string }) {
+function Heading({ id, icon, title, aside, asideTitle }: { id: string; icon: React.ReactNode; title: string; aside?: string; asideTitle?: string }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-0.5 mb-3">
       <h2 id={id} className="flex items-center gap-2 font-display text-[20px] font-semibold text-primary-900 leading-tight whitespace-nowrap">
@@ -106,7 +107,11 @@ function Heading({ id, icon, title, aside }: { id: string; icon: React.ReactNode
         </span>
         {title}
       </h2>
-      {aside && <p className="text-[13px] text-primary-500 tabular-nums">{aside}</p>}
+      {aside && (
+        <p className="text-[13px] text-primary-500 tabular-nums" title={asideTitle}>
+          {aside}
+        </p>
+      )}
     </div>
   );
 }
@@ -127,14 +132,21 @@ function LockedTile({ m }: { m: Medal }) {
 
 /**
  * Earned medals (what each was for, and when) and "Flaunt my medals",
- * then "Next up", then the three locked ones closest to done; the rest behind "See all". Before a
- * first game: the three starters.
+ * then "Next up", then the three locked playing medals closest to done;
+ * then, under a small heading of their own, the three tool medals closest
+ * to done, with what counts and a way to the tools. The rest of both
+ * behind one "See all". Before a first game: the three starters.
  */
 function Medals({ medals, games, now }: { medals: Medal[]; games: number; now: number }) {
   const [all, setAll] = useState(false);
   const restId = useId();
+  const toolRestId = useId();
+  const toolsHeadId = useId();
   const earned = bestFirst(medals.filter((m) => m.earned));
-  const { next, shown, rest } = lockedShortlist(medals, games);
+  const { next, shown, rest, tools } = lockedShortlist(medals, games);
+  const toolMedals = medals.filter(isToolMedal);
+  const toolsEarned = toolMedals.filter((m) => m.earned).length;
+  const more = rest.length + tools.rest.length;
   return (
     <>
       {earned.length > 0 && (
@@ -167,25 +179,60 @@ function Medals({ medals, games, now }: { medals: Medal[]; games: number; now: n
         </ul>
       )}
       {rest.length > 0 && (
-        <>
-          <ul id={restId} hidden={!all} className={all ? `${MEDAL_GRID} mt-2` : "hidden"} aria-label="Still to earn">
-            {rest.map((m) => (
+        <ul id={restId} hidden={!all} className={all ? `${MEDAL_GRID} mt-2` : "hidden"} aria-label="Still to earn">
+          {rest.map((m) => (
+            <li key={m.id}>
+              <LockedTile m={m} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {/* The tool medals still to earn, on their own: an easy one never takes the place of the next game's medal above. */}
+      {tools.shown.length > 0 && (
+        <div data-tool-medals className="mt-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+            <h3 id={toolsHeadId} className="text-[15px] font-semibold text-primary-900">
+              From the free tools
+            </h3>
+            <p className="text-[13px] text-primary-500 tabular-nums">
+              {toolsEarned} of {toolMedals.length}
+            </p>
+          </div>
+          <p className="mt-1 text-[13px] leading-snug text-primary-500">
+            Score a match, flip the toss, split teams. Only what you do signed in counts.{" "}
+            <Link href="/tools" className="font-semibold text-accent-700 underline underline-offset-2 hover:text-accent-800">
+              Open the tools
+            </Link>
+          </p>
+          <ul className={`${MEDAL_GRID} mt-3`} aria-labelledby={toolsHeadId}>
+            {tools.shown.map((m) => (
               <li key={m.id}>
                 <LockedTile m={m} />
               </li>
             ))}
           </ul>
-          <button
-            type="button"
-            aria-expanded={all}
-            aria-controls={restId}
-            onClick={() => setAll((v) => !v)}
-            className="mt-3 inline-flex items-center gap-1.5 min-h-[44px] px-1 text-[14px] font-semibold text-accent-700 hover:text-accent-800 focus-neon rounded-lg"
-          >
-            {all ? "Show fewer" : `See all ${medals.length} medals`}
-            <ChevronDown className={`w-4 h-4 transition-transform ${all ? "rotate-180" : ""}`} aria-hidden />
-          </button>
-        </>
+          {tools.rest.length > 0 && (
+            <ul id={toolRestId} hidden={!all} className={all ? `${MEDAL_GRID} mt-2` : "hidden"} aria-label="More from the free tools">
+              {tools.rest.map((m) => (
+                <li key={m.id}>
+                  <LockedTile m={m} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {more > 0 && (
+        <button
+          type="button"
+          aria-expanded={all}
+          aria-controls={[rest.length > 0 ? restId : null, tools.rest.length > 0 ? toolRestId : null].filter(Boolean).join(" ")}
+          onClick={() => setAll((v) => !v)}
+          className="mt-3 inline-flex items-center gap-1.5 min-h-[44px] px-1 text-[14px] font-semibold text-accent-700 hover:text-accent-800 focus-neon rounded-lg"
+        >
+          {all ? "Show fewer" : `See all ${medals.length} medals`}
+          <ChevronDown className={`w-4 h-4 transition-transform ${all ? "rotate-180" : ""}`} aria-hidden />
+        </button>
       )}
     </>
   );
@@ -196,6 +243,8 @@ function Passport({ r, onChanged }: { r: PassportResponse; onChanged: () => void
   const { passport: p, playedWith, whatsapp } = r;
   const n = p.numbers;
   const earned = p.medals.filter((m) => m.earned);
+  // The played summary's count, so it is the number every other page shows; the list below may name fewer (an account that is gone, or past its first 60).
+  const turfers = r.played?.people ?? playedWith.length;
   const since = sinceWords(n.since);
   const section = "scroll-mt-24 mt-9";
 
@@ -352,8 +401,9 @@ function Passport({ r, onChanged }: { r: PassportResponse; onChanged: () => void
 
       {/* ─── Played with ─────────────────────────────────── */}
       <section id="played-with" aria-labelledby="pp-played-with" className={`${section} pb-2`}>
-        <Heading id="pp-played-with" icon={<Users className="w-5 h-5" />} title="Played with" aside={playedWith.length ? `${playedWith.length} ${playedWith.length === 1 ? "player" : "players"}` : undefined} />
-        <p className="-mt-1 mb-3 text-[13px] text-primary-500">Only you see this list.</p>
+        {/* How many: their Turfers, the number their public profile and the Me card show (lib/profile/turfers.ts). */}
+        <Heading id="pp-played-with" icon={<Users className="w-5 h-5" />} title="Played with" aside={turfers > 0 ? turfersCount(turfers) : undefined} asideTitle={turfersMeaning()} />
+        <p className="-mt-1 mb-3 text-[13px] text-primary-500">Only you see this list. Your public profile shows how many, as Turfers, never who.</p>
         <WhatsAppSwitch initial={whatsapp} />
         <PlayedWithList people={playedWith} now={now} />
       </section>

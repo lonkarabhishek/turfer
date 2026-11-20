@@ -40,7 +40,7 @@ export type PlayedResponse = {
   /** The latest day (India's date) they played at each turf, by turf id. */
   turfs: Record<string, string>;
   streak: Streak;
-  /** Played games, the people in them (other than you) and their sports, counted. */
+  /** Played games, the people in them (other than you: their Turfers, lib/profile/turfers.ts) and their sports, counted. */
   games: number;
   people: number;
   sports: number;

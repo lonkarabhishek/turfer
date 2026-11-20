@@ -19,6 +19,7 @@ import { NotificationsPrompt } from "./NotificationsPrompt";
 import { PushSwitch } from "@/components/push/PushSwitch";
 import { useMeData } from "./useMeData";
 import { PassportEntry } from "@/components/profile/PassportEntry";
+import { turfersMeaning, turfersWord } from "@/lib/profile/turfers";
 import { PassportTab } from "@/components/profile/PassportTab";
 import { StreakNudge } from "@/components/profile/StreakNudge";
 import type { PassportResponse } from "@/lib/profile/types";
@@ -276,7 +277,7 @@ function Me({
 
               {/* Real numbers from their own games; a dash until they are in. Hosted and Joined open their
                   list; Upcoming counts both lists (each game once), so it is a number, not a link. With the
-                  passport open: its own played, turfs and medals instead, under its name (on a phone no
+                  passport open: its own played, Turfers and medals instead, under its name (on a phone no
                   tile below says which section is open). */}
               {onPassport && !passportEmpty && <p className="mt-4 -mb-2 text-[12px] font-semibold text-accent-700">Your passport</p>}
               <ul
@@ -285,24 +286,26 @@ function Me({
               >
                 {(onPassport
                   ? ([
-                      ["Played", passport?.passport.numbers.games ?? null, null],
-                      ["Turfs", passport?.passport.numbers.turfs ?? null, null],
-                      ["Medals", passport ? passport.passport.medals.filter((m) => m.earned).length : null, null],
+                      ["Played", passport?.passport.numbers.games ?? null, null, null],
+                      // The people they played with (lib/profile/turfers.ts), the same number their public profile leads with; it opens their own list below.
+                      [turfersWord(passport?.played.people ?? 0), passport?.played.people ?? null, () => document.getElementById("played-with")?.scrollIntoView({ block: "start" }), turfersMeaning()],
+                      ["Medals", passport ? passport.passport.medals.filter((m) => m.earned).length : null, null, null],
                     ] as const)
                   : ([
-                      ["Hosted", data.loading ? null : data.created.length, () => showGames("created")],
-                      ["Joined", data.loading ? null : data.joined.length, () => showGames("joined")],
-                      ["Upcoming", data.loading ? null : data.upcoming, null],
+                      ["Hosted", data.loading ? null : data.created.length, () => showGames("created"), null],
+                      ["Joined", data.loading ? null : data.joined.length, () => showGames("joined"), null],
+                      ["Upcoming", data.loading ? null : data.upcoming, null, null],
                     ] as const)
-                ).map(([label, n, go]) => {
+                ).map(([label, n, go, meaning]) => {
                   const inner = (
                     <>
                       <span className="block font-display text-[24px] leading-none text-primary-900 tabular-nums">{n ?? "–"}</span>
                       <span className="mt-1 block text-[12px] font-medium text-primary-500">{label}</span>
+                      {meaning && <span className="sr-only">: {meaning.replace(/^[^:]+: /, "")}</span>}
                     </>
                   );
                   return (
-                    <li key={label} className="px-1">
+                    <li key={label} className="px-1" title={meaning ?? undefined}>
                       {go ? (
                         <button type="button" onClick={go} className="w-full rounded-xl py-0.5 hover:bg-white/80 focus-neon">
                           {inner}

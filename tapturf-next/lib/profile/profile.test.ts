@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { gameEndsAt, isPlayed, istDay, playedGames, shortDay, weekDays, weekOf, type GameRow, type ReviewRow, type TurfRef } from "./history";
 import { streakNudge, streakOf, streakReachedOn, sundayWords } from "./streak";
-import { MEDALS, STARTER_MEDALS, bestFirst, lockedShortlist, medalsOf, nextMedal, toGo, type MedalProgress } from "./medals";
+import { MEDALS, STARTER_MEDALS, bestFirst, isToolMedal, lockedShortlist, medalsOf, nextMedal, toGo, type MedalProgress } from "./medals";
 import { buildPassport, latestPlayedByTurf, publicPassport } from "./passport";
 import { playedHereShort, playedHereText } from "./playedHere";
 import { coPlayers, playedWithList, spacedWhatsapp, whatsappLink } from "./playedWith";
@@ -142,7 +142,12 @@ test("medals: earned from real counts, with the day, and what the next one takes
   assert.equal(fresh.next, null);
   assert.deepEqual(fresh.shown.map((m) => m.id), [...STARTER_MEDALS]);
   assert.deepEqual(fresh.shown.map((m) => m.name), ["First Whistle", "Captain", "First Word"]);
-  assert.equal(fresh.rest.length, MEDALS.length - 3);
+  // The tool medals have a short list of their own, so the starters stay the starters.
+  const PLAY = MEDALS.filter((x) => !isToolMedal(x));
+  assert.equal(PLAY.length, 16, "the playing medals, as they were");
+  assert.equal(fresh.rest.length, PLAY.length - 3);
+  assert.ok([...fresh.shown, ...fresh.rest].every((x) => !isToolMedal(x)));
+  assert.equal(fresh.shown.length + fresh.rest.length + fresh.tools.shown.length + fresh.tools.rest.length, MEDALS.length, "every locked medal is in exactly one list");
   // A first review before any game: First Word is earned, so two starters are left.
   const reviewedOnly = medalsOf({ ...none, reviews: { have: 1, days: ["2026-10-09"] } });
   assert.deepEqual(lockedShortlist(reviewedOnly, 0).shown.map((m) => m.id), ["first-game", "first-host"]);
@@ -179,7 +184,7 @@ test("medals: earned from real counts, with the day, and what the next one takes
   const list = lockedShortlist(some, 3);
   assert.equal(list.next?.id, "hosted-5");
   assert.deepEqual(list.shown.map((x) => x.id), ["turfs-3", "games-5", "streak-4"], "2 of 3 turfs, 3 of 5 games, 2 of 4 weeks: the closest after Matchmaker");
-  assert.equal(list.rest.length, some.filter((x) => !x.earned).length - 4);
+  assert.equal(list.rest.length, some.filter((x) => !x.earned && !isToolMedal(x)).length - 4);
   assert.ok(list.rest.every((x) => !x.earned && x !== list.next && !list.shown.includes(x)));
   assert.deepEqual(list.rest.map((x) => x.id), MEDALS.map((x) => x.id).filter((id) => list.rest.some((x) => x.id === id)), "catalog order");
   // Best first: the hardest tier leads, the catalog breaks ties.
@@ -224,7 +229,7 @@ test("passport: stamps, numbers, reviewed and review more, from played games onl
 
   // What the public may see: counts, earned medals, reviewed turfs; never a date or a place played.
   const pub = publicPassport(p);
-  assert.deepEqual(pub.numbers, { games: 5, hosted: 1, turfs: 4, cities: 2, sports: 3, reviews: 2, bestStreak: p.streak.best });
+  assert.deepEqual(pub.numbers, { games: 5, hosted: 1, turfs: 4, cities: 2, sports: 3, reviews: 2, bestStreak: p.streak.best, turfers: null });
   assert.deepEqual(pub.medals.map((m) => m.id).sort(), p.medals.filter((m) => m.earned).map((m) => m.id).sort());
   assert.deepEqual(pub.medals.map((m) => m.id), ["turfs-3", "sports-3", "first-game", "games-5", "first-host", "first-review"], "best first: Explorer and All-Rounder lead");
   assert.deepEqual(Object.keys(pub.medals[0]).sort(), ["art", "blurb", "id", "name"]);

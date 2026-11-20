@@ -6,6 +6,7 @@ import { cleanVenueName } from "../utils/bookingApps";
 import type { GameRow, ReviewRow, TurfRef } from "./history";
 import type { CoPlayerExtra } from "./playedWith";
 import { BADGE_IDS_MAX, badgeIds, parseBadges, type BadgeSent, type PlayerBadge } from "./playerBadge";
+import { parseToolUses, type ToolUses } from "./toolUses";
 import type { WhatsAppState } from "./types";
 
 /**
@@ -50,11 +51,51 @@ async function rows<T>(q: PromiseLike<{ data: unknown; error: { message: string 
   return (Array.isArray(data) ? data : []) as T[];
 }
 
-export type History = { games: GameRow[]; turfs: TurfRef[]; reviews: ReviewRow[] };
+/**
+ * tools: the account's signed-in uses of the free tools, for the tool
+ * medals; null or left out when they can't be read. toolsFailed: the read
+ * itself failed (not a database that has no such read yet), so the medals
+ * worked out this time may be short of ones the player has.
+ */
+export type History = { games: GameRow[]; turfs: TurfRef[]; reviews: ReviewRow[]; tools?: ToolUses | null; toolsFailed?: boolean };
 
-/** Everything the passport is worked out from, for one account. Throws when it can't be read. */
+// A database without public.tool_uses_of (before 20261122_tool_medals.sql) is not asked again for a minute, so the
+// tool medals show within a minute of the file being applied and a database without it costs next to nothing.
+const TOOLS_MISSING_WAIT_MS = 60_000;
+let toolsMissingUntil = 0;
+
+type ToolUsesRead = { ok: ToolUses } | { missing: true } | { failed: true };
+
+/**
+ * This account's own signed-in uses of the free tools (public.tool_uses_of,
+ * 20261122_tool_medals.sql; server key), for the tool medals. missing:
+ * before that file; failed: the read failed. Either way those medals are
+ * locked at zero this time and everything else is as it was. Never throws.
+ */
+async function toolUsesRead(userId: string): Promise<ToolUsesRead> {
+  if (Date.now() < toolsMissingUntil) return { missing: true };
+  try {
+    const r = await accountRpcIfThere("tool_uses_of", { p_user_id: userId });
+    if ("missing" in r) {
+      toolsMissingUntil = Date.now() + TOOLS_MISSING_WAIT_MS;
+      return { missing: true };
+    }
+    const uses = "data" in r ? parseToolUses(r.data) : null;
+    return uses ? { ok: uses } : { failed: true };
+  } catch {
+    return { failed: true };
+  }
+}
+
+/**
+ * Everything the passport is worked out from, for one account. Throws when
+ * the games, turfs or reviews can't be read; the tool uses are read beside
+ * them and are simply absent when they can't be.
+ */
 export async function readHistory(userId: string): Promise<History> {
   const s = db();
+  // Started with the first reads and waited for last, so it never adds a round trip of its own.
+  const toolUses = toolUsesRead(userId);
   const [joined, hosted, reviews] = await Promise.all([
     rows<{ game_id: string }>(s.from("game_participants").select("game_id").eq("user_id", userId).limit(MAX_ROWS), "participants"),
     rows<GameRow>(s.from("games").select(GAME_COLUMNS).eq("creator_id", userId).limit(MAX_ROWS), "hosted games"),
@@ -74,7 +115,8 @@ export async function readHistory(userId: string): Promise<History> {
   const turfs: TurfRef[] = turfRows
     .filter((t) => typeof t.name === "string" && t.name.trim())
     .map((t) => ({ id: t.id, slug: t.slug, name: cleanVenueName(t.name as string), city: t.city, cityLabel: t.city ? cityInfo(t.city).label : null }));
-  return { games, turfs, reviews: reviews.filter((r) => typeof r.rating === "number" && !!r.turf_id) };
+  const tools = await toolUses;
+  return { games, turfs, reviews: reviews.filter((r) => typeof r.rating === "number" && !!r.turf_id), tools: "ok" in tools ? tools.ok : null, ...("failed" in tools ? { toolsFailed: true } : {}) };
 }
 
 /** The people in each of these games (participants, and the host), by game id. Throws when it can't be read. */

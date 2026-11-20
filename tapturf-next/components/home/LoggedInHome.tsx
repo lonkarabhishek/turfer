@@ -22,6 +22,7 @@ import { CityLine } from "@/components/city/CityLine";
 import { UserAvatar } from "@/components/account/UserAvatar";
 import { StreakNudge } from "@/components/profile/StreakNudge";
 import { usePlayed } from "@/components/profile/usePlayed";
+import { turfersMeaning, turfersWord } from "@/lib/profile/turfers";
 import { PlayersBar } from "@/components/game/PlayersBar";
 import { joinedOnTapTurf, speedOf } from "@/lib/games/progress";
 import {
@@ -156,7 +157,8 @@ export function LoggedInHome({ scope, line }: { scope: HomeScope; line: CityLine
             {/* ─── Stats row: each opens where its number comes from ─── */}
             <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-6">
               <StatTile href="/dashboard?tab=passport" icon={<Trophy className="w-4 h-4" />} value={played?.games ?? "–"} label="Played" sr=", open your passport" />
-              <StatTile href="/dashboard?tab=passport#played-with" icon={<Users className="w-4 h-4" />} value={played?.people ?? "–"} label="Played with" sr=", open the list" />
+              {/* The people they have played with: "Turfers" wherever that number shows (lib/profile/turfers.ts). */}
+              <StatTile href="/dashboard?tab=passport#played-with" icon={<Users className="w-4 h-4" />} value={played?.people ?? "–"} label={turfersWord(played?.people ?? 0)} sr={`: ${turfersMeaning().replace(/^[^:]+: /, "")}, open the list`} title={turfersMeaning()} />
               <StatTile href="/dashboard?tab=passport#stamps" icon={<Target className="w-4 h-4" />} value={played?.sports ?? "–"} label="Sports" sr=", open your stamps" />
             </div>
 
@@ -467,10 +469,11 @@ function ClassyGameCard({ game, owned = false }: { game: Game; owned?: boolean }
 // Reusable bits
 // ────────────────────────────────────────────────────────────
 
-function StatTile({ href, icon, value, label, sr }: { href: string; icon: React.ReactNode; value: number | string; label: string; sr: string }) {
+function StatTile({ href, icon, value, label, sr, title }: { href: string; icon: React.ReactNode; value: number | string; label: string; sr: string; title?: string }) {
   return (
     <Link
       href={href}
+      title={title}
       className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-white border border-primary-200 py-4 px-2 hover:border-accent-500 active:scale-[0.97] transition-all focus-neon"
     >
       <span className="text-accent-600" aria-hidden>{icon}</span>

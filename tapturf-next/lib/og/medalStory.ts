@@ -1,6 +1,7 @@
 import { initialsOf } from "../account/avatar";
 import { MEDALS, type MedalArt } from "../profile/medals";
 import type { PublicPassport } from "../profile/passport";
+import { turfersCount } from "../profile/turfers";
 import { clip, drawable, hash36, ogText } from "./gameCard";
 import { medalStoryPath } from "./medalStoryUrl";
 
@@ -15,8 +16,8 @@ export { medalStoryFile, medalStoryPath } from "./medalStoryUrl";
  * (components/profile/FlauntMedals.tsx) and posts it themselves.
  *
  * - Only what the public profile (/u/<username>) already shows, from
- *   publicPassport: the name, the username, the counts, the best streak
- *   and the earned medals. Never where or when they played, or who with,
+ *   publicPassport: the name, the username, the counts (their Turfers
+ *   among them), the best streak and the earned medals. Never where or when they played, or who with,
  *   and no photo. Only for a profile that is public (the page's own
  *   check); no earned medal, no picture.
  * - Drawn as the game's share card is (lib/og/gameCard.ts): only in the
@@ -59,11 +60,11 @@ export type MedalStoryFacts = {
   top: StoryMedal;
   /** "TOP MEDAL", or "FIRST MEDAL" when it is the only one. Capitals made here, never by the renderer. */
   topLabel: string;
-  /** "12 games · 5 turfs · 2 cities", as the profile's own line; "3 reviews" for someone who only reviewed. */
+  /** "12 games · 34 Turfers · 5 turfs" (storyBrag); "3 reviews" for someone who only reviewed. */
   brag: string | null;
   /** "Best streak: 6 weeks in a row", from 2 weeks. */
   streak: string | null;
-  /** "7 of 16 medals". */
+  /** "7 of 27 medals": earned, of every medal in the catalog. */
   count: string;
   /** The other earned medals the grid draws, best first. */
   others: StoryMedal[];
@@ -81,10 +82,20 @@ export const isStoryUsername = (u: unknown): u is string => typeof u === "string
 
 const many = (n: number, one: string, more: string) => `${n} ${n === 1 ? one : more}`;
 
-/** "5 games · 5 turfs · 2 cities", as /u/<username> says it; "3 reviews" with no game played; null with neither. */
+/**
+ * The line under the top medal, from the profile's own numbers. With their
+ * Turfers (how many different players they have played with,
+ * lib/profile/turfers.ts; a count the profile shows too): "12 games · 34
+ * Turfers · 5 turfs", the cities left off so the line stays short. With
+ * none, or when that count could not be read: "5 games · 5 turfs · 2
+ * cities". "3 reviews" with no game played; null with neither.
+ */
 export function storyBrag(n: PublicPassport["numbers"]): string | null {
   if (n.games > 0) {
-    return [many(n.games, "game", "games"), n.turfs ? many(n.turfs, "turf", "turfs") : null, n.cities ? many(n.cities, "city", "cities") : null].filter(Boolean).join(" · ");
+    const games = many(n.games, "game", "games");
+    const turfs = n.turfs ? many(n.turfs, "turf", "turfs") : null;
+    if (n.turfers) return [games, turfersCount(n.turfers), turfs].filter(Boolean).join(" · ");
+    return [games, turfs, n.cities ? many(n.cities, "city", "cities") : null].filter(Boolean).join(" · ");
   }
   return n.reviews > 0 ? many(n.reviews, "review", "reviews") : null;
 }

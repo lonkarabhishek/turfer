@@ -1,6 +1,7 @@
 import { createReadOnlyClient } from "../supabase/server";
-import { buildPassport, publicPassport, type PublicPassport } from "./passport";
-import { profileOwner, readHistory } from "./server";
+import type { PublicPassport } from "./passport";
+import { publicPassportOf } from "./publicPassport";
+import { profileOwner, readHistory, readRosters } from "./server";
 
 /** A public profile as profile_get gives it: only for people who left "Let others find and tag me" on. */
 export type PublicProfile = { u: string; name: string; photo: string | null; since: string | null; verified: boolean };
@@ -35,17 +36,16 @@ export async function readPublicProfile(raw: string): Promise<FoundProfile> {
 
 /**
  * The numbers, medals and reviewed turfs on a public profile (/u/<username>):
- * publicPassport only, so never where or when they played, or who with.
- * Null before 20261101_played_with.sql (the page can't tell whose games are
- * whose) or when a read fails: the page then shows the profile without
- * them rather than failing. Server only.
+ * publicPassport only, so never where or when they played, or who with
+ * (their Turfers is a count). Null before 20261101_played_with.sql (the
+ * page can't tell whose games are whose) or when a read fails: the page
+ * then shows the profile without them rather than failing. Server only.
  */
 export async function loadPublicPassport(username: string): Promise<PublicPassport | null> {
   try {
     const owner = await profileOwner(username);
     if (!("ok" in owner) || !owner.ok) return null;
-    const history = await readHistory(owner.ok);
-    return publicPassport(buildPassport({ userId: owner.ok, ...history, since: null, now: Date.now() }));
+    return await publicPassportOf(owner.ok, { history: readHistory, rosters: readRosters, now: Date.now });
   } catch (e) {
     console.warn("profile: passport read failed", e);
     return null;

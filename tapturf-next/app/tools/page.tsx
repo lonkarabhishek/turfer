@@ -74,6 +74,13 @@ export default function ToolsHub() {
       </ul>
       {/* Live tournaments (/tournament/new); shows once the server can take them. */}
       <StartLiveCta tool="tools_hub" className="mt-3 sm:mt-4" />
+      {/* One quiet line: uses made while signed in earn medals (lib/profile/medals.ts). The tools need no sign-in, and this never asks for one. */}
+      <p data-tool-medals-note className="mt-4 text-[14px] leading-relaxed text-primary-500">
+        Signed in? What you do here counts toward medals: a match scored, a toss, a scorecard.{" "}
+        <Link href="/dashboard?tab=passport#medals" prefetch={false} className="font-semibold text-accent-700 hover:underline">
+          See your medals
+        </Link>
+      </p>
 
       <div className="mt-12 space-y-3 text-[15px] leading-relaxed text-primary-700">
         <h2 className="text-[22px] font-display text-primary-900">Made at the turf</h2>
