@@ -1,4 +1,4 @@
-import { LIVE_CODE_RE, LIVE_DONE_POLL_FOR_MS, LIVE_DONE_POLL_MS, LIVE_IDLE_CLOSE_MS, LIVE_POLL_MS, LIVE_POLL_TIMEOUT_MS, type LiveGetResponse, type LiveStatus } from "../../lib/live/types";
+import { LIVE_CODE_RE, LIVE_DONE_POLL_FOR_MS, LIVE_DONE_POLL_MS, LIVE_IDLE_CLOSE_MS, LIVE_POLL_MS, LIVE_POLL_TIMEOUT_MS, LIVE_QUIET_POLL_MS, type LiveGetResponse, type LiveStatus } from "../../lib/live/types";
 import type { Board, BoardView } from "../../lib/board/types";
 
 /**
@@ -17,8 +17,8 @@ export type FollowStatus = LiveGetResponse["status"];
 export const WAIT_POLL_MS = 15_000;
 export const WAIT_POLL_FOR_MS = 10 * 60_000;
 export const WAIT_SLOW_POLL_MS = 60_000;
-/** ...and after a failed poll (404, 5xx, no network), these, then the last one again. */
-export const FAIL_BACKOFF_MS = [6_000, 12_000, 30_000] as const;
+/** ...and after a failed poll (404, 5xx, no network), these, then the last one again. Never sooner than a poll that worked. */
+export const FAIL_BACKOFF_MS = [10_000, 20_000, 30_000] as const;
 /** The live dot goes after this long without an update. */
 export const FRESH_MS = 2 * 60_000;
 /**
@@ -78,7 +78,9 @@ export function nextPoll(status: FollowStatus, age: number | null, waited: numbe
       // The last ball is often undone, so a finished match is watched a while.
       return age !== null && age >= LIVE_DONE_POLL_FOR_MS ? null : LIVE_DONE_POLL_MS;
     case "live":
-      return age !== null && age >= QUIET_MS ? null : LIVE_POLL_MS;
+      if (age !== null && age >= QUIET_MS) return null;
+      // No update for FRESH_MS (the live dot is off, or held by a break): half as often until the score moves again.
+      return age !== null && age >= FRESH_MS ? LIVE_QUIET_POLL_MS : LIVE_POLL_MS;
   }
 }
 

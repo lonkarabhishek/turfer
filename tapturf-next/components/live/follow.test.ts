@@ -34,7 +34,7 @@ import {
   startPolling,
   type Seen,
 } from "./follow";
-import { LIVE_DONE_POLL_FOR_MS, LIVE_DONE_POLL_MS, LIVE_IDLE_CLOSE_MS, LIVE_POLL_MS, liveIdleClosed, liveStatusAt, type LiveGetResponse } from "../../lib/live/types";
+import { LIVE_DONE_POLL_FOR_MS, LIVE_DONE_POLL_MS, LIVE_CDN_FRESH_S, LIVE_CDN_STALE_S, LIVE_IDLE_CLOSE_MS, LIVE_POLL_MS, LIVE_QUIET_POLL_MS, liveIdleClosed, liveStatusAt, type LiveGetResponse } from "../../lib/live/types";
 import { apply, check, derive, newMatch, type Match, type MatchEvent } from "../../lib/cricket/scoring";
 import { applyBoard, checkBoard, clockMs, deriveBoard, newBoard, undoBoard } from "../../lib/board/index";
 import type { Board, BoardEvent } from "../../lib/board/types";
@@ -91,7 +91,12 @@ test("polls fast while live, slower once done, and stop only when the link is of
   assert.equal(nextPoll("live", 10_000, 0), LIVE_POLL_MS);
   assert.equal(nextPoll("live", null, 0), LIVE_POLL_MS);
   assert.equal(nextPoll("live", NaN, 0), LIVE_POLL_MS);
-  assert.equal(nextPoll("live", QUIET_MS - 1, 0), LIVE_POLL_MS);
+  assert.equal(nextPoll("live", FRESH_MS - 1, 0), LIVE_POLL_MS);
+  // Nothing new for 2 minutes (a break, rain, a scorer who left): half as often, until it closes.
+  assert.equal(nextPoll("live", FRESH_MS, 0), LIVE_QUIET_POLL_MS);
+  assert.equal(nextPoll("live", QUIET_MS - 1, 0), LIVE_QUIET_POLL_MS);
+  assert.equal(LIVE_POLL_MS, 10_000);
+  assert.equal(LIVE_QUIET_POLL_MS, 20_000);
   // Closed at 2 hours, as the server has it: polled only when looked at again.
   assert.equal(nextPoll("live", QUIET_MS, 0), null);
   assert.equal(nextPoll("live", QUIET_MS + 1, 0), null);
@@ -109,7 +114,14 @@ test("polls fast while live, slower once done, and stop only when the link is of
 
   assert.equal(nextPoll("stopped", 0, 0), "stop");
   assert.equal(nextPoll("expired", 0, 0), "stop");
-  assert.deepEqual([...FAIL_BACKOFF_MS], [6_000, 12_000, 30_000]);
+  assert.deepEqual([...FAIL_BACKOFF_MS], [10_000, 20_000, 30_000]);
+  assert.ok(FAIL_BACKOFF_MS[0] >= LIVE_POLL_MS, "a failed poll is never retried sooner than a poll that worked");
+});
+
+test("the CDN's copy of the score runs out before a lone follower's next poll", () => {
+  // Fresh + stale under one poll: with one follower the copy their last poll made is gone by the next, so they are never a whole poll behind for nothing.
+  assert.ok((LIVE_CDN_FRESH_S + LIVE_CDN_STALE_S) * 1000 < LIVE_POLL_MS);
+  assert.ok(LIVE_CDN_FRESH_S >= 1 && LIVE_CDN_STALE_S >= 1);
 });
 
 test("ages read in plain words", () => {
@@ -482,7 +494,7 @@ describe("polling", () => {
   beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "Date"], now: T0 }));
   afterEach(() => mock.timers.reset());
 
-  test("live: every 6 s, and only a higher rev is shown", async () => {
+  test("live: every 10 s, and only a higher rev is shown", async () => {
     const h = harness({ status: "live", rev: 5, updatedAt: T0 }, [live(5), live(4), live(6), live(6)]);
     await advance(LIVE_POLL_MS - 1_000);
     assert.equal(h.polls, 0);
@@ -496,14 +508,14 @@ describe("polling", () => {
     h.poller.stop();
   });
 
-  test("failures keep the score and back off 6, 12, 30, 30 s, then recover", async () => {
+  test("failures keep the score and back off 10, 20, 30, 30 s, then recover", async () => {
     const h = harness({ status: "live", rev: 5, updatedAt: T0 }, [{ status: 503 }, { status: 404 }, { status: 500 }, { status: 503 }, live(7)]);
     await advance(LIVE_POLL_MS);
     assert.equal(h.polls, 1);
     assert.deepEqual(h.troubles, [true]);
-    await advance(6_000);
+    await advance(10_000);
     assert.equal(h.polls, 2);
-    await advance(12_000);
+    await advance(20_000);
     assert.equal(h.polls, 3);
     await advance(29_000);
     assert.equal(h.polls, 3);
@@ -642,7 +654,7 @@ describe("polling", () => {
     const at = T0 - QUIET_MS + 60_000;
     const h = harness({ status: "live", rev: 2, updatedAt: at }, [live(2, at)]);
     await advance(54_000);
-    assert.equal(h.polls, 54_000 / LIVE_POLL_MS);
+    assert.equal(h.polls, Math.floor(54_000 / LIVE_QUIET_POLL_MS));
     const n = h.polls;
     await advance(10 * 60_000);
     assert.equal(h.polls, n + 1, "the poll past 2 hours is the last");

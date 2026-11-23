@@ -35,8 +35,23 @@ export const LIVE_RETRY_MS = [2_000, 4_000, 8_000, 16_000, 30_000] as const;
 /** keepalive bodies share a 64 KiB budget per page; bigger ones wait for the next visit. */
 export const LIVE_KEEPALIVE_MAX_BYTES = 60_000;
 
-/** Followers poll this often while the match is live and the tab is visible. */
-export const LIVE_POLL_MS = 6_000;
+/**
+ * Followers poll this often while the match is live and the tab is visible.
+ * 10 s, not the 6 s it was (23 Nov 2026): every poll is a billed request
+ * whether or not the CDN answers it, a ball takes longer than this to bowl,
+ * and a follower is at most one poll plus the CDN copy behind.
+ */
+export const LIVE_POLL_MS = 10_000;
+/** ...and this often once the score has not moved for the follower page's FRESH_MS (a break, rain, a scorer who left), until the link closes. */
+export const LIVE_QUIET_POLL_MS = 20_000;
+/**
+ * The CDN's copy of GET /api/live/<code>: fresh this many seconds, then
+ * served this many more while one request refreshes it. Their sum stays
+ * under LIVE_POLL_MS (follow.test.ts), so a match with one follower never
+ * gets the copy its own last poll made: it is always asked afresh.
+ */
+export const LIVE_CDN_FRESH_S = 4;
+export const LIVE_CDN_STALE_S = 5;
 /** ...and this often once it is done (the last ball is often undone), for LIVE_DONE_POLL_FOR_MS. */
 export const LIVE_DONE_POLL_MS = 30_000;
 export const LIVE_DONE_POLL_FOR_MS = 30 * 60_000;

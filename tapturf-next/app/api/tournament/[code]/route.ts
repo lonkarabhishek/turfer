@@ -4,7 +4,7 @@ import { liveIpHash, readLiveBody } from "@/lib/live/server";
 import { verifyTournamentCode } from "@/lib/tournament/codes";
 import { readOp } from "@/lib/tournament/payload";
 import { createTournamentLimiter, tournamentKey, tournamentStatus, tournamentView, updateTournament } from "@/lib/tournament/server";
-import type { PatchResponse } from "@/lib/tournament/types";
+import { TOURNAMENT_CDN_FRESH_S, TOURNAMENT_CDN_STALE_S, type PatchResponse } from "@/lib/tournament/types";
 
 // One live tournament (lib/tournament/types.ts has the flow).
 //   GET   -> TournamentGetResponse, what followers poll: the tournament and
@@ -22,8 +22,11 @@ const limits = createTournamentLimiter();
 /** A change is a few hundred bytes; settings with a venue under 2 KB. */
 const PATCH_MAX_BYTES = 20_000;
 const NO_STORE = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" };
-// The CDN keeps a copy 3 s and serves it stale for 10 more while one request refreshes it; browsers keep nothing.
-const VIEW_HEADERS = { "Cache-Control": "public, max-age=0, s-maxage=3, stale-while-revalidate=10, stale-if-error=60", "X-Robots-Tag": "noindex" };
+// The CDN keeps a copy 5 s and serves it stale for 8 more while one request refreshes it; browsers keep nothing (the numbers: lib/tournament/types.ts).
+const VIEW_HEADERS = {
+  "Cache-Control": `public, max-age=0, s-maxage=${TOURNAMENT_CDN_FRESH_S}, stale-while-revalidate=${TOURNAMENT_CDN_STALE_S}, stale-if-error=60`,
+  "X-Robots-Tag": "noindex",
+};
 // A code whose tag fails never becomes valid: a day. One that passes but has no tournament (its create failed): a minute.
 const BAD_CODE_HEADERS = { "Cache-Control": "public, max-age=0, s-maxage=86400", "X-Robots-Tag": "noindex" };
 const NONE_HEADERS = { "Cache-Control": "public, max-age=0, s-maxage=60", "X-Robots-Tag": "noindex" };
