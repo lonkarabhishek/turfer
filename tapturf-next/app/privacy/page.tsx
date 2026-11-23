@@ -172,7 +172,9 @@ const SECTIONS: LegalSection[] = [
           joined, and, worked out from your TapTurf games and reviews: how many games you played and hosted,
           at how many turfs, in how many cities and sports, how many different players you have played a
           TapTurf game with (a number we call Turfers; never who they are, and never a list), your longest
-          run of weeks in a row with a game, the medals you earned and the turfs you reviewed (with your
+          run of weeks in a row with a game, your current weekly streak beside your username when it is 2
+          weeks or more (a number of weeks: it tells others you played a game this week or last, and nothing
+          more about when), the medals you earned and the turfs you reviewed (with your
           stars). Only counts: never which turfs you played at, when, or with whom. If you have a public profile and have earned a medal, your best
           medal also shows as a small badge on your photo to other players, on the pages of games you host or
           are in and in the Played with list of people you played with, and it links to your profile; turn
@@ -207,7 +209,8 @@ const SECTIONS: LegalSection[] = [
           You log in to turn on a live link or to keep following one, but the live score others see is not tied
           to your account: your own name, number or email does not go with it. Our own record of the match
           starting notes your account and the link (see &ldquo;When you use our free tools&rdquo;), and only
-          TapTurf&rsquo;s team sees it. If you tag players with their TapTurf usernames,
+          TapTurf&rsquo;s team sees it. Your Me tab lists the live matches and tournaments you started, to
+          you alone. If you tag players with their TapTurf usernames,
           those usernames go with the match. While you follow a live score, your browser joins a count of
           people watching it. Nothing about you is sent. Opening a live score also adds one to its view count (and,
           once a day per browser, to its count of viewers), which identifies nobody and is kept after the match is cleared.
@@ -385,7 +388,8 @@ const SECTIONS: LegalSection[] = [
         <p>
           <strong>Your profile.</strong> If you pick a username, your username, name, photo and join month are
           public on your profile page and in player search, and your profile also shows your game and review
-          counts, how many players you have played with (a number, never who), medals and reviewed turfs (see &ldquo;Your username and public profile&rdquo; above), unless
+          counts, how many players you have played with (a number, never who), your current weekly streak (a
+          number of weeks), medals and reviewed turfs (see &ldquo;Your username and public profile&rdquo; above), unless
           you turn off &ldquo;Let others find and tag me&rdquo;. Your phone number and email are never shown
           there.
         </p>

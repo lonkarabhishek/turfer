@@ -5,11 +5,12 @@ import type { Notification } from "@/types/notification";
 // (lib/games/server.ts): the database lets nobody read or mark anyone
 // else's, and only the server's actions make them. Pass useAuth().getToken.
 
+/** The newest `limit` (100 at most), and how many are unread in all (null when the read failed): never a count of the list. */
 export async function getUserNotifications(getToken: GetToken, limit = 50) {
   const a = await notificationsCall(getToken, limit);
-  const b = a.body as { notifications?: Notification[] };
-  if (a.status === 200 && Array.isArray(b.notifications)) return { data: b.notifications, error: null };
-  return { data: [] as Notification[], error: gameProblem(a) };
+  const b = a.body as { notifications?: Notification[]; unread?: number };
+  if (a.status === 200 && Array.isArray(b.notifications)) return { data: b.notifications, unread: typeof b.unread === "number" ? b.unread : null, error: null };
+  return { data: [] as Notification[], unread: null, error: gameProblem(a) };
 }
 
 /**

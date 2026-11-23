@@ -204,14 +204,16 @@ export function buildPassport(input: PassportInput): Passport {
 }
 
 /**
- * What the public profile may show: counts, the best streak, earned medals
+ * What the public profile may show: counts, the best streak and the one
+ * alive now (both numbers of weeks), earned medals
  * (best first: the first one leads the profile) and reviewed turfs. No
  * dates and no places played. turfers: how many different players they
  * have played with (lib/profile/turfers.ts), a number only, never who;
  * null when it could not be read (the profile then shows without it).
  */
 export type PublicPassport = {
-  numbers: Omit<PassportNumbers, "since"> & { bestStreak: number; turfers: number | null };
+  /** streak: the weekly streak alive now (Streak.current, the Passport's own number), 0 for none. A number only. */
+  numbers: Omit<PassportNumbers, "since"> & { bestStreak: number; streak: number; turfers: number | null };
   medals: { id: string; name: string; blurb: string; art: MedalArt }[];
   reviewed: { turfId: string; slug: string | null; name: string; cityLabel: string | null; rating: number }[];
 };
@@ -220,7 +222,7 @@ export function publicPassport(p: Passport, turfers: number | null = null): Publ
   const { games, hosted, turfs, cities, sports, reviews } = p.numbers;
   const count = typeof turfers === "number" && Number.isInteger(turfers) && turfers >= 0 ? turfers : null;
   return {
-    numbers: { games, hosted, turfs, cities, sports, reviews, bestStreak: p.streak.best, turfers: count },
+    numbers: { games, hosted, turfs, cities, sports, reviews, bestStreak: p.streak.best, streak: p.streak.current, turfers: count },
     medals: bestFirst(p.medals.filter((m) => m.earned)).map(({ id, name, blurb, art }) => ({ id, name, blurb, art })),
     reviewed: p.reviewed.map(({ turfId, slug, name, cityLabel, rating }) => ({ turfId, slug, name, cityLabel, rating })),
   };

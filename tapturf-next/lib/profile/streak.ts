@@ -23,6 +23,30 @@ export type Streak = {
 
 export const STREAK_WEEKS_SHOWN = 12;
 
+/**
+ * Beside a username (the Me card, the public profile), a streak shows
+ * from this many weeks: the Passport's own words call a run a streak from
+ * 2 ("2-week streak"; one week is "You played this week", and "Best
+ * streak" is said from 2 as well).
+ */
+export const STREAK_SHOWN_FROM = 2;
+
+/**
+ * The number beside a username: the streak that is alive now (Streak.current:
+ * weeks in a row up to this week, or up to last week while this week has no
+ * game yet), when it is worth showing; 0 for a lapsed, a one-week or no
+ * streak, which shows nothing. The Passport's own number, never another.
+ */
+export function streakShown(current: unknown): number {
+  return typeof current === "number" && Number.isInteger(current) && current >= STREAK_SHOWN_FROM ? current : 0;
+}
+
+/** "4-week streak": the chip's name, and the Passport's title for the same run. */
+export const streakLabel = (weeks: number): string => `${weeks}-week streak`;
+
+/** What a visitor is told on a public profile: a plain fact, never the player's own "keep it" nudge. */
+export const streakPlain = (weeks: number): string => `${streakLabel(weeks)}: played ${weeks} weeks in a row`;
+
 export function streakOf(played: readonly PlayedGame[], now: number): Streak {
   const weeks = new Set(played.map((g) => weekOf(g.day)).filter((w) => !Number.isNaN(w)));
   const thisWeek = weekOf(istDay(now));

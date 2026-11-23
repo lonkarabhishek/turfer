@@ -295,7 +295,11 @@ test("the public passport: Turfers is the played summary's own count, a number o
   assert.equal(passport.playedWith.length, 2);
   // A count only: nobody's id or name is in what the public gets.
   assert.doesNotMatch(JSON.stringify(pub), /acc-|Ravi|Priya/);
-  assert.deepEqual(Object.keys(pub.numbers).sort(), ["bestStreak", "cities", "games", "hosted", "reviews", "sports", "turfers", "turfs"]);
+  assert.deepEqual(Object.keys(pub.numbers).sort(), ["bestStreak", "cities", "games", "hosted", "reviews", "sports", "streak", "turfers", "turfs"]);
+  // The streak alive now is the Passport's own number too (the Me tab's routes answer the same), and a number only.
+  assert.equal(pub.numbers.streak, passport.passport.streak.current);
+  assert.equal(pub.numbers.streak, played.streak.current);
+  assert.equal(typeof pub.numbers.streak, "number");
 
   // The rosters are read once, for the played games only; nobody without a game is asked about.
   const asked: string[][] = [];

@@ -24,7 +24,7 @@ import {
 // The medals' story picture (GET /api/og/medals/<username>): what it says, its version and URL, and what the
 // route answers, with the profile and passport reads faked. Fake people.
 
-const numbers = (n: Partial<PublicPassport["numbers"]> = {}): PublicPassport["numbers"] => ({ games: 0, hosted: 0, turfs: 0, cities: 0, sports: 0, reviews: 0, bestStreak: 0, turfers: null, ...n });
+const numbers = (n: Partial<PublicPassport["numbers"]> = {}): PublicPassport["numbers"] => ({ games: 0, hosted: 0, turfs: 0, cities: 0, sports: 0, reviews: 0, bestStreak: 0, streak: 0, turfers: null, ...n });
 const passport = (ids: readonly string[], n: Partial<PublicPassport["numbers"]> = {}): PublicPassport => ({
   numbers: numbers(n),
   // As publicPassport gives them: earned only, best first.

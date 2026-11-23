@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2022",
+    "moduleResolution": "node",
+    "rootDir": ".",
+    "outDir": ".test-out/matches",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "lib": ["es2023", "dom"],
+    "types": ["node"]
+  },
+  "files": ["lib/matches/matches.test.ts", "lib/dashboard/tabs.test.ts"]
+}

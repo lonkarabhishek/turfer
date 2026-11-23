@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { AlarmClock, Bell, CalendarCheck, CalendarClock, CalendarPlus, CalendarX, Check, ChevronRight, Hourglass, Info, MapPin, Megaphone, Stamp, Store, Trophy, UserCheck, UserMinus, UserPlus, XCircle } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -9,6 +9,7 @@ import { getUserNotifications, markAsRead, markAllAsRead } from "@/lib/queries/n
 import { answerTag } from "@/lib/queries/games";
 import { tagButtons } from "@/lib/games/confirmed";
 import { CLAIM_APPROVED, CLAIM_REJECTED, TAG_PLAYED_ASK, TOURNAMENT_HOST_SHOWN, notificationLink } from "@/lib/my/claimNotice";
+import { ALERTS_MAX, ALERTS_PAGE, alertsLimit, alertsMerge, alertsNext, alertsPage, unreadLess } from "@/lib/dashboard/alerts";
 import type { Notification } from "@/types/notification";
 
 const ICON_MAP: Record<string, typeof Bell> = {
@@ -41,13 +42,27 @@ const ICON_MAP: Record<string, typeof Bell> = {
   booking_cancelled_by_player: CalendarX,
 };
 
-/** onUnread: how many are unread, after each load and change (the Me tab's Alerts count). */
+/**
+ * The Alerts tab: the latest ten, and "Show more" for the next ten until
+ * there are no more (lib/dashboard/alerts.ts: each tap asks for a longer
+ * list, 100 at most). onUnread: how many are unread in all, after each
+ * load and change (the Me tab's Alerts count): the server's own total,
+ * never a count of the rows on screen.
+ */
 export function NotificationsList({ userId, onUnread }: { userId: string; onUnread?: (n: number) => void }) {
   const { getToken, signedInWith } = useAuth();
   // The list is read quietly (never a sign-out); marking read uses getToken.
   const readToken = quietToken(signedInWith);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  // How many are on screen at most, the unread total as the server last said it (less what was read here since), and a longer read on its way.
+  const [want, setWant] = useState(ALERTS_PAGE);
+  const [unread, setUnread] = useState<number | null>(null);
+  const [moreBusy, setMoreBusy] = useState(false);
+  const [moreFailed, setMoreFailed] = useState(false);
+  // The first of the rows a "Show more" just added: focus goes there, without scrolling, so a keyboard carries on down the list.
+  const firstNew = useRef<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   // A tag being answered from the list, and what came back, by notification id.
   const [tagBusy, setTagBusy] = useState<string | null>(null);
   const [tagSaid, setTagSaid] = useState<Record<string, string>>({});
@@ -55,9 +70,11 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
   // Again for another account.
   useEffect(() => {
     let alive = true;
-    void getUserNotifications(readToken).then(({ data }) => {
+    void getUserNotifications(readToken, alertsLimit(ALERTS_PAGE)).then(({ data, unread: total }) => {
       if (!alive) return;
       setNotifications(data);
+      setWant(ALERTS_PAGE);
+      setUnread(total ?? data.filter((n) => !n.is_read).length);
       setLoading(false);
     });
     return () => {
@@ -66,12 +83,35 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
   }, [userId, readToken]);
 
   useEffect(() => {
-    if (!loading) onUnread?.(notifications.filter((n) => !n.is_read).length);
-  }, [notifications, loading, onUnread]);
+    if (!loading && unread !== null) onUnread?.(unread);
+  }, [unread, loading, onUnread]);
+
+  // The next ten: the same read, asked for a longer list. The rows on screen stay where they are; the new ones follow them.
+  const showMore = async () => {
+    if (moreBusy) return;
+    const next = alertsNext(want);
+    setMoreBusy(true);
+    setMoreFailed(false);
+    const { data, unread: total, error } = await getUserNotifications(readToken, alertsLimit(next));
+    setMoreBusy(false);
+    if (error) return setMoreFailed(true);
+    firstNew.current = data[want]?.id ?? null;
+    setNotifications((had) => alertsMerge(had, data));
+    setWant(next);
+    if (total !== null) setUnread(total);
+  };
+  useEffect(() => {
+    const id = firstNew.current;
+    if (!id) return;
+    firstNew.current = null;
+    listRef.current?.querySelector<HTMLElement>(`[data-alert="${id}"]`)?.focus({ preventScroll: true });
+  }, [notifications]);
 
   const handleMarkRead = async (id: string) => {
     await markAsRead(getToken, id);
+    const was = notifications.find((n) => n.id === id);
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
+    if (was && !was.is_read) setUnread((u) => (u === null ? u : unreadLess(u)));
   };
 
   // A tag's answer (lib/games/confirmed.ts): "I'm in" or "Remove me" when the page lists them already (the
@@ -87,8 +127,10 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
   };
 
   const handleMarkAllRead = async () => {
+    // All of them, the ones not on screen too.
     await markAllAsRead(getToken);
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setUnread(0);
   };
 
   if (loading) {
@@ -122,7 +164,8 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
     );
   }
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const unreadCount = unread ?? 0;
+  const page = alertsPage(notifications, want);
 
   return (
     <div>
@@ -140,8 +183,8 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
         </div>
       )}
 
-      <div className="space-y-2">
-        {notifications.map((notif) => {
+      <div className="space-y-2" ref={listRef}>
+        {page.shown.map((notif) => {
           const Icon = ICON_MAP[notif.type] || Bell;
           // A game's page, or for a claim decision myTapturf or the turf's page (lib/my/claimNotice.ts).
           const link = notificationLink(notif.type, notif.metadata);
@@ -188,7 +231,7 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
           // A tag still to answer: the two answers, and a link to the game (buttons can't sit inside a link).
           if (notif.type === "game_tagged" && link && (!notif.is_read || tagSaid[notif.id])) {
             return (
-              <div key={notif.id} className={cardClass}>
+              <div key={notif.id} data-alert={notif.id} tabIndex={-1} className={cardClass}>
                 {inner}
                 <div className="mt-3 pl-11">
                   {tagSaid[notif.id] ? (
@@ -228,6 +271,7 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
             return (
               <Link
                 key={notif.id}
+                data-alert={notif.id}
                 href={link.href}
                 onClick={() => { if (!notif.is_read) handleMarkRead(notif.id); }}
                 className={cardClass}
@@ -239,6 +283,7 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
           return (
             <button
               key={notif.id}
+              data-alert={notif.id}
               onClick={() => !notif.is_read && handleMarkRead(notif.id)}
               className={cardClass}
             >
@@ -247,6 +292,27 @@ export function NotificationsList({ userId, onUnread }: { userId: string; onUnre
           );
         })}
       </div>
+
+      {page.more && (
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            data-alerts-more
+            onClick={() => void showMore()}
+            disabled={moreBusy}
+            aria-busy={moreBusy}
+            className="inline-flex min-h-[44px] items-center justify-center rounded-full border-2 border-primary-200 bg-white px-6 text-[14px] font-bold text-primary-800 hover:border-primary-300 disabled:opacity-60 focus-neon"
+          >
+            {moreBusy ? "Loading…" : "Show more"}
+          </button>
+          {moreFailed && (
+            <p role="status" className="mt-2 text-[13px] text-primary-500">
+              Couldn&apos;t load more. Check your connection and try again.
+            </p>
+          )}
+        </div>
+      )}
+      {page.capped && <p className="mt-4 text-center text-[13px] text-primary-500">These are your latest {ALERTS_MAX} alerts.</p>}
     </div>
   );
 }

@@ -16,11 +16,12 @@ import { getMySeries, stopSeries } from "@/lib/queries/games";
 import { MySeries } from "./MySeries";
 import type { Game } from "@/types/game";
 import { gamePath } from "@/lib/utils/gamePath";
+import { EMPTY_GAMES, GAMES_VIEWS, YOU_HOST, gamesOf, splitGames, viewLabel, type GamesView } from "@/lib/dashboard/games";
 
 // The confirm step of "Delete game": fetched on the host's first tap.
 const DeleteGameSheet = dynamic(() => import("@/components/game/DeleteGameSheet").then((m) => m.DeleteGameSheet), { ssr: false });
 
-export type GamesView = "created" | "joined";
+export type { GamesView };
 
 /** Cancelled, or over: the past list. */
 const isPast = (g: Game) => g.status === "cancelled" || getGameStatus(g) === "expired";
@@ -31,8 +32,11 @@ const isPast = (g: Game) => g.status === "cancelled" || getGameStatus(g) === "ex
  * thing they actually opened the app to check — with past games
  * collapsed underneath. The lists come from the Me tab (useMeData), so
  * its Hosted and Joined numbers and this tab agree, and each opens its
- * list. A hosted game says how many players wait for an answer; a
- * joined one shows its host. Hosted leads with the repeats the host runs
+ * list. All (the first pill, lib/dashboard/games.ts) is both together,
+ * each game once: a host is a player of their own game, so a hosted game
+ * is in Joined as well. A hosted game says how many players wait for an
+ * answer (and "You host" in a list that mixes both); a joined one shows
+ * its host. All and Hosted lead with the repeats the host runs
  * (MySeries, read here: only the host's own), and a game of a repeat says
  * how it repeats; a cancelled game goes with the past ones. A hosted game
  * the host can delete has "Delete game" under it (lib/games/remove.ts
@@ -127,21 +131,11 @@ export function MyGames({
   // A game just deleted leaves both lists at once; the next read has neither.
   const hosted = useMemo(() => (gone.size ? createdGames.filter((g) => !gone.has(g.id)) : createdGames), [createdGames, gone]);
   const joined = useMemo(() => (gone.size ? joinedGames.filter((g) => !gone.has(g.id)) : joinedGames), [joinedGames, gone]);
-  const games = view === "created" ? hosted : joined;
+  const games = useMemo(() => gamesOf(view, hosted, joined), [view, hosted, joined]);
 
   // Split into upcoming (live + upcoming) and past.
   // Upcoming sorted by soonest kickoff, past by most-recent first.
-  const { upcoming, past } = useMemo(() => {
-    const up: Game[] = [];
-    const pastList: Game[] = [];
-    for (const g of games) {
-      if (isPast(g)) pastList.push(g);
-      else up.push(g);
-    }
-    up.sort((a, b) => `${a.date}T${a.start_time}`.localeCompare(`${b.date}T${b.start_time}`));
-    pastList.sort((a, b) => `${b.date}T${b.start_time}`.localeCompare(`${a.date}T${a.start_time}`));
-    return { upcoming: up, past: pastList };
-  }, [games]);
+  const { upcoming, past } = useMemo(() => splitGames(games, isPast), [games]);
 
   // Said over the page, above the bottom bar and the Ask button, wherever the list is scrolled to.
   const note = deletedNote ? (
@@ -168,35 +162,44 @@ export function MyGames({
   }
 
   // Past games played with other people have no Delete: one line says why (only once the database can delete at all).
-  const someBlocked = view === "created" && past.some((g) => removeOffer(g) === "blocked");
-  const onDelete = (g: Game) => (view === "created" && removeOffer(g) === "offer" ? () => setDeleting(g) : undefined);
+  // A hosted game is theirs to delete wherever it is listed (All and Joined list it too).
+  const mine = (g: Game) => !!userId && g.creator_id === userId;
+  const someBlocked = past.some((g) => mine(g) && removeOffer(g) === "blocked");
+  const onDelete = (g: Game) => (mine(g) && removeOffer(g) === "offer" ? () => setDeleting(g) : undefined);
+  // In Hosted every row is theirs, so none says so.
+  const row = (g: Game) => ({
+    host: !mine(g),
+    youHost: view !== "created" && mine(g),
+    waiting: mine(g) ? waiting.get(g.id) ?? 0 : 0,
+    repeats: g.series_id ? labels.get(g.series_id) ?? "Repeats" : null,
+    onDelete: onDelete(g),
+  });
 
   return (
     <div>
       {note}
-      {/* Sub-tabs (Created / Joined) — with counts */}
-      <div className="flex gap-2 mb-5">
-        {(["created", "joined"] as const).map((k) => {
+      {/* Sub-tabs (All / Hosted / Joined) with counts; All counts each game once. */}
+      <div className="flex flex-wrap gap-1.5 min-[360px]:gap-2 mb-5" data-games-views>
+        {GAMES_VIEWS.map((k) => {
           const active = view === k;
-          const count = k === "created" ? hosted.length : joined.length;
           return (
             <button
               key={k}
               aria-pressed={active}
               onClick={() => setView(k)}
-              className={`text-[13px] font-bold px-4 py-2 rounded-full border-2 transition-all focus-neon ${
+              className={`inline-flex items-center min-h-[44px] text-[13px] font-bold px-3 min-[360px]:px-4 rounded-full border-2 whitespace-nowrap tabular-nums transition-all focus-neon ${
                 active
                   ? "bg-primary-800 text-white border-primary-800"
                   : "text-primary-700 border-primary-200 bg-white hover:border-primary-300"
               }`}
             >
-              {k === "created" ? "Hosted" : "Joined"} ({count})
+              {viewLabel(k, hosted, joined)}
             </button>
           );
         })}
       </div>
 
-      {view === "created" && <MySeries series={mySeries} venues={venues} onStop={stop} />}
+      {view !== "joined" && <MySeries series={mySeries} venues={venues} onStop={stop} />}
 
       {games.length === 0 ? (
         <EmptyState view={view} />
@@ -212,7 +215,7 @@ export function MyGames({
               </div>
               <div className="space-y-3">
                 {upcoming.map((g) => (
-                  <GameRow key={g.id} game={g} highlight host={view === "joined"} waiting={view === "created" ? waiting.get(g.id) ?? 0 : 0} repeats={g.series_id ? labels.get(g.series_id) ?? "Repeats" : null} onDelete={onDelete(g)} />
+                  <GameRow key={g.id} game={g} highlight {...row(g)} />
                 ))}
               </div>
             </section>
@@ -226,7 +229,7 @@ export function MyGames({
               </p>
               {someBlocked && <p className="-mt-1 mb-3 text-[13px] leading-snug text-primary-500">{REMOVE_BLOCKED_LIST}</p>}
               <div className="space-y-3 opacity-80">
-                {past.map((g) => <GameRow key={g.id} game={g} host={view === "joined"} repeats={g.series_id ? labels.get(g.series_id) ?? "Repeats" : null} onDelete={onDelete(g)} />)}
+                {past.map((g) => <GameRow key={g.id} game={g} {...row(g)} waiting={0} />)}
               </div>
             </section>
           )}
@@ -255,6 +258,7 @@ function GameRow({
   game,
   highlight = false,
   host = false,
+  youHost = false,
   waiting = 0,
   repeats = null,
   onDelete,
@@ -262,6 +266,8 @@ function GameRow({
   game: Game;
   highlight?: boolean;
   host?: boolean;
+  /** Their own game, in a list that mixes hosted and joined. */
+  youHost?: boolean;
   waiting?: number;
   repeats?: string | null;
   onDelete?: () => void;
@@ -331,8 +337,11 @@ function GameRow({
             </span>
           </div>
 
-          {(host || waiting > 0) && (
+          {(host || youHost || waiting > 0) && (
             <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              {youHost && (
+                <span className="inline-flex items-center h-6 px-2.5 rounded-full bg-primary-100 text-primary-700 text-[12px] font-bold">{YOU_HOST}</span>
+              )}
               {host && (
                 <span className="flex items-center gap-1.5 min-w-0 text-[12px] text-primary-600">
                   <Avatar src={game.host_profile_image_url} name={game.host_name} size={20} />
@@ -373,19 +382,28 @@ function EmptyState({ view }: { view: GamesView }) {
       <div className="w-14 h-14 bg-accent-50 border border-accent-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
         <Trophy className="w-6 h-6 text-accent-600" />
       </div>
-      <p className="text-[15px] font-semibold text-primary-800 mb-1">
-        {view === "created" ? "No games yet" : "You haven't joined a game"}
-      </p>
-      <p className="text-[13px] text-primary-500 mb-6">
-        {view === "created" ? "Host your first game — invite the crew" : "Find one that fits your squad"}
-      </p>
-      <Link
-        href={view === "created" ? "/game/create" : "/games"}
-        className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold px-5 py-3 rounded-full transition-colors shadow-neon focus-neon"
-      >
-        <Plus className="w-4 h-4" strokeWidth={2.75} />
-        {view === "created" ? "Host a game" : "Browse games"}
-      </Link>
+      <p className="text-[15px] font-semibold text-primary-800 mb-1">{EMPTY_GAMES[view].title}</p>
+      <p className="text-[13px] text-primary-500 mb-6">{EMPTY_GAMES[view].line}</p>
+      <div className="flex flex-wrap justify-center gap-2">
+        {view !== "joined" && (
+          <Link
+            href="/game/create"
+            className="inline-flex items-center gap-2 bg-accent-500 hover:bg-accent-600 text-white text-sm font-bold px-5 py-3 rounded-full transition-colors shadow-neon focus-neon"
+          >
+            <Plus className="w-4 h-4" strokeWidth={2.75} />
+            Host a game
+          </Link>
+        )}
+        {view !== "created" && (
+          <Link
+            href="/games"
+            className={`inline-flex items-center gap-2 text-sm font-bold px-5 py-3 rounded-full transition-colors focus-neon ${view === "all" ? "border-2 border-primary-200 bg-white text-primary-800 hover:border-primary-300" : "bg-accent-500 hover:bg-accent-600 text-white shadow-neon"}`}
+          >
+            {view === "joined" && <Plus className="w-4 h-4" strokeWidth={2.75} />}
+            Browse games
+          </Link>
+        )}
+      </div>
     </div>
   );
 }

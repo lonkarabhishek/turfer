@@ -10,6 +10,7 @@ import { MedalTile, PassportNumbers, ReviewedList } from "@/components/profile/P
 import { FlauntMedals } from "@/components/profile/FlauntMedals";
 import { NotOwner } from "@/components/profile/NotOwner";
 import { ShareProfile } from "@/components/profile/ShareProfile";
+import { UsernameStreak } from "@/components/profile/StreakChip";
 import { MEDALS, STARTER_MEDALS } from "@/lib/profile/medals";
 import { medalLook } from "@/lib/profile/medalShapes";
 import { turfersMeaning, turfersWord } from "@/lib/profile/turfers";
@@ -21,7 +22,10 @@ import { loadPublicPassport, readPublicProfile } from "@/lib/profile/publicProfi
 // turfs, cities and sports, their best weekly streak, the medals they
 // earned and the turfs they reviewed (lib/profile/passport.ts
 // publicPassport: counts only, never where or when they played, or who
-// with). Under the name, for someone with a game, a row of big numbers as
+// with). Under the name, for someone with a game, the username with the
+// weekly streak that is alive now beside it (the fire emoji and a number
+// of weeks, from 2; a tap says "4-week streak: played 4 weeks in a row")
+// and a row of big numbers as
 // a social profile has: Games, Turfers (how many different players they
 // have played with, lib/profile/turfers.ts: a number only, never who and
 // never a list) and Medals. A profile with a medal is dressed in its top
@@ -123,7 +127,8 @@ export default async function PlayerProfilePage({ params }: Props) {
             {name}
             {verified && <VerifiedTick size="lg" className="ml-1.5 align-[-0.1em]" />}
           </h1>
-          <p className="mt-1 text-[15px] text-primary-500">@{u}</p>
+          {/* The weekly streak alive now, beside the username: a number only, the Passport's own (lib/profile/streak.ts). */}
+          <UsernameStreak username={u} current={counts?.streak ?? 0} />
           {stats.length > 0 && (
             <dl data-profile-stats className="mx-auto mt-4 mb-1 flex max-w-[300px] items-stretch justify-center divide-x divide-primary-200/80">
               {stats.map((st) => (

@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { gameEndsAt, isPlayed, istDay, playedGames, shortDay, weekDays, weekOf, type GameRow, type ReviewRow, type TurfRef } from "./history";
-import { streakNudge, streakOf, streakReachedOn, sundayWords } from "./streak";
+import { STREAK_SHOWN_FROM, streakLabel, streakNudge, streakOf, streakPlain, streakReachedOn, streakShown, sundayWords } from "./streak";
+import { CROWN_MAX, crownAngles, crownLabel, crownMedals, crownPoint } from "./crown";
 import { MEDALS, STARTER_MEDALS, bestFirst, isToolMedal, lockedShortlist, medalsOf, nextMedal, toGo, type MedalProgress } from "./medals";
 import { buildPassport, latestPlayedByTurf, publicPassport } from "./passport";
 import { playedHereShort, playedHereText } from "./playedHere";
@@ -229,7 +230,7 @@ test("passport: stamps, numbers, reviewed and review more, from played games onl
 
   // What the public may see: counts, earned medals, reviewed turfs; never a date or a place played.
   const pub = publicPassport(p);
-  assert.deepEqual(pub.numbers, { games: 5, hosted: 1, turfs: 4, cities: 2, sports: 3, reviews: 2, bestStreak: p.streak.best, turfers: null });
+  assert.deepEqual(pub.numbers, { games: 5, hosted: 1, turfs: 4, cities: 2, sports: 3, reviews: 2, bestStreak: p.streak.best, streak: p.streak.current, turfers: null });
   assert.deepEqual(pub.medals.map((m) => m.id).sort(), p.medals.filter((m) => m.earned).map((m) => m.id).sort());
   assert.deepEqual(pub.medals.map((m) => m.id), ["turfs-3", "sports-3", "first-game", "games-5", "first-host", "first-review"], "best first: Explorer and All-Rounder lead");
   assert.deepEqual(Object.keys(pub.medals[0]).sort(), ["art", "blurb", "id", "name"]);
@@ -344,4 +345,79 @@ test("played with: most games together first, names only from users, extras only
   assert.ok(before.every((p) => p.username === null && p.whatsapp === null), "before the migration: names and photos, nothing else");
   assert.equal(whatsappLink("+919800000003"), "https://wa.me/919800000003");
   assert.equal(spacedWhatsapp("+919800000003"), "+91 98000 00003");
+});
+
+test("the streak beside a username: the one alive now, from 2 weeks, and the Passport's own number", () => {
+  assert.equal(STREAK_SHOWN_FROM, 2, "the Passport's words call a run a streak from 2 weeks");
+  // Alive: a game this week, three weeks in a row.
+  const alive = [game("2026-10-28"), game("2026-10-21"), game("2026-10-14")];
+  const p = buildPassport({ userId: ME, games: alive, turfs: TURFS, reviews: [], since: null, now: NOW });
+  assert.equal(p.streak.current, 3);
+  assert.equal(streakShown(p.streak.current), 3);
+  assert.equal(publicPassport(p).numbers.streak, 3, "the public profile's number is the Passport's own");
+  assert.equal(publicPassport(p).numbers.streak, streakOf(playedGames(ME, alive, NOW), NOW).current, "from the one calculation");
+  // Alive through the week after the last game: no game this week yet, the run is still on.
+  const lastWeek = [game("2026-10-21"), game("2026-10-15"), game("2026-10-06")];
+  const still = buildPassport({ userId: ME, games: lastWeek, turfs: TURFS, reviews: [], since: null, now: THURSDAY });
+  assert.equal(streakShown(still.streak.current), 3);
+  assert.equal(publicPassport(still).numbers.streak, 3);
+  // Lapsed: a week with no game ends it. Nothing beside the username; the best streak stays what it was.
+  const lapsed = buildPassport({ userId: ME, games: [game("2026-10-12"), game("2026-10-05"), game("2026-09-28"), game("2026-09-21")], turfs: TURFS, reviews: [], since: null, now: NOW });
+  assert.equal(lapsed.streak.current, 0);
+  assert.equal(streakShown(lapsed.streak.current), 0);
+  assert.deepEqual([publicPassport(lapsed).numbers.streak, publicPassport(lapsed).numbers.bestStreak], [0, 4]);
+  // One week is not a streak yet ("You played this week"): nothing shows.
+  const one = buildPassport({ userId: ME, games: [game("2026-10-28")], turfs: TURFS, reviews: [], since: null, now: NOW });
+  assert.equal(one.streak.current, 1);
+  assert.equal(streakShown(one.streak.current), 0);
+  assert.equal(publicPassport(one).numbers.streak, 1, "the number itself is the Passport's; the threshold is the chip's");
+  // The threshold, and what is not a number of weeks.
+  assert.deepEqual([0, 1, 2, 3, 26].map(streakShown), [0, 0, 2, 3, 26]);
+  for (const bad of [undefined, null, "4", 2.5, NaN, -3, Infinity]) assert.equal(streakShown(bad), 0);
+  // Never played: nothing.
+  const none = buildPassport({ userId: ME, games: [], turfs: [], reviews: [], since: null, now: NOW });
+  assert.equal(streakShown(publicPassport(none).numbers.streak), 0);
+  // The words: the chip's name is the Passport's own title for the run; a visitor is told a plain fact.
+  assert.equal(streakLabel(4), "4-week streak");
+  assert.equal(streakLabel(3), streakNudge(p.streak, 3, NOW)?.title, "the same words the player's own streak card leads with");
+  assert.equal(streakPlain(4), "4-week streak: played 4 weeks in a row");
+  assert.doesNotMatch(streakPlain(4), /keep|lose|hurry|last day|!/i, "a visitor is never shown the player's own nudge, and nobody is hurried");
+});
+
+test("the medals on the Me card: the best six, in an arc over the photo", () => {
+  const earned = ["games-25", "turfs-3", "sports-3", "first-game", "games-5", "first-host", "first-review", "tool-toss-1"];
+  assert.equal(CROWN_MAX, 6);
+  assert.deepEqual(crownMedals(earned).map((m) => m.id), earned.slice(0, 6), "the first six of the earned ids, which arrive best first");
+  assert.deepEqual(crownMedals(["first-game", "games-5"]).map((m) => m.name), ["First Whistle", MEDALS.find((m) => m.id === "games-5")?.name], "fewer than four: what they have");
+  assert.deepEqual(crownMedals([]), [], "none: nothing extra on the card");
+  assert.deepEqual(crownMedals(["not-a-medal", "first-game", "first-game"]).map((m) => m.id), ["first-game"], "a medal this build doesn't know is left out, and none is drawn twice");
+  // Where they sit: one at the top, then out to either side, the better one on the left.
+  assert.deepEqual(crownAngles(0), []);
+  assert.deepEqual(crownAngles(1), [0]);
+  assert.deepEqual(crownAngles(2), [-15, 15]);
+  assert.deepEqual(crownAngles(3), [0, -30, 30]);
+  assert.deepEqual(crownAngles(4), [-15, 15, -45, 45]);
+  assert.deepEqual(crownAngles(5), [0, -30, 30, -60, 60]);
+  assert.deepEqual(crownAngles(6), [-15, 15, -45, 45, -75, 75]);
+  assert.deepEqual(crownAngles(9), crownAngles(6), "never more than six");
+  for (let n = 1; n <= 6; n++) {
+    const a = crownAngles(n);
+    assert.equal(a.reduce((x, y) => x + y, 0), 0, `${n}: even on both sides`);
+    assert.equal(new Set(a).size, n, "no two in one place");
+    // Neighbours 30 degrees apart on a 72 px arc are 37 px from centre to centre: 34 px discs never touch.
+    const sorted = [...a].sort((x, y) => x - y);
+    for (let i = 1; i < n; i++) {
+      const p = crownPoint(sorted[i - 1], 72);
+      const q = crownPoint(sorted[i], 72);
+      assert.ok(Math.hypot(p.x - q.x, p.y - q.y) > 35, `${n}: medals ${i} and ${i + 1} don't overlap`);
+    }
+    // And every one is clear of the photo (48 px, with its 4 px ring) and inside a 288 px card.
+    for (const deg of a) {
+      const p = crownPoint(deg, 72);
+      assert.ok(Math.hypot(p.x, p.y) - 17 >= 52 && Math.abs(p.x) + 17 <= 144 && p.y - 17 >= 0, `${n}: ${deg} degrees is clear of the photo, on the card and above its centre`);
+    }
+  }
+  assert.deepEqual(crownPoint(0, 72), { x: 0, y: 72 });
+  assert.equal(crownLabel(crownMedals(["first-game"])), "Your medal: First Whistle. Open your medals");
+  assert.match(crownLabel(crownMedals(earned)), /^Your top medals: .+, .+\. Open your medals$/);
 });
