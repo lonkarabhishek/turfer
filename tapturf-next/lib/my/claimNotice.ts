@@ -79,6 +79,12 @@ export const BOOKING_TO_PLAYER = ["booking_confirmed", "booking_declined", "book
 /** A tagged player is asked, once a game is over, whether they played (lib/games/played.ts). */
 export const TAG_PLAYED_ASK = "game_tag_played_ask";
 
+/**
+ * An organiser is told once that their name now shows on the tournaments they started
+ * (20261123_tournament_host.sql: only organisers with a public profile, from before that file).
+ */
+export const TOURNAMENT_HOST_SHOWN = "tournament_host_shown";
+
 /** Where tapping a notification goes, and what its small link says: a game (by its id: the page 308s to its readable URL, lib/utils/gamePath.ts), a claim decision's turf, or a booking request. Null: nowhere (it marks read). */
 export function notificationLink(type: string, metadata: unknown): { href: string; label: string | null } | null {
   const m = metadata && typeof metadata === "object" && !Array.isArray(metadata) ? (metadata as Record<string, unknown>) : {};
@@ -91,6 +97,8 @@ export function notificationLink(type: string, metadata: unknown): { href: strin
   if ((BOOKING_TO_PLAYER as readonly string[]).includes(type)) return { href: "/dashboard?tab=requests", label: "Your requests" };
   // "Were you at Football on Sat? Confirm it for your Passport" (20261118_game_tags_shown.sql): the card is on the Passport tab.
   if (type === TAG_PLAYED_ASK) return { href: "/dashboard?tab=passport", label: "Open your Passport" };
+  // The way to hide the name is the profile's own switch.
+  if (type === TOURNAMENT_HOST_SHOWN) return { href: "/dashboard?tab=profile#find-and-tag", label: "Open that switch" };
   // Older rows stored either { gameId } or { game_id }.
   const game = typeof m.gameId === "string" ? m.gameId : typeof m.game_id === "string" ? m.game_id : null;
   return game ? { href: gamePath({ id: game }), label: null } : null;

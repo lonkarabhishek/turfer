@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BOOKING_TO_OWNER, BOOKING_TO_PLAYER, CLAIM_APPROVED, CLAIM_REJECTED, KIND_LINE_MAX, TAG_PLAYED_ASK, claimDecisionNotice, kindLine, notificationLink } from "./claimNotice";
+import { BOOKING_TO_OWNER, BOOKING_TO_PLAYER, CLAIM_APPROVED, CLAIM_REJECTED, KIND_LINE_MAX, TAG_PLAYED_ASK, TOURNAMENT_HOST_SHOWN, claimDecisionNotice, kindLine, notificationLink } from "./claimNotice";
 import { BOOKINGS_LINE, claimCopyProblem } from "../turfPage/claimPrompts";
 
 test("approved: their turf is on myTapturf now", () => {
@@ -92,4 +92,10 @@ test("notificationLink: did you play? opens the Passport; an update from a host 
   const gameId = "dddddddd-dddd-4ddd-8ddd-000000000001";
   assert.deepEqual(notificationLink("game_update_posted", { gameId, updateId: "x" }), { href: `/game/${gameId}`, label: null });
   assert.deepEqual(notificationLink("game_tagged", { gameId, tagId: "x", shown: true }), { href: `/game/${gameId}`, label: null });
+});
+
+test("notificationLink: an organiser told their name now shows goes to the switch that hides it", () => {
+  assert.equal(TOURNAMENT_HOST_SHOWN, "tournament_host_shown");
+  assert.deepEqual(notificationLink(TOURNAMENT_HOST_SHOWN, { code: "abcdefghijkl" }), { href: "/dashboard?tab=profile#find-and-tag", label: "Open that switch" });
+  assert.deepEqual(notificationLink(TOURNAMENT_HOST_SHOWN, null), { href: "/dashboard?tab=profile#find-and-tag", label: "Open that switch" });
 });

@@ -222,7 +222,9 @@ const SECTIONS: LegalSection[] = [
           is needed to run one. If you are signed in, the tournament is kept with your account so you can
           manage it from another phone. A tournament you start while signed in shows your name, photo and a
           link to your profile on its page if your profile is public; turn off &ldquo;Let others find and
-          tag me&rdquo; on the Me tab and they stop showing there within a couple of minutes. Your number
+          tag me&rdquo; on the Me tab and they stop showing there within a couple of minutes. This also
+          applies to tournaments started before 23 November 2026, when this page said your name did not go
+          with them: if yours is one, we sent you a notice in the app. Your number
           and email never go with it, and if your profile is not public only TapTurf&rsquo;s team sees which
           account runs it. Nothing about the people following a tournament is
           kept: opening its page adds one to its view count (and, once a day per browser, to its count of

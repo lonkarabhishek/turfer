@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { AlarmClock, Bell, CalendarCheck, CalendarClock, CalendarPlus, CalendarX, Check, ChevronRight, Hourglass, Info, MapPin, Megaphone, Stamp, Store, UserCheck, UserMinus, UserPlus, XCircle } from "lucide-react";
+import { AlarmClock, Bell, CalendarCheck, CalendarClock, CalendarPlus, CalendarX, Check, ChevronRight, Hourglass, Info, MapPin, Megaphone, Stamp, Store, Trophy, UserCheck, UserMinus, UserPlus, XCircle } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { quietToken } from "@/lib/account/client";
 import { getUserNotifications, markAsRead, markAllAsRead } from "@/lib/queries/notifications";
 import { answerTag } from "@/lib/queries/games";
 import { tagButtons } from "@/lib/games/confirmed";
-import { CLAIM_APPROVED, CLAIM_REJECTED, TAG_PLAYED_ASK, notificationLink } from "@/lib/my/claimNotice";
+import { CLAIM_APPROVED, CLAIM_REJECTED, TAG_PLAYED_ASK, TOURNAMENT_HOST_SHOWN, notificationLink } from "@/lib/my/claimNotice";
 import type { Notification } from "@/types/notification";
 
 const ICON_MAP: Record<string, typeof Bell> = {
@@ -28,6 +28,8 @@ const ICON_MAP: Record<string, typeof Bell> = {
   // 20261118: after a game a tagged player never answered about, a pointer to the Passport's "Did you play?"; an update from a game's host.
   [TAG_PLAYED_ASK]: Stamp,
   game_update_posted: Megaphone,
+  // 20261123_tournament_host.sql: an organiser's name now shows on the tournaments they started.
+  [TOURNAMENT_HOST_SHOWN]: Trophy,
   // A turf claim TapTurf decided (20261106_owner_claims_clarity.sql admin_answer_owner_claim).
   [CLAIM_APPROVED]: Store,
   [CLAIM_REJECTED]: Info,
