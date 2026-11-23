@@ -24,7 +24,7 @@ import {
   starterWanted,
   type LiveRow,
 } from "@/lib/live/server";
-import { LIVE_MAX_BODY_BYTES, type LiveError, type LiveGetResponse } from "@/lib/live/types";
+import { LIVE_CDN_FRESH_S, LIVE_CDN_STALE_S, LIVE_MAX_BODY_BYTES, type LiveError, type LiveGetResponse } from "@/lib/live/types";
 import { recordTournamentResult } from "@/lib/tournament/server";
 
 // One live scorecard link (lib/live/types.ts has the whole flow).
@@ -49,12 +49,13 @@ const limits = createLiveLimiter();
 const STOP_MAX_BYTES = 1_000;
 
 const NO_STORE = { "Cache-Control": "no-store" };
-// Vercel's CDN keeps a copy 2 s and serves it stale for 8 more while
+// Vercel's CDN keeps a copy 4 s and serves it stale for 5 more while
 // one request refreshes it (60 if the function fails); browsers keep
 // nothing. revalidateTag clears the data cache only, so followers lag a
-// write by up to this plus one poll.
+// write by up to this plus one poll. The numbers are lib/live/types.ts's,
+// kept under the poll so a lone follower is never handed its own last copy.
 const LIVE_HEADERS = {
-  "Cache-Control": "public, max-age=0, s-maxage=2, stale-while-revalidate=8, stale-if-error=60",
+  "Cache-Control": `public, max-age=0, s-maxage=${LIVE_CDN_FRESH_S}, stale-while-revalidate=${LIVE_CDN_STALE_S}, stale-if-error=60`,
   "X-Robots-Tag": "noindex",
 };
 // Codes that fail the tag check never become valid: keep the 404 a day.

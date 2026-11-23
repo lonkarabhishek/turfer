@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { aboutFacts, aboutOf, indiaDate, progressWords, QUIET_AFTER_DAYS, runningWords, scoredLiveCount, scoredLiveWords, stampWords, startedDay, startVerb, updatedWords } from "./about";
 import { makeFixtures } from "./fixtures";
 import { resolve } from "./standings";
-import type { Fixture, LiveNow, LiveResult, ManualResult, Settings } from "./types";
+import { TOURNAMENT_CDN_FRESH_S, TOURNAMENT_CDN_STALE_S, TOURNAMENT_LIVE_POLL_MS, TOURNAMENT_POLL_MS, type Fixture, type LiveNow, type LiveResult, type ManualResult, type Settings } from "./types";
 
 /** An India clock time as an instant: at("2026-11-16", "18:02") is 6:02 pm on 16 Nov in India. */
 const at = (day: string, time = "12:00") => Date.parse(`${day}T${time}:00+05:30`);
@@ -186,4 +186,12 @@ test("no hurry, no invented number, never 'book'", () => {
     const text = [...aboutFacts(a, false), a.startedBy, a.progress, a.updated?.text ?? "", a.updated?.stamp ?? ""].join(" | ");
     assert.doesNotMatch(text, /\bbook|hurry|fast|only|left|last chance|don't miss|popular|trending|!/i, text);
   }
+});
+
+test("the CDN's copy of a tournament runs out before a lone follower's next poll", () => {
+  // Fresh + stale under the faster poll: a page with one follower is never handed the copy its own last poll made.
+  assert.ok((TOURNAMENT_CDN_FRESH_S + TOURNAMENT_CDN_STALE_S) * 1000 < TOURNAMENT_LIVE_POLL_MS);
+  assert.ok(TOURNAMENT_LIVE_POLL_MS < TOURNAMENT_POLL_MS);
+  assert.equal(TOURNAMENT_LIVE_POLL_MS, 15_000);
+  assert.equal(TOURNAMENT_POLL_MS, 60_000);
 });

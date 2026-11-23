@@ -45,10 +45,18 @@ export const MAX_OVERS = 50;
 export const MAX_WICKETS = 30;
 export const MAX_ROUND = 99;
 
-/** Followers poll this often while a match is being scored live and the page is on screen... */
-export const TOURNAMENT_LIVE_POLL_MS = 10_000;
-/** ...and this often otherwise. Hidden pages do not poll. */
-export const TOURNAMENT_POLL_MS = 30_000;
+/** Followers poll this often while a match is being scored live and the page is on screen (15 s, not the 10 s it was: 23 Nov 2026, as LIVE_POLL_MS)... */
+export const TOURNAMENT_LIVE_POLL_MS = 15_000;
+/** ...and this often otherwise (it was 30 s). Hidden pages do not poll. */
+export const TOURNAMENT_POLL_MS = 60_000;
+/**
+ * The CDN's copy of GET /api/tournament/<code>: fresh this many seconds,
+ * then served this many more while one request refreshes it. Their sum
+ * stays under TOURNAMENT_LIVE_POLL_MS (about.test.ts), so a page with one
+ * follower is never handed the copy its own last poll made.
+ */
+export const TOURNAMENT_CDN_FRESH_S = 5;
+export const TOURNAMENT_CDN_STALE_S = 8;
 export const TOURNAMENT_POLL_TIMEOUT_MS = 8_000;
 
 /** League (round robin, once or twice), a two-team series, or a three-team series. */

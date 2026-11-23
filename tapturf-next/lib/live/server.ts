@@ -373,7 +373,7 @@ export function readLiveViews(code: string): Promise<ViewCount | null> {
  * After an accepted write or stop. { expire: 0 } is a hard expiry: the
  * next read refills in the foreground, where 'max' would serve the old
  * score once more. It clears the data cache only; the CDN copy of
- * GET /api/live/<code> (s-maxage 2) carries no tag and runs out by itself.
+ * GET /api/live/<code> (s-maxage LIVE_CDN_FRESH_S) carries no tag and runs out by itself.
  */
 export function purgeLive(code: string): void {
   try {
