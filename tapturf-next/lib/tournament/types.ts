@@ -156,8 +156,24 @@ export type LiveNow = {
   result: LiveResult | null;
 };
 
-/** GET /api/tournament/<code>. live: per fixture id, for the fixtures scored live. */
-export type TournamentGetResponse = { tournament: Tournament; live: Record<string, LiveNow>; at: number };
+/**
+ * Who started the tournament, as their public profile shows them: only
+ * for an organiser who was signed in and has a public profile right now
+ * ("Let others find and tag me" on), asked again on every read
+ * (public.tournament_host, 20261123_tournament_host.sql; lib/tournament/host.ts).
+ * Never an account id, a number or an email. medal: their best medal's id
+ * (lib/profile/medals.ts) with how many they have, or null and 0.
+ */
+export type TournamentHost = { username: string; name: string; photo: string | null; verified: boolean; medal: string | null; medals: number };
+
+/**
+ * GET /api/tournament/<code>. live: per fixture id, for the fixtures scored
+ * live. host: who started it; null when there is nobody to name (no
+ * account, or no public profile); left out when it could not be asked
+ * (before 20261123_tournament_host.sql, or a read that failed), which also
+ * names nobody.
+ */
+export type TournamentGetResponse = { tournament: Tournament; live: Record<string, LiveNow>; at: number; host?: TournamentHost | null };
 
 /** POST /api/tournament body. fixtures: as the organiser's browser made them (lib/tournament/fixtures.ts); left out, the server makes them. */
 export type CreateBody = {

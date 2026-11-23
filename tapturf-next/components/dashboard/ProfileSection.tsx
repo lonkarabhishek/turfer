@@ -323,7 +323,7 @@ export function ProfileSection({ user, onEditPhoto }: { user: AppUser; onEditPho
             on={taggable}
             disabled={!username.trim()}
             onChange={(on) => setDraft((d) => ({ ...d, taggable: on }))}
-            detail="Friends who score live matches can tag you as a player. Off also hides your profile page and the “Managed by” line on turfs you run."
+            detail="Friends who score live matches can tag you as a player. Off also hides your profile page, the “Managed by” line on turfs you run and your name on tournaments you started."
           />
           {user.username && user.taggable !== false && (
             <Link href={`/u/${user.username}`} className="inline-block mt-2 text-sm font-semibold text-accent-700 underline underline-offset-2">

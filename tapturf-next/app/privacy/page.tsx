@@ -220,8 +220,11 @@ const SECTIONS: LegalSection[] = [
           live, its live link&rsquo;s code and its result when it ends. We also keep a one-way hash of your
           network address (never the address itself) so one network cannot make tournaments in bulk. No login
           is needed to run one. If you are signed in, the tournament is kept with your account so you can
-          manage it from another phone; your own name, number or email does not go with it, and only
-          TapTurf&rsquo;s team sees which account runs it. Nothing about the people following a tournament is
+          manage it from another phone. A tournament you start while signed in shows your name, photo and a
+          link to your profile on its page if your profile is public; turn off &ldquo;Let others find and
+          tag me&rdquo; on the Me tab and they stop showing there within a couple of minutes. Your number
+          and email never go with it, and if your profile is not public only TapTurf&rsquo;s team sees which
+          account runs it. Nothing about the people following a tournament is
           kept: opening its page adds one to its view count (and, once a day per browser, to its count of
           viewers), which identifies nobody.
         </p>
@@ -372,8 +375,10 @@ const SECTIONS: LegalSection[] = [
         </p>
         <p>
           <strong>Live tournaments.</strong> Anyone with a tournament&rsquo;s link can see it, team names and
-          results included. Like live links, tournaments are not listed anywhere on TapTurf and are hidden from
-          search engines. Take it down from its page at any time, or email <Email /> and we will.
+          results included, and who started it when that person&rsquo;s profile is public. A live score that is
+          one of a tournament&rsquo;s matches names the tournament and links to it, as the tournament links to
+          that score, so anyone with either link can reach the other. Like live links, tournaments are not
+          listed anywhere on TapTurf and are hidden from search engines. Take it down from its page at any time, or email <Email /> and we will.
         </p>
         <p>
           <strong>Your profile.</strong> If you pick a username, your username, name, photo and join month are

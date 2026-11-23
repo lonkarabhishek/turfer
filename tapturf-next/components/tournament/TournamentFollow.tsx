@@ -10,13 +10,16 @@ import { CONTACT_EMAIL } from "@/lib/contact";
 import { formatNrr, formatOvers } from "@/lib/cricket/overs";
 import { viewsLabel } from "@/lib/live/views";
 import { turfPath } from "@/lib/utils/turfPath";
+import { aboutOf, scoredLiveCount } from "@/lib/tournament/about";
 import { dayLabel, fixtureTitle, groupFixtures, rangeLabel, timeLabel } from "@/lib/tournament/format";
+import { hostNote, sameHost } from "@/lib/tournament/host";
 import { formatLabel, resolve, type Resolution, type Resolved } from "@/lib/tournament/standings";
 import { loadStore, newSecret, saveEntry, saveHandoff } from "@/lib/tournament/store";
 import { TOURNAMENT_LIVE_POLL_MS, TOURNAMENT_POLL_MS, TOURNAMENT_POLL_TIMEOUT_MS, tournamentUrl, type Op, type Team, type TournamentGetResponse } from "@/lib/tournament/types";
 import { changeTournament, claimTournament, errorText, readTournament } from "./api";
-import { FixtureSheet, ManageRow, ResultSheet, SettingsSheet, TeamSheet } from "./OrganiserSheets";
+import { FixtureSheet, HostLine, ManageRow, ResultSheet, SettingsSheet, TeamSheet } from "./OrganiserSheets";
 import { ShareSheet } from "./ShareSheet";
+import { TournamentAbout } from "./TournamentAbout";
 import { useTournamentViews } from "./useTournamentViews";
 
 const TOOL = "live_tournament";
@@ -60,7 +63,10 @@ function scoreOf(r: Resolved, side: "a" | "b"): { score: string; overs: string }
  * with their score, kept up to date by polling GET /api/tournament/<code>
  * while the page is on screen (every TOURNAMENT_LIVE_POLL_MS with a match
  * live, else TOURNAMENT_POLL_MS; never while hidden). Followers need no
- * sign-in. In the organiser's browser (it holds the secret) it is also
+ * sign-in. The masthead's foot says who started it (only an organiser
+ * with a public profile, as the server's read and every poll say:
+ * lib/tournament/host.ts) and when, how long it has been running and when
+ * it last changed (TournamentAbout). In the organiser's browser (it holds the secret) it is also
  * where they run it: results, live scoring, fixtures, teams and settings.
  * On a phone the parts are tabs; on a wide screen the table and the
  * fixtures sit side by side.
@@ -77,20 +83,35 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
   const [fresh, setFresh] = useState(false);
   const latest = useRef(initial);
   const views = useTournamentViews(code);
+  // "2 h ago" is worked out from the server's own clock on the first render (so it hydrates as served), then this device's, minute by minute.
+  const [now, setNow] = useState(initial.at);
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const first = setTimeout(tick, 0);
+    const every = setInterval(tick, 60_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(every);
+    };
+  }, []);
 
   const t = data.tournament;
   const res: Resolution = useMemo(() => resolve(t, data.live), [t, data.live]);
   const anyLive = res.fixtures.some((r) => r.state === "live" && !r.live?.closed);
   const live = useRef(anyLive);
   live.current = anyLive;
+  const about = useMemo(
+    () => aboutOf({ createdAt: t.createdAt, updatedAt: t.updatedAt, starts: t.settings.starts, ends: t.settings.ends, played: res.played, total: res.total, scoredLive: scoredLiveCount(res.fixtures) }, now),
+    [t.createdAt, t.updatedAt, t.settings.starts, t.settings.ends, res, now],
+  );
   const organiser = !!secret;
   const url = tournamentUrl(typeof window === "undefined" ? "https://www.tapturf.in" : window.location.origin, code);
 
   const take = useCallback((next: TournamentGetResponse) => {
     const cur = latest.current;
-    // The highest rev wins; the live scores can move without one.
+    // The highest rev wins; the live scores, and who is named as starting it, can move without one.
     if (next.tournament.rev < cur.tournament.rev) return;
-    if (next.tournament.rev === cur.tournament.rev && JSON.stringify(next.live) === JSON.stringify(cur.live)) return;
+    if (next.tournament.rev === cur.tournament.rev && JSON.stringify(next.live) === JSON.stringify(cur.live) && sameHost(next.host, cur.host)) return;
     latest.current = next;
     setData(next);
   }, []);
@@ -300,9 +321,7 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
         </div>
         <div className="relative mt-4">
           <div className="flex items-baseline justify-between text-[13px]">
-            <span className="font-semibold">
-              {res.played} of {res.total} played
-            </span>
+            <span className="font-semibold">{about?.progress ?? `${res.played} of ${res.total} played`}</span>
             {views !== null && views > 0 && <span className="text-white/60 tabular-nums">{viewsLabel(views)}</span>}
           </div>
           <div className="mt-1.5 h-1.5 rounded-full bg-white/15 overflow-hidden" aria-hidden>
@@ -314,6 +333,7 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
             <Crown className="w-5 h-5" aria-hidden /> {champion ? `Champions: ${champion.name}` : "Title shared"}
           </p>
         )}
+        {about && <TournamentAbout about={about} host={data.host ?? null} onProfile={() => trackTool("tool_cta_clicked", TOOL, { href: "/u" })} />}
       </header>
 
       {trouble && (
@@ -462,6 +482,7 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
                   </p>
                 )}
               </div>
+              <HostLine note={hostNote(data.host, user ? { username: user.username, taggable: user.taggable } : null)} named={!!data.host} />
             </section>
           )}
         </div>
@@ -606,6 +627,8 @@ function FixtureCard({ r, title, teamOf, organiser, onResult, onEdit, onScore }:
   const stalled = r.state === "live" && r.live?.closed;
   const playable = r.home !== null && r.away !== null;
   const canScore = organiser && playable && !f.result && (r.state === "scheduled" || stalled || r.live?.status === "off");
+  // The fixture's live scorecard is there to open: being scored, stopped part of the way, or finished with the result it gave.
+  const hasCard = !!f.live && (live || stalled || (r.state === "done" && r.source === "live"));
   return (
     <article className={`rounded-2xl border bg-white p-3.5 ${live ? "border-red-600/70" : "border-primary-200"}`}>
       <div className="flex items-center gap-2 text-[12px] text-primary-500">
@@ -640,11 +663,11 @@ function FixtureCard({ r, title, teamOf, organiser, onResult, onEdit, onScore }:
       {r.state === "done" && r.text && <p className="mt-2 text-[13px] font-semibold text-accent-700">{r.text}</p>}
       {live && r.live?.headline && r.live.a && r.live.b && <p className="mt-2 text-[13px] text-primary-600 line-clamp-2">{r.live.headline}</p>}
       {stalled && <p className="mt-2 text-[13px] text-amber-800">The live scorecard stopped updating.</p>}
-      {(f.live && (live || (r.state === "done" && r.source === "live"))) || (organiser && playable) ? (
+      {hasCard || (organiser && playable) ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {f.live && (live || (r.state === "done" && r.source === "live")) && (
+          {hasCard && (
             <Link href={`/live/${f.live}`} className={`inline-flex items-center gap-1 h-9 px-3 rounded-full text-[13px] font-bold ${live ? "bg-red-600 text-white" : "bg-primary-100 text-primary-800"}`}>
-              {live ? "Watch live" : "Scorecard"} <ArrowRight className="w-3.5 h-3.5" aria-hidden />
+              {live ? "Watch live" : stalled ? "Scorecard so far" : "Scorecard"} <ArrowRight className="w-3.5 h-3.5" aria-hidden />
             </Link>
           )}
           {canScore && (

@@ -26,6 +26,9 @@
     "lib/tournament/codes.test.ts",
     "lib/tournament/read.test.ts",
     "lib/admin/tournaments.test.ts",
-    "lib/tournament/format.test.ts"
+    "lib/tournament/format.test.ts",
+    "lib/tournament/about.test.ts",
+    "lib/tournament/host.test.ts",
+    "lib/tournament/scorecard.test.ts"
   ]
 }

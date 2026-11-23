@@ -10,8 +10,10 @@ import { MAX_TRACKED, windowCounter } from "../limits";
 import { accountRpcIfThere } from "../account/server";
 import { later } from "../account/route";
 import { mintTournamentCode } from "./codes";
+import { HOST_UNKNOWN, hostCopyFresh, toHostRead, type HostRead } from "./host";
 import { liveNowOf, liveResultOf, sameLiveResult } from "./live";
 import { opData, toMine, toTournament } from "./read";
+import { toLiveTournament, type LiveTournament } from "./scorecard";
 import type { CreateInput } from "./payload";
 import type { LiveNow, LiveResult, MineItem, Op, Tournament, TournamentError, TournamentGetResponse } from "./types";
 
@@ -101,6 +103,115 @@ export function purgeTournament(code: string): void {
   }
 }
 
+/** Before 20261123_tournament_host.sql the function is not there: left alone a minute per instance. */
+let hostOffUntil = 0;
+
+/**
+ * Who started it, straight from the database (public.tournament_host):
+ * someone only when the organiser was signed in and has a public profile
+ * at this moment. Never throws: a database without the function, a
+ * refusal or a failed read is "could not be asked", which names nobody,
+ * so a name is never shown on the strength of a read that didn't happen.
+ */
+async function readHost(code: string): Promise<HostRead> {
+  const key = tournamentKey();
+  if (!key || Date.now() < hostOffUntil) return HOST_UNKNOWN;
+  try {
+    const { data, error } = await createReadOnlyClient().rpc("tournament_host", { p_key: key, p_code: code });
+    if (error) {
+      if (missingFn(error.code)) hostOffUntil = Date.now() + 60_000;
+      else console.warn("tournament: host read failed", code, error.code, error.message);
+      return HOST_UNKNOWN;
+    }
+    return toHostRead(data);
+  } catch (e) {
+    console.warn("tournament: host read threw", code, e);
+    return HOST_UNKNOWN;
+  }
+}
+
+/**
+ * The same from Next's data cache, beside the tournament's own copy: 30 s,
+ * and the tournament's tag, so the organiser's changes (and the account
+ * keeping it) refresh it. The switch that makes a profile public is asked
+ * by every read and nothing purges this copy when it is turned off, so
+ * the copy's age is the promise: the cache hands back a copy past its 30 s
+ * while it fetches another behind it, however long nobody asked, and one
+ * older than HOST_COPY_MAX_MS is never shown; the database is asked there
+ * and then instead. While a page is being followed that is one read per
+ * 30 s; after a quiet spell, one extra.
+ */
+export async function getTournamentHost(code: string): Promise<HostRead> {
+  const read = async () => ({ ...(await readHost(code)), at: Date.now() });
+  try {
+    const copy = await unstable_cache(read, ["tournament-host", code], { revalidate: 30, tags: [`tournament:${code}`] })();
+    if (hostCopyFresh(copy.at, Date.now())) return { known: copy.known === true, host: copy.host ?? null };
+  } catch (e) {
+    console.warn("tournament: host copy failed", code, e);
+  }
+  return readHost(code);
+}
+
+/* ------------------------------------------------------------------ */
+/* A live scorecard's tournament                                       */
+/* ------------------------------------------------------------------ */
+
+/** Before 20261123_tournament_host.sql the function is not there: not asked again for 10 minutes per instance, and never kept as "no tournament". */
+let bannerOffUntil = 0;
+class BannerOff extends Error {}
+
+async function readLiveTournament(liveCode: string): Promise<LiveTournament | null> {
+  const key = tournamentKey();
+  if (!key || Date.now() < bannerOffUntil) throw new BannerOff();
+  const { data, error } = await createReadOnlyClient().rpc("live_tournament", { p_key: key, p_live_code: liveCode });
+  if (error) {
+    if (missingFn(error.code)) {
+      bannerOffUntil = Date.now() + 10 * 60_000;
+      throw new BannerOff();
+    }
+    // Thrown, so the data cache keeps its last copy instead of "no tournament" (readTournament does the same).
+    throw new Error(`live tournament read failed: ${error.code} ${error.message}`);
+  }
+  if ((data as { r?: unknown } | null)?.r === "unavailable") throw new Error("live tournament read: unavailable");
+  return toLiveTournament(data);
+}
+
+/**
+ * The tournament a live scorecard is a match of (public.live_tournament),
+ * for the banner on /live/<code>; null for a scorecard that is no
+ * tournament's, and whenever it can't be said (no function yet, a failed
+ * read): the scorecard then looks as it always did. Never throws.
+ *
+ * Read by the scorecard page's server render only (never by a poll), from
+ * the data cache in two steps, so a page view is not a database read.
+ * Which tournament, by the live code: 5 minutes, purged when a fixture is
+ * linked to that code (updateTournament), so a scorecard that is no
+ * tournament's costs one small read per 5 minutes it is opened in. Then
+ * the answer itself under the tournament's own tag: 30 s, and purged by
+ * every change to that tournament (a result, a rename, a fixture taken
+ * out or unlinked, the tournament taken down) exactly as its page is.
+ */
+export async function getLiveTournament(liveCode: string): Promise<LiveTournament | null> {
+  try {
+    const read = () => readLiveTournament(liveCode);
+    const first = await unstable_cache(read, ["live-tournament", liveCode], { revalidate: 300, tags: [`live-tournament:${liveCode}`] })();
+    if (!first) return null;
+    return await unstable_cache(read, ["live-tournament", liveCode, first.code], { revalidate: 30, tags: [`tournament:${first.code}`] })();
+  } catch (e) {
+    if (!(e instanceof BannerOff)) console.warn("tournament: live tournament read failed", liveCode, e);
+    return null;
+  }
+}
+
+/** A fixture was just linked to this live code: its scorecard's "no tournament" copy goes. */
+function purgeLiveTournament(liveCode: string): void {
+  try {
+    revalidateTag(`live-tournament:${liveCode}`, { expire: 0 });
+  } catch (e) {
+    console.warn(`revalidateTag(live-tournament:${liveCode}) failed`, e);
+  }
+}
+
 /** Live results this instance already sent for a code and rev, so a page read does not send one again on every poll. */
 const healed = new Set<string>();
 
@@ -142,8 +253,12 @@ async function liveOf(t: Tournament, f: Tournament["fixtures"][number], now: num
 const LIVE_READS = 40;
 
 /**
- * What GET /api/tournament/<code> serves: the tournament and, for each
- * fixture scored live without a hand result, its scorecard as it stands.
+ * What GET /api/tournament/<code> serves: the tournament, for each
+ * fixture scored live without a hand result its scorecard as it stands,
+ * and who started it when that can be said (getTournamentHost; not asked
+ * for one taken down). The page's first render and every poll carry the
+ * organiser, so an open page drops a name that is no longer public at its
+ * next poll.
  * fresh: the tournament straight from the database, not the shared copy or
  * a read already under way that may predate a change (the organiser's
  * read right after one). Throws when the tournament could not be read;
@@ -154,10 +269,11 @@ export async function tournamentView(code: string, fresh = false): Promise<Tourn
   if (!t) return null;
   const now = Date.now();
   const linked = t.fixtures.filter((f) => f.live && !f.result).slice(-LIVE_READS);
-  const pairs = await Promise.all(linked.map(async (f) => [String(f.id), await liveOf(t, f, now)] as const));
+  // The organiser is read beside the live scorecards, only for a tournament that is on. It never rejects.
+  const [pairs, host] = await Promise.all([Promise.all(linked.map(async (f) => [String(f.id), await liveOf(t, f, now)] as const)), t.status === "on" ? getTournamentHost(code) : HOST_UNKNOWN]);
   const live: Record<string, LiveNow> = {};
   for (const [id, l] of pairs) if (l) live[id] = l;
-  return { tournament: t, live, at: Date.now() };
+  return { tournament: t, live, at: Date.now(), ...(host.known ? { host: host.host } : {}) };
 }
 
 /** The same, once per render: the page's metadata and body share one. */
@@ -221,6 +337,7 @@ export async function updateTournament(code: string, secret: string, op: Op): Pr
     const d = (data ?? {}) as { r?: unknown; rev?: unknown };
     if (d.r === "ok" && Number.isSafeInteger(d.rev)) {
       purgeTournament(code);
+      if (op.op === "live_link") purgeLiveTournament(op.liveCode);
       return { rev: d.rev as number };
     }
     if (d.r === "unavailable" || !R.includes(d.r as TournamentError)) console.warn("tournament: unexpected update answer", code, data);
@@ -290,6 +407,8 @@ export async function claimTournament(code: string, secret: string, userId: stri
   const attach = await accountRpcIfThere("tournament_attach", { p_code: code, p_secret: secret, p_user_id: userId });
   if ("missing" in attach || "unavailable" in attach) return { error: "unavailable" };
   const a = attach.data.r;
+  // Newly kept with an account: who started it may be nameable now, so the shared copies are read again.
+  if (a === "ok") purgeTournament(code);
   if (a === "ok" || a === "known") return { kept: true, device: false };
   if (a === "other") return { error: "other" };
   if (a !== "forbidden") return { error: asError(a) };

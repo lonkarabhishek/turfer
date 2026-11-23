@@ -83,7 +83,10 @@ const calls = new Set([...code.matchAll(/\b(public|private)\.(\w+)\s*\(/g)].map(
 eq([...calls].sort(), CALLED, "it calls exactly that function");
 // Nothing any earlier file made is made again here.
 for (const fn of MADE) eq(repoDef(fn), null, `${fn} is new: no earlier file has it`);
-for (const file of FILES.filter((f) => f !== NAME)) ok(!/player_badge/.test(fs.readFileSync(`${M}/${file}`, "utf8")), `${file} knows nothing of it`);
+// Earlier files only: a later one may read the table (20261123_tournament_host.sql does, for the medal on an organiser's photo).
+for (const file of FILES.filter((f) => f < NAME)) ok(!/player_badge/.test(fs.readFileSync(`${M}/${file}`, "utf8")), `${file} knows nothing of it`);
+// And no later file makes either function again or alters the table.
+for (const file of FILES.filter((f) => f > NAME)) ok(!/create (or replace )?function public[.]player_badge|alter table private[.]player_badges|(insert into|update) private[.]player_badges/i.test(fs.readFileSync(`${M}/${file}`, "utf8")), `${file} (later) leaves the badges' functions and table as they are`);
 // The medal ids the app sends today all fit the table's own check, and the catalog's size fits the count.
 const MEDAL_IDS = [...fs.readFileSync(new URL("../../lib/profile/medals.ts", import.meta.url), "utf8").matchAll(/\{ id: "([^"]+)", name: "/g)].map((m) => m[1]);
 ok(MEDAL_IDS.length >= 16 && MEDAL_IDS.length <= 99, `the app's ${MEDAL_IDS.length} medals fit the count`);

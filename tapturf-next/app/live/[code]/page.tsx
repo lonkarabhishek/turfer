@@ -7,6 +7,7 @@ import { deriveBoard } from "@/lib/board";
 import { verifyLiveCode } from "@/lib/live/codes";
 import { isLiveBoard, sanitizeLive, type LiveMatch } from "@/lib/live/match";
 import { getLiveForPage, liveWriteKey } from "@/lib/live/server";
+import { getLiveTournament } from "@/lib/tournament/server";
 import type { LiveGetResponse } from "@/lib/live/types";
 
 // Each open is one function call; the data comes from the cached getter
@@ -97,6 +98,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function LiveMatchPage({ params }: Props) {
   const { code } = await params;
   if (!known(code)) notFound();
-  const { initial, at } = await load(code);
-  return <LiveFollow key={code} code={code} initial={initial} serverNow={at} />;
+  // Beside the score: the tournament this scorecard is a match of, if any (cached; never throws; null draws nothing).
+  const [{ initial, at }, tournament] = await Promise.all([load(code), getLiveTournament(code)]);
+  return <LiveFollow key={code} code={code} initial={initial} serverNow={at} tournament={tournament} />;
 }

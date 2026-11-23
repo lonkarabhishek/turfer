@@ -19,7 +19,7 @@ test("policy: the friends a host says are in already, and tagging", () => {
   assert.doesNotMatch(things, /until they say yes only you see who you tagged/, "the sentence from before is gone");
   // No new site-wide notice for it (the site owner's call); the policy's date moves.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-20");
+  assert.equal(PRIVACY_UPDATED, "2026-11-23");
 });
 
 test("policy notice: a new id, so people who dismissed the last one see it", () => {
@@ -34,7 +34,7 @@ test("policy notice: emails, and where the policy says it", () => {
     "If your account has an email Google confirmed, TapTurf now emails you about your games: a welcome, join requests and answers, game changes and reminders. Resend sends them for us. Turn each kind off on the Me tab or with the link in any email. We don't track opens or taps, and we never email about booking requests.",
   );
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-20");
+  assert.equal(PRIVACY_UPDATED, "2026-11-23");
   assert.equal(PRIVACY_NOTICE.anchor, "emails");
   const at = privacyPage.indexOf(`id="${PRIVACY_NOTICE.anchor}"`);
   assert.ok(at >= 0, `the policy has #${PRIVACY_NOTICE.anchor}`);
@@ -176,7 +176,7 @@ test("policy: Ask for a slot, what is kept and what never reaches us", () => {
   assert.deepEqual([...table.matchAll(/^  (\w+) /gm)].map((m) => m[1]), ["id", "turf_id", "slot_date", "slot_hour", "slot_minute", "minutes", "sport", "players", "signed_in", "created_at"]);
   // No new site-wide notice for it (an ask names nobody); the policy's date moves to the day it ships.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-20");
+  assert.equal(PRIVACY_UPDATED, "2026-11-23");
 });
 
 test("policy: the medal on your photo, who sees it and how to turn it off", () => {
@@ -193,7 +193,7 @@ test("policy: the medal on your photo, who sees it and how to turn it off", () =
   assert.match(sql, /join public\.usernames n on n\.user_id = b\.user_id and n\.taggable/);
   // No new site-wide notice for it (the medals were on the public profile already); the policy's date moves to the day it ships.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-20");
+  assert.equal(PRIVACY_UPDATED, "2026-11-23");
 });
 
 test("policy: a host can delete a game they posted, and what is kept", () => {
@@ -208,7 +208,7 @@ test("policy: a host can delete a game they posted, and what is kept", () => {
   assert.doesNotMatch(sql, /create table/i, "no new table: nothing else is stored");
   // No new site-wide notice for it (nothing new is collected or shared); the policy's date moves to the day it ships.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-20");
+  assert.equal(PRIVACY_UPDATED, "2026-11-23");
 });
 
 test("policy: tools used signed in count toward medals, and the profile shows how many you played with, never who", () => {
@@ -231,7 +231,32 @@ test("policy: tools used signed in count toward medals, and the profile shows ho
   assert.match(page, /your profile also shows your game and review counts, how many players you have played with \(a number, never who\), medals and reviewed turfs/);
   // No new site-wide notice (the medals and the counts were on the public profile already; this adds one more count); the policy's date moves to the day it ships.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
-  assert.equal(PRIVACY_UPDATED, "2026-11-20");
+  assert.equal(PRIVACY_UPDATED, "2026-11-23");
+});
+
+test("policy: a tournament you start signed in names you if your profile is public, and how to turn that off", () => {
+  const page = privacyPage.replace(/\s+/g, " ");
+  const at = page.indexOf('<p id="live-tournaments"');
+  const para = page.slice(at, page.indexOf("</p>", at));
+  assert.match(para, /A tournament you start while signed in shows your name, photo and a link to your profile on its page if your profile is public; turn off &ldquo;Let others find and tag me&rdquo; on the Me tab and they stop showing there within a couple of minutes\./);
+  assert.match(para, /Your number and email never go with it, and if your profile is not public only TapTurf&rsquo;s team sees which account runs it\./);
+  assert.doesNotMatch(para, /your own name, number or email does not go with it/, "the sentence from before is gone: a public organiser's name does show now");
+  assert.match(page, /Anyone with a tournament&rsquo;s link can see it, team names and results included, and who started it when that person&rsquo;s profile is public\./, "and under what others can see");
+  assert.match(page, /A live score that is one of a tournament&rsquo;s matches names the tournament and links to it, as the tournament links to that score, so anyone with either link can reach the other\./, "a scorecard's banner, said where tournaments' links are");
+  // What the sentence says is what the read gives the page (20261123_tournament_host.sql): a public profile's own fields, only while the switch is on, asked on every call.
+  const sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20261123_tournament_host.sql"), "utf8");
+  const from = sql.indexOf("as $$", sql.indexOf("create or replace function public.tournament_host")) + 5;
+  const body = sql.slice(from, sql.indexOf("$$;", from));
+  assert.deepEqual([...body.matchAll(/^\s+'(\w+)', /gm)].map((m) => m[1]), ["u", "name", "photo", "verified", "m", "n"], "username, name, photo, the tick and the medal: nothing else");
+  assert.match(body, /join public\.usernames n on n\.user_id = t\.user_id and n\.taggable/, "only while the profile is public");
+  assert.doesNotMatch(body, /\bphone\b|\bemail\b/, "never a number or an email");
+  assert.doesNotMatch(sql.replace(/^\s*--.*$/gm, ""), /create table|insert into|\bupdate\b/i, "nothing new is kept");
+  // "Within a couple of minutes": the server never shows a copy older than a minute and a half, and an open page asks again every half minute.
+  const host = fs.readFileSync(path.join(process.cwd(), "lib/tournament/host.ts"), "utf8");
+  assert.match(host, /export const HOST_COPY_MAX_MS = 90_000;/);
+  // No new site-wide notice was added with it; the policy's date moves to the day it ships.
+  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_UPDATED, "2026-11-23");
 });
 
 test("policy notice: the notice it replaced still reaches anyone who never dismissed it", () => {

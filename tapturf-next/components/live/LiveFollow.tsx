@@ -24,6 +24,8 @@ import { WatchCount } from "./WatchCount";
 import { viewsLabel } from "@/lib/live/views";
 import { AskPageContext } from "@/components/ask/AskPageContext";
 import { liveAskChips } from "@/lib/ask/live";
+import type { LiveTournament } from "@/lib/tournament/scorecard";
+import { TournamentBanner } from "./TournamentBanner";
 
 const TOOL = "live_follow";
 /** Past this, a Supabase session still unresolved (a dead network) counts as logged out. */
@@ -112,9 +114,12 @@ function Freshness({ status, updatedAt, pause, serverNow, frozenAt }: { status: 
  * new match. A cricket match shows the Live Cricket Scorer's view, a
  * board the Live Scoreboard's, with its clock ticking here. The score
  * is free; logged out, the page stops polling once it has one and asks
- * for a login (Google first, then phone) in the tabs' place.
+ * for a login (Google first, then phone) in the tabs' place. A scorecard
+ * that is a tournament's match says so over the score, with the way to the
+ * tournament (TournamentBanner; `tournament` comes with the page's own
+ * render, never from a poll, and is null for every other scorecard).
  */
-export function LiveFollow({ code, initial, serverNow }: { code: string; initial: LiveGetResponse | null; serverNow: number }) {
+export function LiveFollow({ code, initial, serverNow, tournament = null }: { code: string; initial: LiveGetResponse | null; serverNow: number; tournament?: LiveTournament | null }) {
   const router = useRouter();
   const { user, loading: authLoading, settled } = useAuth();
   const [shown, setShown] = useState<Shown | null>(() => (initial ? toShown(initial, serverNow) : null));
@@ -258,6 +263,12 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
     </div>
   );
 
+  const sides = view ? { a: view.setup.teamA, b: view.setup.teamB } : boardView ? { a: boardView.teams.a.name, b: boardView.teams.b.name } : null;
+  const banner = (className: string) =>
+    tournament ? (
+      <TournamentBanner tournament={tournament} shown={scored ? sides : null} over={shown?.status === "done"} onOpen={() => trackTool("tool_cta_clicked", TOOL, { href: "/tournament", status: shown?.status ?? "unavailable" })} className={className} />
+    ) : null;
+
   // Ask TapTurf on this page answers about this match (lib/ask/live.ts), for a signed-in player.
   const askHere = <AskPageContext live={{ code, chips: liveAskChips(scored ? match : null) }} />;
 
@@ -266,6 +277,7 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
     return (
       <div className="mx-auto max-w-xl px-4 py-6 sm:py-10">
         {askHere}
+        {banner("mb-3 rounded-2xl border border-accent-500/25")}
         <StateCard state={state} />
         <div className="mt-4 space-y-4">
           {(state === "waiting" || state === "unavailable") && shareBar}
@@ -304,6 +316,7 @@ export function LiveFollow({ code, initial, serverNow }: { code: string; initial
       {askHere}
       <div className="lg:col-start-1 lg:row-start-1">
         <h1 className="sr-only">{names} live score</h1>
+        {banner("sm:mb-3")}
         {header}
         <div className="px-3 py-2.5 sm:px-1 space-y-2">
           {updatedAt !== null && <Freshness status={status} updatedAt={updatedAt} pause={pause} serverNow={serverNow} frozenAt={frozenAt} />}

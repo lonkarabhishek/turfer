@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, Loader2, Trash2, Unlink } from "lucide-react";
+import Link from "next/link";
+import { ArrowDown, ArrowUp, Eye, EyeOff, Loader2, Trash2, Unlink } from "lucide-react";
 import { Sheet } from "@/components/tools/scorer/ui";
 import { Field, NumberInput, OversInput, PrimaryButton, Segmented, SecondaryButton, TextInput } from "@/components/tools/inputs";
 import { emptyScoreDraft, readScoreDraft, scoreDraftOf, type ScoreDraft } from "@/lib/cricket/resultForm";
 import type { ResultChoice } from "@/lib/cricket/nrr";
 import { readShort } from "@/lib/tournament/payload";
+import type { HostNote } from "@/lib/tournament/host";
 import type { Resolved } from "@/lib/tournament/standings";
 import { DEFAULT_TOURNAMENT_POINTS, MAX_WICKETS, type Op, type Points, type Settings, type Team, type Tournament, type Venue } from "@/lib/tournament/types";
 import { VenuePicker } from "./VenuePicker";
@@ -312,5 +314,32 @@ export function ManageRow({ icon, title, sub, onClick, tone = "default" }: { ico
         {sub && <span className="block text-[13px] text-primary-500 truncate">{sub}</span>}
       </span>
     </button>
+  );
+}
+
+/**
+ * The organiser's one line about their name on the page (the words are
+ * lib/tournament/host.ts hostNote): that it shows because their profile
+ * is public, with the way to the switch, or that the page names nobody.
+ * Nothing is set here. No line when the page could not ask who started it.
+ */
+export function HostLine({ note, named }: { note: HostNote | null; named: boolean }) {
+  if (!note) return null;
+  const Icon = named ? Eye : EyeOff;
+  return (
+    <div data-host-note className="mt-2 rounded-2xl bg-primary-50 px-4 py-3 flex items-start gap-3">
+      <Icon className="w-5 h-5 text-accent-600 shrink-0 mt-0.5" aria-hidden />
+      <p className="text-[13px] text-primary-700">
+        {note.text}
+        {note.link && (
+          <>
+            {" "}
+            <Link href={note.link.href} className="font-semibold text-accent-700 underline">
+              {note.link.label}
+            </Link>
+          </>
+        )}
+      </p>
+    </div>
   );
 }
