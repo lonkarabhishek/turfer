@@ -1,13 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { RotateCcw, Volume2, VolumeX } from "lucide-react";
+import Link from "next/link";
+import { Activity, ChevronRight, RotateCcw, Volume2, VolumeX } from "lucide-react";
 import { trackTool } from "@/lib/analytics/tools";
 import { STATUS_H } from "@/lib/tools/tossSim";
 import { ToolCta } from "./ToolCta";
 import { TossCoin, type TossCoinHandle } from "./TossCoin";
 
 const TOOL = "toss";
+/** Where a toss leads: the match itself. Shown once the coin has landed. */
+const SCORER_HREF = "/tools/cricket-live-scorer";
+const BOARD_HREF = "/tools/live-scoreboard";
 type Side = "heads" | "tails";
 type Pick = "bat" | "bowl";
 type Phase = "idle" | "flying" | "landed";
@@ -213,6 +217,32 @@ export function CricketToss({ cta }: { cta: { label: string; href: string } }) {
           <button type="button" onClick={reset} className="press-tight w-full h-12 rounded-full border border-primary-200 bg-white text-[15px] font-semibold text-primary-800 hover:border-accent-400 inline-flex items-center justify-center gap-2 transition-colors">
             <RotateCcw className="w-4 h-4" aria-hidden /> New toss
           </button>
+        )}
+
+        {/* After the toss comes the match: one tap to the scorer. Only once the coin has landed, so it never competes with Flip. */}
+        {landed && (
+          <div data-toss-next className="toss-pop">
+            <Link
+              href={SCORER_HREF}
+              onClick={() => trackTool("tool_cta_clicked", TOOL, { href: SCORER_HREF })}
+              className="press-tight flex items-center gap-3 min-h-[64px] rounded-2xl border border-accent-500/40 bg-accent-50 px-3.5 py-2.5 hover:border-accent-500 transition-colors"
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white border border-accent-500/30">
+                <Activity className="h-5 w-5 text-accent-600" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px] font-bold leading-snug text-primary-900">Score this match live</span>
+                <span className="block text-[13px] leading-snug text-primary-600">Ball by ball on your phone. Free, and your group can follow along.</span>
+              </span>
+              <ChevronRight className="h-5 w-5 shrink-0 text-primary-400" aria-hidden />
+            </Link>
+            <p className="mt-2 text-center text-[13px] text-primary-500">
+              Football, badminton or another sport?{" "}
+              <Link href={BOARD_HREF} onClick={() => trackTool("tool_cta_clicked", TOOL, { href: BOARD_HREF })} className="whitespace-nowrap font-semibold text-accent-700 underline underline-offset-2">
+                Live Scoreboard
+              </Link>
+            </p>
+          </div>
         )}
       </div>
 
