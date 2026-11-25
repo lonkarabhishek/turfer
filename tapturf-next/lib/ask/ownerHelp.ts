@@ -270,6 +270,8 @@ const AFTER_LINE =
 const NOT_LISTED_LINE = `Turf not on TapTurf yet? Email ${TEAM_EMAIL} with its name, area and city, Google Maps link, sports, phone or WhatsApp number, hours and prices. We add it, then you claim it at ${MY_SAID}.`;
 /** A claim checked by hand is answered with a notice on TapTurf (admin_answer_owner_claim), never an email or SMS. */
 const NOTICE_LINE = "When we check a claim by hand, the answer comes as a notification on TapTurf, not an email or SMS.";
+/** myTapturf says the same after a claim is sent for a check (lib/my/claimFlow.ts CLAIM_FLOW_COPY.fasterBody; the site owner, 25 Nov 2026). */
+export const FASTER_LINE = "To get a check by hand approved faster, send a DM from your turf's own Instagram account to TapTurf's Instagram, @tap_turf, with your name, your role and the turf's name.";
 
 export type OwnerLink = { label: string; href: string; primary?: boolean };
 export type OwnerAnswer = {
@@ -343,7 +345,7 @@ export function ownerAnswer(kind: OwnerKind, venue: OwnerVenue = { turfs: [], mi
       about: "named",
       reply: lead,
       steps: [`Tap Claim ${name} below and sign in with Google or your phone.`, CODE_LINE],
-      notes: [kind === "time" ? NOTICE_LINE : AFTER_LINE],
+      notes: kind === "time" ? [NOTICE_LINE, FASTER_LINE] : [AFTER_LINE],
       links: [claimLink(one)],
     };
   }
@@ -370,7 +372,7 @@ export function ownerAnswer(kind: OwnerKind, venue: OwnerVenue = { turfs: [], mi
         about,
         reply: `${missed}With the phone whose number is on your listing, we send it a code and you get in at once. Otherwise we check with you first, usually within a day.`,
         steps: [SIGN_IN_STEP, SEARCH_STEP],
-        notes: [NOTICE_LINE],
+        notes: [NOTICE_LINE, FASTER_LINE],
         links: [OPEN_MY],
       };
     case "verify":

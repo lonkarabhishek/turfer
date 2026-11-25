@@ -63,6 +63,9 @@ export function turfPhone10(input: string): string | null {
   return /^[6-9]\d{9}$/.test(p10) ? p10 : null;
 }
 
+/** TapTurf's own Instagram, where a claimant's DM from their turf's account speeds up a check by hand. */
+export const TAPTURF_INSTAGRAM = { handle: "@tap_turf", url: "https://www.instagram.com/tap_turf/" } as const;
+
 export const CLAIM_ROLES = ["owner", "manager", "staff"] as const;
 export type ClaimRole = (typeof CLAIM_ROLES)[number];
 export const ROLE_LABELS: Record<ClaimRole, string> = { owner: "Owner", manager: "Manager", staff: "Staff" };
@@ -104,5 +107,14 @@ export const CLAIM_FLOW_COPY = {
   sendForCheck: "Send for a check",
   thanks: (turf: string) => `Thanks. We'll check that you run ${turf}, usually within a day, and tell you here on TapTurf.`,
   thanksMore: "Once it's confirmed, it shows under Your turfs.",
+  // The site owner's ask (25 Nov 2026): after a claim goes for a check by hand (a partner, or someone without the
+  // listed phone), say how to speed it up. A DM from the turf's own Instagram account shows us who runs it.
+  dontHavePhone: "A partner, or don't have that phone? Send your claim for a check",
+  fasterTitle: "Want it approved faster?",
+  fasterBody: (turf: string) =>
+    `Send a DM from ${turf}'s own Instagram account to TapTurf's Instagram, ${TAPTURF_INSTAGRAM.handle}, with your name, your role and the turf's name. It shows us you run the turf.`,
+  fasterButton: `Open ${TAPTURF_INSTAGRAM.handle} on Instagram`,
+  fasterLine: `Waiting on a check? A DM from your turf's own Instagram account to ${TAPTURF_INSTAGRAM.handle}, with your name, your role and the turf's name, gets it approved faster.`,
+  fasterNone: "No Instagram for the turf? No problem: we still check your claim, usually within a day.",
   waiting: "We're checking that you run it, usually within a day",
 } as const;

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { RecaptchaVerifier } from "firebase/auth";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BarChart3, CheckCircle2, ChevronRight, Clock, Loader2, Navigation, Phone, Search, Store, Users } from "lucide-react";
+import { BarChart3, CheckCircle2, ChevronRight, Clock, Instagram, Loader2, Navigation, Phone, Search, Store, Users } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { createClient } from "@/lib/supabase/client";
 import { labelFor, isCity } from "@/lib/city";
@@ -17,6 +17,7 @@ import {
   CLAIM_FLOW_COPY as COPY,
   CLAIM_ROLES,
   ROLE_LABELS,
+  TAPTURF_INSTAGRAM,
   asksRunsQuestion,
   claimLoginUrl,
   claimOwnerUrl,
@@ -148,6 +149,14 @@ export function MyHome() {
                   </li>
                 ))}
               </ul>
+              {home.turfs.some((t) => t.status !== "active") && (
+                <p className="mt-2 text-[13px] text-primary-600 leading-snug" data-claim-faster-line>
+                  {COPY.fasterLine}{" "}
+                  <a href={TAPTURF_INSTAGRAM.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center font-semibold text-accent-700 underline underline-offset-2">
+                    {COPY.fasterButton}
+                  </a>
+                </p>
+              )}
               <RunsNote home={home} />
             </section>
           )}
@@ -449,6 +458,28 @@ const CLAIM_ERRORS: Record<string, string> = {
   needs_check: "We need to check this one by hand. Send your claim and we'll confirm it, usually within a day.",
 };
 
+/**
+ * After a claim goes for a check by hand: how to speed it up (the site owner, 25 Nov 2026). A plain link to
+ * TapTurf's Instagram, opened only on a tap; nothing of Instagram's loads on this page.
+ */
+function ClaimFaster({ turf }: { turf: string }) {
+  return (
+    <div className="mt-3 rounded-xl border border-primary-200 bg-white px-3 py-2.5" data-claim-faster>
+      <p className="text-[14px] font-semibold text-primary-900">{COPY.fasterTitle}</p>
+      <p className="mt-0.5 text-[13px] text-primary-700 leading-snug">{COPY.fasterBody(turf)}</p>
+      <a
+        href={TAPTURF_INSTAGRAM.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-2 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-primary-900 px-4 text-[14px] font-semibold text-white hover:bg-accent-600 transition-colors"
+      >
+        <Instagram className="w-4 h-4" aria-hidden /> {COPY.fasterButton}
+      </a>
+      <p className="mt-2 text-[12px] text-primary-500 leading-snug">{COPY.fasterNone}</p>
+    </div>
+  );
+}
+
 const RESEND_S = 120;
 /** A proof is good for 10 minutes on the server; reuse it a little less than that. */
 const PROOF_MS = 9 * 60_000;
@@ -709,6 +740,7 @@ function ClaimRow({
               Your claim is with us. We&rsquo;ll confirm it, usually within a day. Have the phone with the listed number? Verify below to get in now.
             </p>
           )}
+          {pending && step !== "code" && step !== "sent" && <ClaimFaster turf={turf.name} />}
           {step !== "sent" && (
             <div className="rounded-xl bg-primary-50/60 px-3 py-2 text-[13px] text-primary-700">
               Claiming as <span className="font-semibold text-primary-900">{me.name || "your account"}</span>
@@ -773,7 +805,7 @@ function ClaimRow({
               </button>
               {!pending && (
                 <button type="button" onClick={() => { setWhy(""); setMsg(""); setStep("manual"); }} className="mt-2 inline-flex min-h-11 items-center text-[13px] font-semibold text-primary-700 underline underline-offset-2 cursor-pointer">
-                  I don&rsquo;t have that phone. Send my claim for a check
+                  {COPY.dontHavePhone}
                 </button>
               )}
             </div>
@@ -862,6 +894,7 @@ function ClaimRow({
           <p className="mt-0.5 text-[13px] text-primary-500 leading-snug">{COPY.thanksMore}</p>
         </div>
       )}
+      {step === "sent" && <ClaimFaster turf={turf.name} />}
       {msg && <p className="mt-2 text-[13px] text-hot-600" role="alert">{msg}</p>}
     </li>
   );

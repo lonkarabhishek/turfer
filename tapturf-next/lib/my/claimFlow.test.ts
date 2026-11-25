@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CLAIM_FLOW_COPY, CLAIM_ROLES, ROLE_LABELS, asksRunsQuestion, claimFromNext, claimLoginUrl, claimOwnerUrl, claimTurfId, turfPhone10 } from "./claimFlow";
+import { CLAIM_FLOW_COPY, CLAIM_ROLES, ROLE_LABELS, TAPTURF_INSTAGRAM, asksRunsQuestion, claimFromNext, claimLoginUrl, claimOwnerUrl, claimTurfId, turfPhone10 } from "./claimFlow";
 import { BOOKINGS_LINE, claimCopyProblem } from "../turfPage/claimPrompts";
 
 const ID = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -66,6 +66,7 @@ test("the flow's words: the site owner's line for players, nothing that reads li
     c.playBody("Green Box", true), c.playBody("Green Box", false), c.playButton(true), c.playButton(false), c.playUndo,
     c.loginTitle("Green Box"), c.loginLead, c.loginDefault, c.rolePick("Green Box"), c.roleNeeded, c.byHandWhy,
     c.phoneLabel, c.phoneHint, c.phoneNeeded, c.byHandWhyListed, c.phoneLabelListed, c.phoneHintListed, c.phoneNeededListed, c.noteLabel, c.notePlaceholder, c.sendForCheck, c.thanks("Green Box"), c.thanksMore, c.waiting,
+    c.dontHavePhone, c.fasterTitle, c.fasterBody("Green Box"), c.fasterButton, c.fasterLine, c.fasterNone,
   ];
   assert.equal(words.length, Object.keys(c).length + 4, "every entry read (the four that take a yes or no read twice)");
   for (const s of words) assert.equal(claimCopyProblem(s), null, s);
@@ -81,4 +82,19 @@ test("a page whose number can't get a code (a landline): it asks for a mobile at
   assert.match(CLAIM_FLOW_COPY.phoneLabelListed, /mobile/i);
   assert.match(CLAIM_FLOW_COPY.phoneNeededListed, /mobile/i);
   assert.doesNotMatch(CLAIM_FLOW_COPY.byHandWhyListed, /no mobile number/i, "the page does show a number");
+});
+
+test("after a claim goes for a check, it says how to get it approved faster: a DM to TapTurf's Instagram", () => {
+  const c = CLAIM_FLOW_COPY;
+  assert.deepEqual(TAPTURF_INSTAGRAM, { handle: "@tap_turf", url: "https://www.instagram.com/tap_turf/" });
+  const body = c.fasterBody("Green Box");
+  assert.match(body, /Send a DM from Green Box's own Instagram account to TapTurf's Instagram, @tap_turf, with your name, your role and the turf's name\./);
+  assert.equal(c.fasterButton, "Open @tap_turf on Instagram");
+  assert.match(c.fasterLine, /@tap_turf/);
+  assert.match(c.dontHavePhone, /partner/i, "a partner without the listed phone is told they can still send a claim");
+  // No promise of a time the DM can't keep, and the house rules for claim copy.
+  for (const s of [c.fasterTitle, body, c.fasterButton, c.fasterLine, c.fasterNone, c.dontHavePhone]) {
+    assert.equal(claimCopyProblem(s), null, s);
+    assert.doesNotMatch(s, /instant|minutes|guarantee/i, s);
+  }
 });
