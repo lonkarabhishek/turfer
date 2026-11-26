@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   ANSWERED_MAX,
+  ASK_MAX_AGE_MS,
+  ASK_MIN_AWAY_MS,
   EMPTY_MEMORY,
   MAX_AGE_MS,
   MAX_ASKS_PER_DAY,
@@ -36,6 +38,57 @@ const ask = (o: Partial<Parameters<typeof decide>[0]> = {}) => decide({ tap: tap
 
 test("the limits, as the site owner asked", () => {
   assert.deepEqual([MIN_AWAY_MS, MAX_AGE_MS, SAME_TURF_MS, SNOOZE_MS, MAX_ASKS_PER_DAY], [15_000, 3 * HOUR, 7 * DAY, 3 * DAY, 2]);
+  assert.deepEqual([ASK_MIN_AWAY_MS, ASK_MAX_AGE_MS], [15 * MIN, 12 * HOUR], "an Ask for a slot tap: 15 minutes to 12 hours");
+});
+
+// An "Ask for a slot" tap: it sent a WhatsApp message for a day and time, which the turf still has to answer.
+const askTap = (o: Partial<Tap> = {}): Tap => tap({ kind: "whatsapp", source: "slot_ask", ask: { date: "2026-11-14", hour: 19, minute: 0 }, ...o });
+
+test("after Ask for a slot the card waits 15 minutes: a sooner return is not asked, and still can be later", () => {
+  const soon = ask({ tap: askTap({ at: NOW - (15 * MIN - 1000) }) });
+  assert.deepEqual(soon, { do: "wait", tap: askTap({ at: NOW - (15 * MIN - 1000), left: false }), why: "too_soon" }, "back after 14 min 59 s: not asked, the tap is kept");
+  assert.equal(ask({ tap: askTap({ at: NOW - 20_000 }) }).do, "wait", "20 seconds, when a plain tap would be asked");
+  assert.equal(ask({ tap: askTap({ at: NOW - 3 * MIN }) }).do, "wait", "3 minutes, when every real Got a slot had come");
+  assert.equal(ask({ tap: askTap({ at: NOW - 15 * MIN }) }).do, "ask", "15 minutes exactly");
+  assert.deepEqual(ask({ tap: askTap({ at: NOW - 16 * MIN }) }), { do: "ask", tap: askTap({ at: NOW - 16 * MIN }) }, "about that tap, with the time it asked for");
+  // The tap that was too soon: they stay on the page, nothing; they leave and come back after the 15 minutes, asked.
+  const kept = soon.do === "wait" ? soon.tap : null;
+  assert.equal(decide({ tap: kept, memory: mem(), now: NOW + 30 * MIN, path: "/" }).do, "wait", "however long they stay on the page");
+  assert.equal(decide({ tap: leftAfterTap(kept), memory: mem(), now: NOW + 500, path: "/" }).do, "wait", "a second return still inside the 15 minutes waits again");
+  assert.equal(decide({ tap: leftAfterTap(kept), memory: mem(), now: NOW + 2 * MIN, path: "/" }).do, "ask", "and the next return after them is asked");
+});
+
+test("after Ask for a slot the card still asks that night: up to 12 hours, not a second more", () => {
+  assert.equal(ask({ tap: askTap({ at: NOW - 3 * HOUR - 1 }) }).do, "ask", "past 3 hours, when a plain tap is forgotten");
+  assert.equal(ask({ tap: askTap({ at: NOW - 8 * HOUR }) }).do, "ask", "asked in the evening, back that night");
+  assert.equal(ask({ tap: askTap({ at: NOW - 12 * HOUR + 1000 }) }).do, "ask", "11 h 59 min 59 s");
+  assert.equal(ask({ tap: askTap({ at: NOW - 12 * HOUR }) }).do, "ask", "12 hours to the millisecond is the last moment");
+  assert.deepEqual(ask({ tap: askTap({ at: NOW - 12 * HOUR - 1 }) }), { do: "forget", why: "too_old" }, "past 12 hours it is not asked");
+  assert.deepEqual(ask({ tap: askTap({ at: NOW - 13 * HOUR }) }), { do: "forget", why: "too_old" });
+  assert.deepEqual(ask({ tap: askTap({ at: NOW + MIN }) }), { do: "forget", why: "too_old" }, "a clock gone wrong");
+});
+
+test("a plain Call or WhatsApp tap is asked exactly as before: 15 seconds to 3 hours", () => {
+  assert.equal(ask({ tap: tap({ at: NOW - 20_000 }) }).do, "ask", "a Call tap, back after 20 seconds");
+  assert.equal(ask({ tap: tap({ kind: "whatsapp", source: "turf_bar", at: NOW - 20_000 }) }).do, "ask", "a WhatsApp tap too");
+  assert.equal(ask({ tap: tap({ kind: "whatsapp", source: "slot_ask", at: NOW - 20_000 }) }).do, "ask", "what decides is the noted time (Tap.ask), not the source's name");
+  assert.equal(ask({ tap: tap({ at: NOW - 14_999 }) }).do, "wait");
+  assert.equal(ask({ tap: tap({ at: NOW - 3 * HOUR }) }).do, "ask");
+  assert.deepEqual(ask({ tap: tap({ at: NOW - 3 * HOUR - 1 }) }), { do: "forget", why: "too_old" });
+  assert.deepEqual(ask({ tap: tap({ kind: "whatsapp", at: NOW - 8 * HOUR }) }), { do: "forget", why: "too_old" }, "no 12 hours for a plain tap");
+});
+
+test("after Ask for a slot every other rule is the same", () => {
+  const t = askTap({ at: NOW - HOUR });
+  assert.equal(ask({ tap: t }).do, "ask");
+  assert.deepEqual(ask({ tap: askTap({ at: NOW - HOUR, left: false }) }), { do: "wait", tap: askTap({ at: NOW - HOUR, left: false }), why: "not_left" }, "only on a return");
+  for (const p of ["/admin", "/my/turf/abc", "/report/abcdef", "/email/off"]) assert.deepEqual(ask({ tap: t, path: p }), { do: "wait", tap: t, why: "quiet_page" }, p);
+  assert.deepEqual(ask({ tap: t, memory: mem({ snoozeUntil: NOW + DAY }) }), { do: "forget", why: "snoozed" });
+  assert.deepEqual(ask({ tap: t, memory: mem({ answered: { [T(1)]: NOW - 6 * DAY } }) }), { do: "forget", why: "same_turf" });
+  assert.deepEqual(ask({ tap: t, memory: mem({ day: istDay(NOW), asks: 2 }) }), { do: "forget", why: "day_cap" });
+  assert.deepEqual(ask({ tap: t, busy: true }), { do: "wait", tap: t, why: "busy" });
+  // The tab keeps the tap as long as it is open: what is stored reads back the same 12 hours on.
+  assert.deepEqual(readTap(JSON.stringify(t)), t);
 });
 
 test("back from a tap between 15 seconds and 3 hours later: ask, about that tap", () => {
@@ -179,10 +232,11 @@ test("a tap that asked for a slot keeps the time it asked about, and nothing els
     const x = newTap({ turf: T(1), name: "Kings Turf Arena", kind: "whatsapp", source: "slot_ask", signedIn: true, ask: bad }, NOW)!;
     assert.ok(x && !("ask" in x), JSON.stringify(bad));
   }
-  // Every rule that keeps the card from nagging treats it as any tap.
+  // Every rule that keeps the card from nagging treats it as any tap; only its wait is longer (15 minutes to 12 hours).
   const back = { ...t, left: true };
-  assert.equal(decide({ tap: back, memory: { ...EMPTY_MEMORY, answered: {} }, now: NOW + 5 * MIN, path: "/turf/kings" }).do, "ask");
+  assert.equal(decide({ tap: back, memory: { ...EMPTY_MEMORY, answered: {} }, now: NOW + 20 * MIN, path: "/turf/kings" }).do, "ask");
+  assert.equal(decide({ tap: back, memory: { ...EMPTY_MEMORY, answered: {} }, now: NOW + 5 * MIN, path: "/turf/kings" }).do, "wait", "5 minutes after an ask is too soon now");
   assert.equal(decide({ tap: back, memory: { ...EMPTY_MEMORY, answered: {} }, now: NOW + 3_000, path: "/turf/kings" }).do, "wait");
-  assert.equal(decide({ tap: back, memory: afterAnswer({ ...EMPTY_MEMORY, answered: {} }, T(1), NOW), now: NOW + 5 * MIN, path: "/turf/kings" }).do, "forget");
-  assert.equal(decide({ tap: back, memory: afterClose({ ...EMPTY_MEMORY, answered: {} }, NOW), now: NOW + 5 * MIN, path: "/turf/kings" }).do, "forget");
+  assert.equal(decide({ tap: back, memory: afterAnswer({ ...EMPTY_MEMORY, answered: {} }, T(1), NOW), now: NOW + 20 * MIN, path: "/turf/kings" }).do, "forget");
+  assert.equal(decide({ tap: back, memory: afterClose({ ...EMPTY_MEMORY, answered: {} }, NOW), now: NOW + 20 * MIN, path: "/turf/kings" }).do, "forget");
 });

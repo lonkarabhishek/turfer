@@ -45,6 +45,7 @@ import { OwnerPhotos } from "@/components/admin/OwnerPhotos";
 import { ReviewFlags } from "@/components/admin/ReviewFlags";
 import { EmailsCard } from "@/components/admin/EmailsCard";
 import { OwnerOutreach } from "@/components/admin/OwnerOutreach";
+import { OutcomeTotals } from "@/components/admin/OutcomeTotals";
 import { MapSection, mapSummary } from "@/components/admin/MapUsage";
 import { TrafficSection, trafficSummary } from "@/components/admin/Traffic";
 
@@ -126,6 +127,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           Call or WhatsApp a turf&rsquo;s owner with the free report of what TapTurf did for their page, and note it here so nobody is contacted twice.
         </p>
         <OwnerOutreach />
+      </Fold>
+
+      {/* "Did you get a slot?" (20261127_contact_outcome_totals.sql): what players answered after a Call or WhatsApp tap, all turfs, with every answer one by one (read in the browser, once opened). */}
+      <Fold id="slot-answers" title="Did you get a slot?" line="What players answered after a Call or WhatsApp tap: all turfs, 7 days, 30 days, all time">
+        <p className="text-[13px] text-primary-500 mb-3">
+          After a Call or WhatsApp tap, a player who comes back to TapTurf is asked once whether they got a slot. These are the answers for every turf. Nothing here says who answered.
+        </p>
+        <OutcomeTotals />
       </Fold>
 
       {/* myTapturf owner photos (read in the browser: the panel fills in the line and how many are kept off). */}

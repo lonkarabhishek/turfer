@@ -11,8 +11,16 @@ import { askedTime, type AskedTime } from "../slotAsk/ask";
  * time questions.
  * The card asks about it once, when the player comes back: the page was
  * hidden, or the window lost focus, after the tap, and they return between
- * MIN_AWAY_MS and MAX_AGE_MS after it. A return sooner than that is not a
- * return (nobody got a slot in 15 seconds): the tap waits for the next one.
+ * MIN_AWAY_MS and MAX_AGE_MS after it (15 seconds to 3 hours). A return
+ * sooner than that is not a return (nobody got a slot in 15 seconds): the
+ * tap waits for the next one.
+ * An "Ask for a slot" tap waits longer, ASK_MIN_AWAY_MS to ASK_MAX_AGE_MS
+ * (15 minutes to 12 hours; the site owner, 26 Nov 2026): it sends a
+ * WhatsApp message the turf still has to read and answer, and every real
+ * "Got a slot" had come 0 to 3 minutes after the message was sent, before
+ * a turf could have answered. 12 hours so a player who asked in the
+ * evening and is back that night is still asked. Only those two numbers
+ * differ; every other rule is the same for both kinds of tap.
  *
  * Never: twice for one tap; for a turf answered about in the last
  * SAME_TURF_MS; more than MAX_ASKS_PER_DAY times a day (India's day) on
@@ -35,6 +43,10 @@ export const MEMORY_KEY = "tapturf_contact_asks_v1";
 export const MIN_AWAY_MS = 15_000;
 /** Back later than this: the tap is too old to ask about. */
 export const MAX_AGE_MS = 3 * 60 * 60_000;
+/** An "Ask for a slot" tap (Tap.ask): back sooner than this is not asked, the turf has hardly had time to answer the message. */
+export const ASK_MIN_AWAY_MS = 15 * 60_000;
+/** An "Ask for a slot" tap: asked about up to this long after it. public.admin_contact_outcome_list matches an answer to its ask within this and 5 minutes (20261127_contact_outcome_totals.sql). */
+export const ASK_MAX_AGE_MS = 12 * 60 * 60_000;
 /** After an answer about a turf, that turf is not asked about again for this long. */
 export const SAME_TURF_MS = 7 * 24 * 60 * 60_000;
 /** The card's ✕: no asks at all for this long. */
@@ -143,9 +155,11 @@ export function decide(v: { tap: Tap | null; memory: Memory; now: number; path: 
   if (!tap) return { do: "wait", tap: null, why: "no_tap" };
   if (!tap.left) return { do: "wait", tap, why: "not_left" };
   const away = now - tap.at;
-  if (away > MAX_AGE_MS || away < 0) return { do: "forget", why: "too_old" };
-  // Straight back: that was not a call or a chat. The next time they leave and return may be.
-  if (away < MIN_AWAY_MS) return { do: "wait", tap: { ...tap, left: false }, why: "too_soon" };
+  // An "Ask for a slot" tap sent a message the turf has to answer: asked later, and for longer.
+  const [minAway, maxAge] = tap.ask ? [ASK_MIN_AWAY_MS, ASK_MAX_AGE_MS] : [MIN_AWAY_MS, MAX_AGE_MS];
+  if (away > maxAge || away < 0) return { do: "forget", why: "too_old" };
+  // Straight back: that was not a call or a chat (or, after an ask, the turf has not answered yet). The next time they leave and return may be.
+  if (away < minAway) return { do: "wait", tap: { ...tap, left: false }, why: "too_soon" };
   if (quietPath(v.path)) return { do: "wait", tap, why: "quiet_page" };
   if (memory.snoozeUntil > now) return { do: "forget", why: "snoozed" };
   const last = memory.answered[tap.turf];
