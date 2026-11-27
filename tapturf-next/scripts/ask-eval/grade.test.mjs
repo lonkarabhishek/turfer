@@ -97,3 +97,24 @@ test("free hours: times only on cards shown and marked by an owner; the reply ho
   const q = { expect: { intent: "find_turf", free_hours: true }, facts: ["free_reply_honest"] };
   assert.deepEqual(gradeReply(q, { ...found, router: 10, intent: "find_turf", memo: { free_hours: true } }, null).fails, []);
 });
+
+test("a tournament answer: the kind it was read as, code-built or the model's, never a forecast, never book", () => {
+  const q = { id: "tournament-leader", tournament: "league", expect: { intent: "tournament", kind: "leader" }, facts: ["no_model", "no_forecast", "no_book_word", "reply_matches:Titans lead the table"] };
+  const built = { router: 10, intent: "tournament", source: "keywords", memo: { intent: "other" }, tournament: { code: "x", state: "on", kind: "leader" }, reply: "Titans lead the table with 4 points from 2 matches.", followups: [] };
+  assert.deepEqual(gradeReply(q, built, null).fails, []);
+  // Read as another question, or written by the model: both caught.
+  assert.match(gradeReply(q, { ...built, tournament: { ...built.tournament, kind: "table" } }, null).fails[0], /kind: wanted "leader", read "table"/);
+  assert.match(gradeReply(q, { ...built, source: "claude" }, null).fails[0], /a model wrote this reply/);
+  assert.equal(FACTS.by_model({ source: "claude", reply: "x" }), null);
+  assert.match(FACTS.by_model({ source: "keywords", reply: "x" }), /was not shown/);
+  // A forecast is caught; the sentence that declines to make one is not.
+  assert.equal(FACTS.no_forecast({ reply: "I can't say what will happen, only how it stands. Titans lead the table." }), null);
+  assert.equal(FACTS.no_forecast({ reply: "I can't say who will win, only how it stands." }), null);
+  assert.match(FACTS.no_forecast({ reply: "Titans lead the table. They should win it from here." }), /a forecast: "They should win it from here\."/);
+  assert.match(FACTS.no_forecast({ reply: "Titans are the favourites." }), /a forecast/);
+  assert.equal(FACTS.no_book_word({ reply: "Match 5 is on Sat 28 Nov.", followups: ["Who's leading the table?"] }), null);
+  assert.match(FACTS.no_book_word({ reply: "Book the turf for the final.", followups: [] }), /says book/);
+  // A search typed on a tournament's page goes on to the usual Ask.
+  assert.equal(FACTS.not_tournament({ intent: "find_turf" }), null);
+  assert.match(FACTS.not_tournament({ intent: "tournament", reply: "Titans lead." }), /answered as a tournament question/);
+});

@@ -20,6 +20,7 @@ import { changeTournament, claimTournament, errorText, readTournament } from "./
 import { FixtureSheet, HostLine, ManageRow, ResultSheet, SettingsSheet, TeamSheet } from "./OrganiserSheets";
 import { ShareSheet } from "./ShareSheet";
 import { TournamentAbout } from "./TournamentAbout";
+import { TournamentAsk } from "./TournamentAsk";
 import { useTournamentViews } from "./useTournamentViews";
 
 const TOOL = "live_tournament";
@@ -515,6 +516,9 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
           </div>
         </section>
       </div>
+
+      {/* Ask TapTurf about this tournament: under the table and the matches, clear of the masthead and the tabs. */}
+      <TournamentAsk code={code} res={res} format={t.settings.format} />
 
       <Ctas venue={t.settings.venue ? { id: t.settings.venue.id, slug: t.settings.venue.slug, name: t.settings.venue.name } : null} code={code} />
 
