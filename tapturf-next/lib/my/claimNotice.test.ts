@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BOOKING_TO_OWNER, BOOKING_TO_PLAYER, CLAIM_APPROVED, CLAIM_REJECTED, KIND_LINE_MAX, TAG_PLAYED_ASK, TOURNAMENT_HOST_SHOWN, claimDecisionNotice, kindLine, notificationLink } from "./claimNotice";
+import { BOOKING_TO_OWNER, BOOKING_TO_PLAYER, CLAIM_APPROVED, CLAIM_REJECTED, KIND_LINE_MAX, TAG_PLAYED_ASK, TOURNAMENT_HOST_SHOWN, USERNAME_ASSIGNED, claimDecisionNotice, kindLine, notificationLink } from "./claimNotice";
 import { BOOKINGS_LINE, claimCopyProblem } from "../turfPage/claimPrompts";
 
 test("approved: their turf is on myTapturf now", () => {
@@ -98,4 +98,11 @@ test("notificationLink: an organiser told their name now shows goes to the switc
   assert.equal(TOURNAMENT_HOST_SHOWN, "tournament_host_shown");
   assert.deepEqual(notificationLink(TOURNAMENT_HOST_SHOWN, { code: "abcdefghijkl" }), { href: "/dashboard?tab=profile#find-and-tag", label: "Open that switch" });
   assert.deepEqual(notificationLink(TOURNAMENT_HOST_SHOWN, null), { href: "/dashboard?tab=profile#find-and-tag", label: "Open that switch" });
+});
+
+test("notificationLink: a username TapTurf gave goes to the Profile section's card, whatever its metadata", () => {
+  assert.equal(USERNAME_ASSIGNED, "username_assigned");
+  for (const meta of [{ username: "asha_rao" }, {}, null, { gameId: "11111111-2222-3333-4444-555555555555" }]) {
+    assert.deepEqual(notificationLink(USERNAME_ASSIGNED, meta), { href: "/dashboard?tab=profile#username", label: "Open Profile" });
+  }
 });

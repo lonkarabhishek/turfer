@@ -167,7 +167,12 @@ const SECTIONS: LegalSection[] = [
           number and email never show there. Turning the switch off takes it off within a minute or so.
         </p>
         <p id="usernames" className="scroll-mt-24">
-          <strong>Your username and public profile.</strong> You can pick a TapTurf username. Your username,
+          <strong>Your username and public profile.</strong> TapTurf gives every account a username, made
+          from the name on the account and nothing else: never from your phone number or your email. It
+          stays private until you say so. Nobody can find you, tag you or open a profile page by it, and
+          it shows on no page, until you keep it or change it to one of your own on the Me tab; we tell
+          you about it in the app (never by email or SMS), and until then only you see it there. Keeping
+          it or saving your own is your choice, and it is what makes your profile public: your username,
           name and photo then show on your public profile page, tapturf.in/u/your-username, with the month you
           joined, and, worked out from your TapTurf games and reviews: how many games you played and hosted,
           at how many turfs, in how many cities and sports, how many different players you have played a
@@ -386,7 +391,7 @@ const SECTIONS: LegalSection[] = [
           listed anywhere on TapTurf and are hidden from search engines. Take it down from its page at any time, or email <Email /> and we will.
         </p>
         <p>
-          <strong>Your profile.</strong> If you pick a username, your username, name, photo and join month are
+          <strong>Your profile.</strong> Once you keep the username we gave you or pick your own, your username, name, photo and join month are
           public on your profile page and in player search, and your profile also shows your game and review
           counts, how many players you have played with (a number, never who), your current weekly streak (a
           number of weeks), medals and reviewed turfs (see &ldquo;Your username and public profile&rdquo; above), unless
@@ -527,7 +532,7 @@ const SECTIONS: LegalSection[] = [
       <p>
         Your browser keeps a few things locally so the site remembers you: your sign-in, the city you picked,
         your cookie choice (section 5), banners you closed, whether you dismissed the &ldquo;install app&rdquo;
-        prompt, whether we already asked you to pick a username, the TapTurf profiles you tagged recently, the
+        prompt, whether we already asked you to pick a username, whether you tapped &ldquo;Not now&rdquo; on the username we gave you (so we wait 7 days before showing it again), the TapTurf profiles you tagged recently, the
         WhatsApp number you last gave players for a game, the matches and tournaments you score with our
         free tools, which live scores and tournaments it opened in the last two days and when it last opened the map (so a reload is not counted as another view), and, so we can ask whether you got a slot without asking too often, the turf you last tapped Call or WhatsApp on (until you close the tab; it is sent to us only with your answer, if you give one) and when we last asked or you answered. If you asked a turf for a slot, the day and time you asked about are kept with that, and what you picked waits in the tab while you sign in (until you send it or close the tab). Only if you accept cookies does it also keep Google Analytics&rsquo; cookies, the short
         visit note described under &ldquo;When you sign up&rdquo; and the random tag described under

@@ -3,7 +3,7 @@ import type { NextResponse } from "next/server";
 import { cityNote, uncuratedPick } from "./city";
 import type { Identity } from "./identity";
 import { accountError, accountReply, caller, later } from "./route";
-import { createAccountLimiter, noteCity, notePhoneChecked, readSmallJson, resolveAccount, setContactEmail, setUsername, updateName, type ResolveResult } from "./server";
+import { createAccountLimiter, ensureUsername, noteCity, notePhoneChecked, readSmallJson, resolveAccount, setContactEmail, setUsername, updateName, type ResolveResult } from "./server";
 import type { AccountError, AccountProfile } from "./types";
 
 // The signed-in person's own account (lib/account/types.ts has the API),
@@ -82,6 +82,10 @@ export async function postMe(req: Request, isLive?: LiveCityCheck): Promise<Next
   noteCityLater(req, r.ok.id, isLive);
   notePhoneLater(who.id, r.ok.id);
   const profile = r.ok;
+  // After the reply: an account with no username is given one (20261128_usernames_assigned.sql), so a new
+  // account has its name from its first sign-in. It stays private until its person keeps it or picks
+  // another (lib/account/assigned.ts); it is not in this profile. Never touches the sign-in.
+  if (!profile.username) later(() => ensureUsername(profile.id));
   // So new means made in the last 15 minutes.
   const made = Date.parse(profile.created_at);
   const fresh = r.created || (Number.isFinite(made) && Date.now() - made >= -60_000 && Date.now() - made < 15 * 60_000);

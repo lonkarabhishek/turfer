@@ -14,6 +14,7 @@ import type {
   PlayersSearchResponse,
   ProfileResponse,
   UsernameCheckResponse,
+  UsernameKeepResponse,
   UsernameSuggestResponse,
 } from "./types";
 
@@ -206,6 +207,10 @@ export const checkUsername = (token: string, u: string) =>
   call<UsernameCheckResponse>(token, `/api/account/username?u=${encodeURIComponent(u)}`);
 
 export const suggestUsername = (token: string) => call<UsernameSuggestResponse>(token, "/api/account/username?suggest=1");
+
+/** "Keep it": the username TapTurf gave this account becomes its own (lib/account/assigned.ts). */
+export const keepUsername = (token: string) =>
+  call<UsernameKeepResponse>(token, "/api/account/username", { method: "POST", body: JSON.stringify({ keep: true }) });
 
 export const searchPlayers = (token: string, q: string) =>
   call<PlayersSearchResponse>(token, `/api/players/search?q=${encodeURIComponent(q)}`);

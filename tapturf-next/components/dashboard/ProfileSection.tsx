@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Camera, Save, Phone, Mail, AtSign, Loader2 } from "lucide-react";
@@ -8,6 +8,9 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { errorOf, patchMe, profileOf } from "@/lib/account/client";
 import { AVAILABILITY_TEXT, useUsernameCheck, usernameSavable } from "@/components/account/useUsernameCheck";
 import { TagSwitch } from "@/components/account/TagSwitch";
+import { AssignedUsernameCard, assignedCardShown } from "@/components/account/AssignedUsernameCard";
+import { takeUsernameEdit, useAssignedUsername } from "@/components/account/useAssignedUsername";
+import { ASSIGNED_WORDS } from "@/lib/account/assigned";
 import { GoogleLinkActions } from "@/components/account/GoogleLinkActions";
 import { PhoneAddForm } from "@/components/account/PhoneAddForm";
 import { VerifiedTick } from "@/components/account/VerifiedTick";
@@ -48,9 +51,13 @@ export function ProfileSection({ user, onEditPhoto }: { user: AppUser; onEditPho
   const params = useSearchParams();
   // What the person typed; until then, what the server sent.
   const [draft, setDraft] = useState<{ name?: string; username?: string; taggable?: boolean }>({});
+  // The username TapTurf gave them, while they have not kept it or picked another (lib/account/assigned.ts):
+  // it is in the box, ready to change, and private until they save it or turn the switch on.
+  const { assigned, known: assignedKnown } = useAssignedUsername();
+  const given = user.username ? null : assigned;
+  const current = user.username ?? given ?? "";
   const name = draft.name ?? (user.name || "");
-  const username = draft.username ?? (user.username ?? "");
-  const taggable = draft.taggable ?? (user.taggable ?? true);
+  const username = draft.username ?? current;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -74,30 +81,55 @@ export function ProfileSection({ user, onEditPhoto }: { user: AppUser; onEditPho
     void refreshUser();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // myTapturf's "Pick a username" comes here (#username): the box, ready to type in.
-  // "Flaunt my medals" with the profile hidden comes to the switch that shows it (#find-and-tag).
-  useEffect(() => {
-    if (window.location.hash === "#find-and-tag") {
-      document.getElementById("find-and-tag")?.scrollIntoView({ block: "center" });
-      return;
-    }
-    if (window.location.hash !== "#username") return;
-    const box = document.getElementById("profile-username");
+  /** The username box, ready to type in ("Change" on the card, and "Pick a username" links). */
+  const editUsername = () => {
+    const box = document.getElementById("profile-username") as HTMLInputElement | null;
     box?.scrollIntoView({ block: "center" });
     box?.focus({ preventScroll: true });
-  }, []);
+    box?.select();
+  };
+
+  // "Flaunt my medals" with the profile hidden comes to the switch that shows it (#find-and-tag).
+  // myTapturf's "Pick a username", and the notice about a username TapTurf gave, come here (#username):
+  // the card with Keep it and Change when it is showing (the anchor of that name sits on it then, so
+  // the address lands on it by itself too), else the box, ready to type in. "Change" on the Me card asks for the
+  // box. The address is read once the section is drawn (a tap on a link updates it only then), and
+  // it waits until the given username is known, so the box is never focused empty a moment before the card.
+  const cardShown = assignedCardShown(user.id, given);
+  const arrived = useRef(false);
+  const editAsked = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (arrived.current) return;
+    editAsked.current ??= takeUsernameEdit();
+    const hash = window.location.hash;
+    if (!editAsked.current && hash !== "#username") {
+      arrived.current = true;
+      if (hash === "#find-and-tag") document.getElementById("find-and-tag")?.scrollIntoView({ block: "center" });
+      return;
+    }
+    if (!user.username && !assignedKnown) return;
+    arrived.current = true;
+    const card = !editAsked.current && assignedCardShown(user.id, given) ? document.querySelector("#me-panel [data-username-card]") : null;
+    if (card) card.scrollIntoView({ block: "center" });
+    else editUsername();
+  }, [assignedKnown, given, user.id, user.username]);
 
   const u = username.trim();
-  const usernameChanged = u !== (user.username ?? "");
-  const availability = useUsernameCheck(u, user.username, getToken);
+  const usernameChanged = u !== current;
+  const availability = useUsernameCheck(u, current || null, getToken);
+  // A given username is private (the switch shows off). A different name typed over it will be their
+  // own choice, so the switch shows on, as it is for anyone picking a username; they can turn it off first.
+  const taggable = draft.taggable ?? (given ? usernameChanged && !!u : (user.taggable ?? true));
 
   // Only what the person changed is sent: a copy loaded earlier must never put back a switch or a username changed since.
   const nameChanged = draft.name !== undefined && name.trim() !== user.name;
   // The switch belongs to a username: with none (now or typed), there is nothing to save it on.
-  const taggableChanged = draft.taggable !== undefined && taggable !== (user.taggable ?? true) && (!!u || !!user.username);
+  const taggableChanged = !given && draft.taggable !== undefined && taggable !== (user.taggable ?? true) && (!!u || !!user.username);
+  // With the given username still in the box, turning the switch on is keeping it.
+  const givenKept = !!given && !usernameChanged && taggable;
   // A username can be changed but not removed.
-  const usernameCleared = usernameChanged && !u && !!user.username;
-  const anyChange = nameChanged || (usernameChanged && !!u) || taggableChanged;
+  const usernameCleared = usernameChanged && !u && !!current;
+  const anyChange = nameChanged || (usernameChanged && !!u) || taggableChanged || givenKept;
   // Going to Google (or changing the number) would lose what was typed here.
   const dirty = anyChange || usernameCleared;
   const canSave = !saving && !!name.trim() && anyChange && !usernameCleared && (!usernameChanged || (!!u && usernameSavable(availability)));
@@ -115,6 +147,12 @@ export function ProfileSection({ user, onEditPhoto }: { user: AppUser; onEditPho
       if (nameChanged) patch.name = name.trim();
       if (usernameChanged && u) patch.username = u;
       if (taggableChanged) patch.taggable = taggable;
+      // A given username: the name they are saving (their own, or the given one kept) goes with what the switch shows.
+      if (given && usernameChanged && u) patch.taggable = taggable;
+      if (givenKept) {
+        patch.username = given;
+        patch.taggable = true;
+      }
       const a = await patchMe(tok.token, patch);
       const p = profileOf(a);
       if (p) applyProfile(p);
@@ -244,6 +282,11 @@ export function ProfileSection({ user, onEditPhoto }: { user: AppUser; onEditPho
 
   return (
     <div className="max-w-md">
+      {/* The username TapTurf gave them: keep it or change it. Nothing for someone who chose one. */}
+      {/* #username is the card while it is showing, else the username box below: one of the two anchors is drawn. */}
+      {cardShown && <span id="username" className="block scroll-mt-24" aria-hidden />}
+      <AssignedUsernameCard onChange={editUsername} className="mb-6" />
+
       {/* Photo: the sheet is the Me tab's (the header's camera opens it too) */}
       <div className="flex items-center gap-4 mb-6">
         <UserAvatar src={user.profile_image_url} name={user.name} size={64} />
@@ -283,7 +326,8 @@ export function ProfileSection({ user, onEditPhoto }: { user: AppUser; onEditPho
         </div>
 
         {/* Username */}
-        <div id="username" className="scroll-mt-24">
+        <div>
+          {!cardShown && <span id="username" className="block scroll-mt-24" aria-hidden />}
           <label htmlFor="profile-username" className="block text-sm font-medium text-gray-700 mb-1.5">Username</label>
           <div className="relative">
             <AtSign className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -310,6 +354,8 @@ export function ProfileSection({ user, onEditPhoto }: { user: AppUser; onEditPho
           </p>
           {usernameCleared ? (
             <p className="text-xs text-hot-600">Usernames can&rsquo;t be removed. Type one, or undo.</p>
+          ) : given ? (
+            <p className="text-xs text-gray-500">{usernameChanged ? ASSIGNED_WORDS.fieldChanged : ASSIGNED_WORDS.fieldNote}</p>
           ) : (
             usernameChanged && user.username && (
               <p className="text-xs text-gray-500">Your old username keeps pointing to you, and nobody else can take it.</p>

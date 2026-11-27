@@ -5,6 +5,7 @@ import type { CityNote } from "./city";
 import type { GoogleIdentity, Identity } from "./identity";
 import type { AccountProfile, LinkState, PlayerHit } from "./types";
 import type { ToolUse } from "../tools/usage";
+import { USERNAME_RE } from "./tag";
 
 export type { AccountProfile, PlayerHit };
 
@@ -103,14 +104,15 @@ export async function accountRpcIfThere(fn: string, args: Record<string, unknown
 }
 
 async function call(fn: string, args: Record<string, unknown>): Promise<Rpc>;
-async function call(fn: string, args: Record<string, unknown>, orMissing: true): Promise<Rpc | { missing: true }>;
-async function call(fn: string, args: Record<string, unknown>, orMissing = false): Promise<Rpc | { missing: true }> {
+async function call(fn: string, args: Record<string, unknown>, orMissing: true, orClosed?: boolean): Promise<Rpc | { missing: true }>;
+async function call(fn: string, args: Record<string, unknown>, orMissing = false, orClosed = false): Promise<Rpc | { missing: true }> {
   const key = accountKey();
   if (!key) return { unavailable: true };
   try {
     const { data, error } = await accountClient().rpc(fn, { p_key: key, ...args });
     if (error) {
-      if (orMissing && missingFunction(error.code)) return { missing: true };
+      // orClosed: a function whose execute was taken away again (42501) counts as not there.
+      if (orMissing && (missingFunction(error.code) || (orClosed && error.code === "42501"))) return { missing: true };
       console.warn(`account: ${fn} failed`, error.message);
       return { unavailable: true };
     }
@@ -195,15 +197,65 @@ export async function updateName(userId: string, name: string): Promise<ChangeRe
   return changeResult(await call("account_update", { p_user_id: userId, p_name: name }));
 }
 
-/** Set or change the username and/or the tagging switch. A null username changes only the switch. */
+/**
+ * The three functions of 20261128_usernames_assigned.sql (a username TapTurf
+ * gave, waiting for its person: lib/account/assigned.ts). A database without
+ * them, or with their execute taken away again (that file's "To undo"),
+ * answers { missing: true } and the caller does what it did before the file.
+ */
+const given = (fn: "username_ensure" | "username_choose" | "username_check_all", args: Record<string, unknown>) => call(fn, args, true, true);
+
+/**
+ * Set or change the username and/or the tagging switch. A null username changes only the switch.
+ * Through username_choose where the database has it: a name waiting for someone else is taken,
+ * and the caller's own waiting name is closed once they have chosen (a first username never
+ * counts against the 3 changes in 30 days, as before).
+ */
 export async function setUsername(userId: string, username: string | null, taggable: boolean | null): Promise<ChangeResult> {
-  return changeResult(await call("username_set", { p_user_id: userId, p_username: username, p_taggable: taggable }));
+  const args = { p_user_id: userId, p_username: username, p_taggable: taggable };
+  const res = await given("username_choose", args);
+  return changeResult("missing" in res ? await call("username_set", args) : res);
+}
+
+/** The username TapTurf gave this account and is keeping for it, or null (it has chosen one, or none was given). */
+export type EnsureResult = { assigned: string | null } | { missing: true } | { unavailable: true };
+
+/**
+ * The name waiting for an account (username_ensure), given now if it has no
+ * username and none was given yet: this is where an account made after the
+ * migration gets its name, at its first signed-in request. Never makes
+ * anything public. missing: the database is from before the file.
+ */
+export async function ensureUsername(userId: string): Promise<EnsureResult> {
+  const res = await given("username_ensure", { p_user_id: userId });
+  if ("missing" in res || "unavailable" in res) return res;
+  if (res.data.r !== "ok") return { unavailable: true };
+  const a = res.data.assigned;
+  return { assigned: typeof a === "string" && USERNAME_RE.test(a) ? a : null };
+}
+
+/** moved: the name went to someone else a moment ago; this other one is waiting now. */
+export type KeepResult = { ok: AccountProfile } | { moved: string | null } | { r: "bad" } | { missing: true } | { unavailable: true };
+
+/** "Keep it": the given name becomes the account's username, by its person's own tap (username_choose with no name). */
+export async function keepUsername(userId: string): Promise<KeepResult> {
+  const res = await given("username_choose", { p_user_id: userId, p_username: null, p_taggable: null });
+  if ("missing" in res || "unavailable" in res) return res;
+  const r = res.data.r;
+  if (r === "ok") {
+    const p = toProfile(res.data);
+    return p ? { ok: p } : { unavailable: true };
+  }
+  if (r === "moved") return { moved: typeof res.data.assigned === "string" && USERNAME_RE.test(res.data.assigned) ? res.data.assigned : null };
+  return r === "bad" ? { r } : { unavailable: true };
 }
 
 export type CheckResult = { ok: string } | { r: "bad" | "reserved" | "taken" } | { unavailable: true };
 
 export async function checkUsername(userId: string, username: string): Promise<CheckResult> {
-  const res = await call("username_check", { p_user_id: userId, p_username: username });
+  const args = { p_user_id: userId, p_username: username };
+  const all = await given("username_check_all", args);
+  const res = "missing" in all ? await call("username_check", args) : all;
   if ("unavailable" in res) return res;
   const r = res.data.r;
   if (r === "ok" && typeof res.data.username === "string") return { ok: res.data.username };
