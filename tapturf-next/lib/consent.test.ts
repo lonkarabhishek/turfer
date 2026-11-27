@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  ADS_STORAGE_PREFIXES,
+  adsCookieNames,
   CONSENT_MAX_AGE_S,
+  CONSENT_VERSION,
   consentCookie,
   consentOf,
   cookieDomains,
@@ -26,29 +29,32 @@ function boot(o: Parameters<typeof installBrowser>[0] = {}): { b: FakeBrowser; c
 // ---------------------------------------------------------------------------
 // The cookie
 
-test("parse: accepted.v1 and rejected.v1, among other cookies", () => {
-  assert.equal(parseConsentCookie("tt_consent=accepted.v1"), "accepted");
-  assert.equal(parseConsentCookie("tt_city=pune; tt_consent=rejected.v1; _ga=GA1.1.1.1"), "rejected");
-  assert.equal(parseConsentCookie(" tt_consent = accepted.v1 "), "accepted");
+test("parse: accepted.v2 and rejected.v2, among other cookies", () => {
+  assert.equal(parseConsentCookie("tt_consent=accepted.v2"), "accepted");
+  assert.equal(parseConsentCookie("tt_city=pune; tt_consent=rejected.v2; _ga=GA1.1.1.1"), "rejected");
+  assert.equal(parseConsentCookie(" tt_consent = accepted.v2 "), "accepted");
 });
 
 test("parse: nothing, garbage and look-alikes are no choice", () => {
-  for (const c of [null, undefined, "", "tt_consent=", "tt_consent=yes", "tt_consent=accepted", "tt_consent=ACCEPTED.v1", "xtt_consent=accepted.v1", "tt_consentx=accepted.v1", "tt_consent=accepted.v1x"]) {
+  for (const c of [null, undefined, "", "tt_consent=", "tt_consent=yes", "tt_consent=accepted", "tt_consent=ACCEPTED.v2", "xtt_consent=accepted.v2", "tt_consentx=accepted.v2", "tt_consent=accepted.v2x"]) {
     assert.equal(parseConsentCookie(c), null, String(c));
   }
 });
 
 test("parse: an Accept for another version asks again, a Reject for any version holds", () => {
+  assert.equal(CONSENT_VERSION, 2, "2 since Accept covers Google AdSense too (28 Nov 2026)");
   assert.equal(parseConsentCookie("tt_consent=accepted.v0"), null);
-  assert.equal(parseConsentCookie("tt_consent=accepted.v2"), null);
+  assert.equal(parseConsentCookie("tt_consent=accepted.v1"), null, "an Accept from before ads covered less than Accept does now");
+  assert.equal(parseConsentCookie("tt_consent=accepted.v3"), null);
   assert.equal(parseConsentCookie("tt_consent=rejected.v0"), "rejected");
+  assert.equal(parseConsentCookie("tt_consent=rejected.v1"), "rejected", "a Reject from before ads still holds");
   // A bad copy first does not hide a good one.
-  assert.equal(parseConsentCookie("tt_consent=junk; tt_consent=accepted.v1"), "accepted");
+  assert.equal(parseConsentCookie("tt_consent=junk; tt_consent=accepted.v2"), "accepted");
 });
 
 test("the cookie: first party, whole site, about six months, Lax, Secure on https", () => {
   const c = consentCookie("accepted", true);
-  assert.match(c, /^tt_consent=accepted\.v1; /);
+  assert.match(c, /^tt_consent=accepted\.v2; /);
   assert.match(c, /; Path=\/(;|$)/);
   assert.match(c, /; SameSite=Lax/);
   assert.match(c, /; Secure$/);
@@ -69,10 +75,32 @@ test("consentOf: a stored choice wins, Global Privacy Control is a Reject, else 
 
 test("GA's cookies: _ga, _ga_<id>, _gid, _gat; not ours or look-alikes", () => {
   assert.deepEqual(
-    gaCookieNames("_ga=GA1.1.2.3; _ga_KRDVP16TSM=GS1; tt_city=pune; _gid=x; _gat_gtag_UA_1=1; _gac_x=1; _gcl_au=1; tt_consent=accepted.v1; _gallery=1; ga=1"),
+    gaCookieNames("_ga=GA1.1.2.3; _ga_KRDVP16TSM=GS1; tt_city=pune; _gid=x; _gat_gtag_UA_1=1; _gac_x=1; _gcl_au=1; tt_consent=accepted.v2; _gallery=1; ga=1"),
     ["_ga", "_ga_KRDVP16TSM", "_gid", "_gat_gtag_UA_1", "_gac_x", "_gcl_au"],
   );
   assert.deepEqual(gaCookieNames(""), []);
+});
+
+test("AdSense's cookies: __gads, __gpi, __eoi; not ours, GA's or look-alikes", () => {
+  assert.deepEqual(
+    adsCookieNames("__gads=ID=1:T=2; tt_city=pune; __gpi=UID=3; _ga=GA1.1.2.3; __eoi=ID=4; tt_consent=accepted.v2; __gadsx=1; x__gads=1; _gads=1; __GADS=1"),
+    ["__gads", "__gpi", "__eoi"],
+  );
+  assert.deepEqual(adsCookieNames(""), []);
+  assert.deepEqual(adsCookieNames(null), []);
+  assert.deepEqual(gaCookieNames("__gads=1; __gpi=1; __eoi=1"), [], "and GA's list does not name them twice");
+});
+
+test("the ad script's storage: keys that start google_ or goog_, none of them one TapTurf keeps", () => {
+  assert.deepEqual([...ADS_STORAGE_PREFIXES], ["google_", "goog_"]);
+  const { b, c } = boot();
+  try {
+    for (const k of [...c.CONSENTED_LOCAL_KEYS, c.CONSENTED_SESSION_PREFIX, c.CONSENT_COOKIE, "tapturf_city", "tapturf_policy_seen"]) {
+      assert.equal(ADS_STORAGE_PREFIXES.some((p) => k.startsWith(p)), false, k);
+    }
+  } finally {
+    b.uninstall();
+  }
 });
 
 test("cookie domains: host-only first, then every parent with and without the dot; none for IPs and localhost", () => {
@@ -130,7 +158,7 @@ test("Accept: the cookie is set, consent is granted at once, listeners hear it, 
 test("a stored choice is read on the next page load", () => {
   const { b, c } = boot();
   try {
-    b.jar.put("tt_consent", "accepted.v1");
+    b.jar.put("tt_consent", "accepted.v2");
     assert.equal(c.getConsent(), "granted");
     assert.equal(c.bannerShown(), false);
   } finally {
@@ -138,11 +166,36 @@ test("a stored choice is read on the next page load", () => {
   }
   const again = boot();
   try {
-    again.b.jar.put("tt_consent", "rejected.v1");
+    again.b.jar.put("tt_consent", "rejected.v2");
     assert.equal(again.c.getConsent(), "denied");
     assert.equal(again.c.bannerShown(), false);
   } finally {
     again.b.uninstall();
+  }
+});
+
+test("an Accept from before ads (accepted.v1) is no choice: the banner asks again and nothing is allowed until a new Accept", () => {
+  const { b, c } = boot();
+  try {
+    b.jar.put("tt_consent", "accepted.v1");
+    assert.equal(c.storedChoice(), null);
+    assert.equal(c.getConsent(), "unset");
+    assert.equal(c.bannerShown(), true, "asked again");
+    assert.equal(c.analyticsAllowed(), false);
+    c.setConsent("accepted");
+    assert.equal(c.getConsent(), "granted");
+    assert.match(b.jar.header, /(^|; )tt_consent=accepted\.v2($|; )/, "the new Accept is stored as this version's");
+    assert.doesNotMatch(b.jar.header, /accepted\.v1/);
+  } finally {
+    b.uninstall();
+  }
+  const old = boot();
+  try {
+    old.b.jar.put("tt_consent", "rejected.v1");
+    assert.equal(old.c.getConsent(), "denied", "a Reject from before ads still holds");
+    assert.equal(old.c.bannerShown(), false, "and is not asked again");
+  } finally {
+    old.b.uninstall();
   }
 });
 
@@ -164,14 +217,14 @@ test("Global Privacy Control: denied with no banner, until the visitor accepts i
   }
   const later = boot({ gpc: true });
   try {
-    later.b.jar.put("tt_consent", "accepted.v1");
+    later.b.jar.put("tt_consent", "accepted.v2");
     assert.equal(later.c.getConsent(), "granted", "the explicit Accept still holds on the next load");
   } finally {
     later.b.uninstall();
   }
 });
 
-test("Reject after Accept (withdrawal): GA stops, its cookies on every domain and the local notes are deleted", () => {
+test("Reject after Accept (withdrawal): GA stops, GA's and AdSense's cookies on every domain and the local notes are deleted", () => {
   const { b, c } = boot();
   try {
     c.setConsent("accepted");
@@ -180,20 +233,32 @@ test("Reject after Accept (withdrawal): GA stops, its cookies on every domain an
     b.jar.put("_ga", "GA1.1.123.456", "tapturf.in");
     b.jar.put("_ga_KRDVP16TSM", "GS1.1.1", "tapturf.in");
     b.jar.put("_gid", "GA1.1.9", null);
+    b.jar.put("__gads", "ID=1:T=2:RT=3:S=4", "tapturf.in");
+    b.jar.put("__gpi", "UID=5:T=6", "tapturf.in");
+    b.jar.put("__eoi", "ID=7:T=8", null);
     b.jar.put("tt_city", "pune");
     for (const k of c.CONSENTED_LOCAL_KEYS) b.local.setItem(k, "x");
     b.local.setItem("tapturf_city", "pune");
     b.local.setItem("tapturf_ask_anon", "a-b-c");
+    b.local.setItem("google_adsense_settings", "{}");
+    b.local.setItem("google_ama_config", "{}");
+    b.local.setItem("goog_pem_mod", "1");
+    b.session.setItem("google_experiment_mod1", "1");
     b.session.setItem("tt_viewed_abc", "1");
     b.session.setItem("tapturf_ask_thread_v1", "[]");
+    // The ad script is on this page (it replaces the array with an object of its own).
+    const ads: Record<string, unknown> = { loaded: true };
+    b.win.adsbygoogle = ads;
 
     c.setConsent("rejected");
 
+    assert.deepEqual(ads, { loaded: true, pauseAdRequests: 1, requestNonPersonalizedAds: 1 }, "the ad script is told to ask for no more ads; nothing is pushed");
+
     assert.equal(c.getConsent(), "denied");
     assert.equal(b.win["ga-disable-G-KRDVP16TSM"], true, "GA's own off switch");
-    assert.deepEqual(calls, [["consent", "update", { analytics_storage: "denied" }]]);
+    assert.deepEqual(calls, [["consent", "update", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" }]]);
     assert.equal("gtag" in b.win, false, "window.gtag is gone, so every gtag?.() is a no-op");
-    assert.deepEqual(b.jar.names().sort(), ["tt_city", "tt_consent"], "GA's cookies gone, ours kept");
+    assert.deepEqual(b.jar.names().sort(), ["tt_city", "tt_consent"], "GA's and AdSense's cookies gone, ours kept");
     assert.equal(parseConsentCookie(b.jar.header), "rejected");
     assert.deepEqual(b.local.keys().sort(), ["tapturf_ask_anon", "tapturf_city"], "only the notes that need consent go");
     assert.deepEqual(b.session.keys(), ["tapturf_ask_thread_v1"]);
@@ -209,7 +274,7 @@ test("a Reject made in another tab applies here when this tab comes back", () =>
     b.win.gtag = () => {};
     let heard = 0;
     c.subscribeConsent(() => heard++);
-    b.jar.put("tt_consent", "rejected.v1"); // the other tab
+    b.jar.put("tt_consent", "rejected.v2"); // the other tab
     b.fire("visibilitychange");
     assert.equal(c.getConsent(), "denied");
     assert.equal(heard, 1);
@@ -252,7 +317,7 @@ test("a choice made in another tab reaches this one at once, while both are on s
     let heard = 0;
     c.subscribeConsent(() => heard++);
     // The other tab rejects: it stores the cookie and posts; no visibilitychange here.
-    b.jar.put("tt_consent", "rejected.v1");
+    b.jar.put("tt_consent", "rejected.v2");
     other.postMessage("rejected");
     assert.equal(c.getConsent(), "denied");
     assert.equal(heard, 1);
@@ -270,12 +335,12 @@ test("a gate reads the cookie before saying yes: another tab's Reject wins with 
     c.setConsent("accepted");
     assert.equal(c.analyticsAllowed(), true);
     b.win.gtag = () => {};
-    b.jar.put("tt_consent", "rejected.v1"); // stored by another tab; nothing fired here
+    b.jar.put("tt_consent", "rejected.v2"); // stored by another tab; nothing fired here
     assert.equal(c.analyticsAllowed(), false);
     assert.equal(c.getConsent(), "denied");
     assert.equal("gtag" in b.win, false);
     // And an Accept made elsewhere is picked up the same way.
-    b.jar.put("tt_consent", "accepted.v1");
+    b.jar.put("tt_consent", "accepted.v2");
     assert.equal(c.analyticsAllowed(), false, "a no is not re-read: nothing starts on a stale check");
     b.fire("visibilitychange");
     assert.equal(c.analyticsAllowed(), true);
@@ -288,6 +353,8 @@ test("before Accept, what a visit before the banner (or a lapsed Accept) left he
   const seed = (b: FakeBrowser, c: ConsentModule) => {
     b.jar.put("_ga", "GA1.1.123.456", "tapturf.in");
     b.jar.put("_ga_KRDVP16TSM", "GS1.1.1", "tapturf.in");
+    b.jar.put("__gads", "ID=1", "tapturf.in");
+    b.local.setItem("google_adsense_settings", "{}");
     b.jar.put("tt_city", "pune");
     for (const k of c.CONSENTED_LOCAL_KEYS) b.local.setItem(k, "x");
     b.local.setItem("tapturf_city", "pune");
@@ -295,8 +362,8 @@ test("before Accept, what a visit before the banner (or a lapsed Accept) left he
   };
   for (const [label, cookie, gpc] of [
     ["no choice yet", null, false],
-    ["an Accept for an older version", "accepted.v0", false],
-    ["a Reject", "rejected.v1", false],
+    ["an Accept for an older version", "accepted.v1", false],
+    ["a Reject", "rejected.v2", false],
     ["Global Privacy Control", null, true],
   ] as const) {
     const { b, c } = boot({ gpc });
@@ -304,7 +371,8 @@ test("before Accept, what a visit before the banner (or a lapsed Accept) left he
       seed(b, c);
       if (cookie) b.jar.put("tt_consent", cookie);
       c.forgetUnconsented();
-      assert.deepEqual(b.jar.names().filter((n) => n.startsWith("_ga")), [], `${label}: GA cookies`);
+      assert.deepEqual(b.jar.names().filter((n) => n.startsWith("_ga") || n.startsWith("__g")), [], `${label}: GA's and AdSense's cookies`);
+      assert.equal("adsbygoogle" in b.win, false, `${label}: nothing of the ad script is made where it never ran`);
       assert.deepEqual(b.local.keys(), ["tapturf_city"], `${label}: only what needs no consent stays`);
       assert.deepEqual(b.session.keys(), [], label);
     } finally {
@@ -314,9 +382,11 @@ test("before Accept, what a visit before the banner (or a lapsed Accept) left he
   const { b, c } = boot();
   try {
     seed(b, c);
-    b.jar.put("tt_consent", "accepted.v1");
+    b.jar.put("tt_consent", "accepted.v2");
     c.forgetUnconsented();
     assert.equal(b.jar.names().includes("_ga"), true, "a valid Accept keeps them");
+    assert.equal(b.jar.names().includes("__gads"), true);
+    assert.equal(b.local.getItem("google_adsense_settings"), "{}");
     assert.equal(b.local.getItem("tt_first_v1"), "x");
   } finally {
     b.uninstall();
