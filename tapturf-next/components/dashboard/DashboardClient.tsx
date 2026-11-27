@@ -8,6 +8,9 @@ import { useAuth, type SignedInWith } from "@/components/auth/AuthProvider";
 import { UserAvatar } from "@/components/account/UserAvatar";
 import { NameWithTick } from "@/components/account/VerifiedTick";
 import { PhotoSheet } from "@/components/account/PhotoSheet";
+import { AssignedUsernameCard } from "@/components/account/AssignedUsernameCard";
+import { askUsernameEdit, useAssignedUsername } from "@/components/account/useAssignedUsername";
+import { ASSIGNED_WORDS } from "@/lib/account/assigned";
 import { useCityChoice } from "@/components/city/useCityChoice";
 import { labelFor, openCityPicker } from "@/lib/city";
 import { MyGames, type GamesView } from "./MyGames";
@@ -129,6 +132,8 @@ function Me({
   const [photoOpen, setPhotoOpen] = useState(false);
   const [photoNote, setPhotoNote] = useState("");
   const city = useCityChoice();
+  // The username TapTurf gave them, until they keep it or pick another: shown to them only, never a link.
+  const given = useAssignedUsername();
   const [hello] = useState(() => greeting());
   const [passport, setPassport] = useState<PassportResponse | null>(null);
   const onPassport = tab === "passport";
@@ -280,11 +285,19 @@ function Me({
                     ) : (
                       <span className="min-w-0 truncate font-medium text-primary-600">@{user.username}</span>
                     )
-                  ) : (
+                  ) : given.assigned ? (
+                    <span className="inline-flex min-w-0 items-center min-h-[44px] font-medium text-primary-600" title={ASSIGNED_WORDS.meLabel(given.assigned)}>
+                      <span className="truncate">@{given.assigned}</span>
+                      <span className="sr-only">: {ASSIGNED_WORDS.meLabel(given.assigned)}</span>
+                    </span>
+                  ) : given.known ? (
                     <Link href="/dashboard?tab=profile#username" className="inline-flex items-center gap-1 min-h-[44px] font-semibold text-accent-700">
                       <AtSign className="w-3.5 h-3.5" aria-hidden />
                       Pick a username
                     </Link>
+                  ) : (
+                    // Until the server says whether a username is waiting for them: the line keeps its height, with nothing to tap.
+                    <span className="inline-block min-h-[44px]" aria-hidden />
                   )}
                   {/* The weekly streak alive now, from 2 weeks (lib/profile/streak.ts): a tap shows its words below. */}
                   {streakWeeks > 0 && (
@@ -326,6 +339,18 @@ function Me({
                 <p className="mt-2 text-[13px] font-semibold text-accent-700" role="status">
                   {photoNote}
                 </p>
+              )}
+              {/* "Your username is @asha_rao": Keep it or Change, where "Pick a username" used to be the only way in.
+                  Once on the page: with the Profile section open the card is at its top instead. */}
+              {tab !== "profile" && (
+                <AssignedUsernameCard
+                  className="mt-3"
+                  onChange={() => {
+                    // The Profile section, with the cursor in its username box (no #username: that address lands on the card).
+                    askUsernameEdit();
+                    pick("profile");
+                  }}
+                />
               )}
 
               {/* Real numbers from their own games; a dash until they are in. Hosted and Joined open their

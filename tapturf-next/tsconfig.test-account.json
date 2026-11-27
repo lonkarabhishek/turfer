@@ -25,6 +25,8 @@
     "lib/account/display.test.ts",
     "lib/account/toolRoutes.test.ts",
     "lib/account/avatar.test.ts",
-    "lib/account/photoRoutes.test.ts"
+    "lib/account/photoRoutes.test.ts",
+    "lib/account/assigned.test.ts",
+    "lib/account/usernameRoutes.test.ts"
   ]
 }

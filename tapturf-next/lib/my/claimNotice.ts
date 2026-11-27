@@ -91,6 +91,12 @@ export const TOURNAMENT_HOST_SHOWN = "tournament_host_shown";
  */
 export const TOURNAMENT_ON_TURF_PAGE = "tournament_on_turf_page";
 
+/**
+ * An account that had no username was given one and told once (20261128_usernames_assigned.sql;
+ * lib/account/assigned.ts ASSIGNED_NOTICE has the words, and its test holds this type to it).
+ */
+export const USERNAME_ASSIGNED = "username_assigned";
+
 /** Where tapping a notification goes, and what its small link says: a game (by its id: the page 308s to its readable URL, lib/utils/gamePath.ts), a claim decision's turf, or a booking request. Null: nowhere (it marks read). */
 export function notificationLink(type: string, metadata: unknown): { href: string; label: string | null } | null {
   const m = metadata && typeof metadata === "object" && !Array.isArray(metadata) ? (metadata as Record<string, unknown>) : {};
@@ -103,6 +109,8 @@ export function notificationLink(type: string, metadata: unknown): { href: strin
   if ((BOOKING_TO_PLAYER as readonly string[]).includes(type)) return { href: "/dashboard?tab=requests", label: "Your requests" };
   // "Were you at Football on Sat? Confirm it for your Passport" (20261118_game_tags_shown.sql): the card is on the Passport tab.
   if (type === TAG_PLAYED_ASK) return { href: "/dashboard?tab=passport", label: "Open your Passport" };
+  // The card with Keep it and Change is at the top of the Profile section.
+  if (type === USERNAME_ASSIGNED) return { href: "/dashboard?tab=profile#username", label: "Open Profile" };
   // The way to hide the name is the profile's own switch.
   if (type === TOURNAMENT_HOST_SHOWN) return { href: "/dashboard?tab=profile#find-and-tag", label: "Open that switch" };
   // The way to take it off the turf's page is the tournament's own venue, under Manage on its page.

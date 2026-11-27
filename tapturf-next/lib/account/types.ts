@@ -10,6 +10,7 @@
  *                                               skipEmail: true answers the ask with No thanks)
  *   GET   /api/account/username?u=<name>   -> UsernameCheckResponse
  *   GET   /api/account/username?suggest=1  -> UsernameSuggestResponse
+ *   POST  /api/account/username  { keep: true } -> UsernameKeepResponse ("Keep it")
  *   GET   /api/players/search?q=<text>     -> PlayersSearchResponse
  *
  * Adding Google to a phone account (Bearer: the phone sign-in's Firebase token):
@@ -164,7 +165,13 @@ export type PhoneSetResponse =
   | { error: AccountError; until?: string; holderOpens?: boolean; holderEmpty?: boolean; holderMadeOn?: string | null };
 
 export type UsernameCheckResponse = { ok: true; username: string } | { error: AccountError };
-export type UsernameSuggestResponse = { username: string | null } | { error: AccountError };
+/**
+ * assigned: this username is the one TapTurf gave the account and keeps for it (lib/account/assigned.ts).
+ * It is private until its person keeps it or saves another. Without it: only a suggestion.
+ */
+export type UsernameSuggestResponse = { username: string | null; assigned?: true } | { error: AccountError };
+/** taken (with assigned): the name went to someone else a moment ago, and this other one is waiting now. */
+export type UsernameKeepResponse = { profile: AccountProfile } | { error: AccountError; assigned?: string | null };
 
 /** A profile people can tag: no ids, phone or email. v: the verified tick (search results only, never kept). */
 export type PlayerHit = { u: string; name: string; photo: string | null; v?: true };

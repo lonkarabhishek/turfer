@@ -1,0 +1,309 @@
+{
+ "about": "The username TapTurf gives an account, made from the name on it and nothing else. lib/account/assigned.ts (npm run test:account: assignUsername) and 20261128_usernames_assigned.sql (scripts/sql-tests/usernames_assigned.check.mjs: private.username_from_name and private.username_assign) must agree on every one. name: the account's name. emails: every address the account holds, read only to make sure the name is not one of them. taken: usernames someone has, had, or is waiting to choose. want: the username given. Made-up people only.",
+ "names": [
+  {
+   "what": "a first and a last name",
+   "name": "Asha Rao",
+   "want": "asha_rao"
+  },
+  {
+   "what": "the same name, taken once",
+   "name": "Asha Rao",
+   "taken": [
+    "asha_rao"
+   ],
+   "want": "asha_rao2"
+  },
+  {
+   "what": "taken twice",
+   "name": "Asha Rao",
+   "taken": [
+    "asha_rao",
+    "asha_rao2"
+   ],
+   "want": "asha_rao3"
+  },
+  {
+   "what": "a gap in the numbers is used",
+   "name": "Asha Rao",
+   "taken": [
+    "asha_rao",
+    "asha_rao3"
+   ],
+   "want": "asha_rao2"
+  },
+  {
+   "what": "capitals and extra spaces",
+   "name": "  ASHA    rao ",
+   "want": "asha_rao"
+  },
+  {
+   "what": "one word",
+   "name": "Kabir",
+   "want": "kabir"
+  },
+  {
+   "what": "one word, taken",
+   "name": "Kabir",
+   "taken": [
+    "kabir"
+   ],
+   "want": "kabir2"
+  },
+  {
+   "what": "accents are folded to plain letters",
+   "name": "José Peña",
+   "want": "jose_pena"
+  },
+  {
+   "what": "an umlaut inside a word",
+   "name": "Jörg Müller",
+   "want": "jorg_muller"
+  },
+  {
+   "what": "an apostrophe joins",
+   "name": "Nina D'Souza",
+   "want": "nina_dsouza"
+  },
+  {
+   "what": "a curly apostrophe joins",
+   "name": "Liam O’Brien",
+   "want": "liam_obrien"
+  },
+  {
+   "what": "initials with dots",
+   "name": "K. L. Menon",
+   "want": "k_menon"
+  },
+  {
+   "what": "initials without spaces",
+   "name": "S.Kumar",
+   "want": "s_kumar"
+  },
+  {
+   "what": "a middle name is left out",
+   "name": "Meera Vijay Kulkarni",
+   "want": "meera_kulkarni"
+  },
+  {
+   "what": "a hyphen separates",
+   "name": "Asha-Rao",
+   "want": "asha_rao"
+  },
+  {
+   "what": "an underscore separates",
+   "name": "Asha_Rao",
+   "want": "asha_rao"
+  },
+  {
+   "what": "a comma separates",
+   "name": "Rao, Asha",
+   "want": "rao_asha"
+  },
+  {
+   "what": "full width letters",
+   "name": "Ａｓｈａ Ｒａｏ",
+   "want": "asha_rao"
+  },
+  {
+   "what": "exactly 16 characters fits",
+   "name": "Abcdefgh Ijklmno",
+   "want": "abcdefgh_ijklmno"
+  },
+  {
+   "what": "17 characters: the last name becomes its initial",
+   "name": "Abcdefgh Ijklmnop",
+   "want": "abcdefgh_i"
+  },
+  {
+   "what": "a long last name becomes its initial",
+   "name": "Anantha Krishnamoorthy",
+   "want": "anantha_k"
+  },
+  {
+   "what": "a long first name stands alone",
+   "name": "Sudarshanprasad Venkataramanan",
+   "want": "sudarshanprasad"
+  },
+  {
+   "what": "a very long single word is cut at 16",
+   "name": "Venkatanarasimharajuvaripeta",
+   "want": "venkatanarasimha"
+  },
+  {
+   "what": "a title in front is left out",
+   "name": "Dr. Asha Rao",
+   "want": "asha_rao"
+  },
+  {
+   "what": "another title",
+   "name": "Mr Kabir Sethi",
+   "want": "kabir_sethi"
+  },
+  {
+   "what": "a title alone is too short to be a name",
+   "name": "Dr",
+   "want": "turfer1"
+  },
+  {
+   "what": "a name in Devanagari has no usable letters",
+   "name": "आशुतोष पाटील",
+   "want": "turfer1"
+  },
+  {
+   "what": "a name in Tamil, with turfer1 taken",
+   "name": "தமிழ் செல்வன்",
+   "taken": [
+    "turfer1"
+   ],
+   "want": "turfer2"
+  },
+  {
+   "what": "only emoji",
+   "name": "🔥🔥",
+   "want": "turfer1"
+  },
+  {
+   "what": "two scripts: the Latin part is used",
+   "name": "Asha राव",
+   "want": "asha"
+  },
+  {
+   "what": "too short to be a username",
+   "name": "Om",
+   "want": "turfer1"
+  },
+  {
+   "what": "two short words make three characters",
+   "name": "Al B",
+   "want": "al_b"
+  },
+  {
+   "what": "one letter",
+   "name": "X",
+   "want": "turfer1"
+  },
+  {
+   "what": "empty",
+   "name": "",
+   "want": "turfer1"
+  },
+  {
+   "what": "only spaces",
+   "name": "   ",
+   "want": "turfer1"
+  },
+  {
+   "what": "a phone number as the name gives nothing from it",
+   "name": "9800000012",
+   "want": "turfer1"
+  },
+  {
+   "what": "a name with a phone number after it: no digit is kept",
+   "name": "Rahul 9800000012",
+   "want": "rahul"
+  },
+  {
+   "what": "digits inside a name are left out",
+   "name": "Rahul07",
+   "want": "rahul"
+  },
+  {
+   "what": "a number after the name is left out",
+   "name": "Asha Rao 2",
+   "want": "asha_rao"
+  },
+  {
+   "what": "an email address as the name",
+   "name": "asha.rao92@example.com",
+   "want": "turfer1"
+  },
+  {
+   "what": "the name is the part of the account's email before the @ (a Google account with no name)",
+   "name": "asha.rao92",
+   "emails": [
+    "asha.rao92@example.com"
+   ],
+   "want": "turfer1"
+  },
+  {
+   "what": "the same, whatever the capitals",
+   "name": "Asha",
+   "emails": [
+    null,
+    "ASHA@example.com"
+   ],
+   "want": "turfer1"
+  },
+  {
+   "what": "a real name is used even when the email is made of it",
+   "name": "Asha Rao",
+   "emails": [
+    "asha.rao@example.com"
+   ],
+   "want": "asha_rao"
+  },
+  {
+   "what": "a handle that is no address of the account is treated as a name",
+   "name": "asha.rao92",
+   "emails": [
+    "someone.else@example.com"
+   ],
+   "want": "asha_rao"
+  },
+  {
+   "what": "a reserved word",
+   "name": "Admin",
+   "want": "turfer1"
+  },
+  {
+   "what": "a word the rules refuse inside a name",
+   "name": "Padmini Iyer",
+   "want": "turfer1"
+  },
+  {
+   "what": "TapTurf's own name",
+   "name": "Team Tapturf",
+   "want": "turfer1"
+  },
+  {
+   "what": "another reserved word",
+   "name": "Support",
+   "want": "turfer1"
+  },
+  {
+   "what": "reserved once the underscore is taken out",
+   "name": "Near Me",
+   "want": "turfer1"
+  },
+  {
+   "what": "the fallback word as a name",
+   "name": "Turfer",
+   "want": "turfer"
+  },
+  {
+   "what": "the fallback counts past the taken ones",
+   "name": "राहुल",
+   "taken": [
+    "turfer1",
+    "turfer2",
+    "turfer3"
+   ],
+   "want": "turfer4"
+  },
+  {
+   "what": "the fallback never stands without a number",
+   "name": "राहुल",
+   "taken": [
+    "turfer"
+   ],
+   "want": "turfer1"
+  }
+ ],
+ "notice": {
+  "type": "username_assigned",
+  "title": "You have a TapTurf username",
+  "message": "Your TapTurf username is @{username}. Keep it or change it in Profile. It stays private until you say so.",
+  "link": "/dashboard?tab=profile#username"
+ }
+}

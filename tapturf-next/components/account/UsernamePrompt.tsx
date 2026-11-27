@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { errorOf, patchMe, profileOf, suggestUsername } from "@/lib/account/client";
 import { AVAILABILITY_TEXT, useUsernameCheck, usernameSavable } from "./useUsernameCheck";
 import { TagSwitch } from "./TagSwitch";
+import { setAssigned } from "./useAssignedUsername";
 import { FOCUSABLE, askHere, busy, claimPrompt } from "@/lib/account/prompts";
 import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 
@@ -50,6 +51,12 @@ const SAVE_ERROR: Record<string, string> = {
  * device, prefilled with a free one made from their name. Only after the
  * server confirmed there is none (profileFresh), and never over another
  * dialog. This is also where people first hear about tagging.
+ *
+ * Since 20261128_usernames_assigned.sql every account is given a username
+ * (private until its person keeps it, lib/account/assigned.ts), and for
+ * such an account this sheet never opens: the Me tab's card asks instead
+ * (components/account/AssignedUsernameCard.tsx). The sheet is what a
+ * database from before that file still gets.
  */
 export function UsernamePrompt() {
   const { user, profileFresh, getToken, applyProfile, notice } = useAuth();
@@ -79,7 +86,15 @@ export function UsernamePrompt() {
       if (!live || !("token" in tok)) return;
       const a = await suggestUsername(tok.token);
       if (!live || errorOf(a)) return;
-      const suggestion = (a.body as { username?: string | null }).username ?? "";
+      const answer = a.body as { username?: string | null; assigned?: boolean };
+      if (answer.assigned === true) {
+        // TapTurf gave this account a username already. It waits for them on the Me tab, as a card with
+        // Keep it and Change: this sheet never opens for it, and the other asks need not wait for this one.
+        setAssigned(userId, answer.username ?? null);
+        markAsked(userId);
+        return;
+      }
+      const suggestion = answer.username ?? "";
       if (busy() || !claimPrompt("username")) return;
       lastFocus.current = document.activeElement as HTMLElement | null;
       setUsername(suggestion);
