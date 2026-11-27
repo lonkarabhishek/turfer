@@ -4,21 +4,29 @@ import { useSyncExternalStore } from "react";
  * The visitor's cookie choice (components/consent/CookieBanner.tsx).
  *
  * Nothing that tracks or stores a visit runs until the visitor taps
- * Accept: Google Analytics (lib/analytics/ga.ts), the on-device visit note
- * sent at sign-up (lib/analytics/visitor.ts), the free tools' random guest
- * tag (lib/analytics/tools.ts) and Google Maps embeds. TapTurf's own
+ * Accept: Google Analytics (lib/analytics/ga.ts), Google AdSense's ad
+ * script (lib/analytics/ads.ts, lib/ads.ts; since 28 Nov 2026, which is
+ * why the version is 2), the on-device visit note sent at sign-up
+ * (lib/analytics/visitor.ts), the free tools' random guest tag
+ * (lib/analytics/tools.ts) and Google Maps embeds. TapTurf's own
  * anonymous counts (turf page views, Call/WhatsApp taps, tool use counts,
  * page views and visits, lib/traffic) run for everyone: they store nothing
  * on the device and name no one.
  *
- * The choice is a first-party cookie, tt_consent=accepted.v1 or
- * rejected.v1, for about six months. Pages are static, so the server never
+ * The choice is a first-party cookie, tt_consent=accepted.v2 or
+ * rejected.v2, for about six months. An Accept from before ads
+ * (accepted.v1) covered less than Accept does now, so it is no choice:
+ * the banner asks again and nothing loads until then. A Reject of any
+ * version still holds. Pages are static, so the server never
  * reads it: the browser does, after hydration (useConsent says "unknown"
  * until then, which every gate treats as no). A browser that sends Global
  * Privacy Control (navigator.globalPrivacyControl) is treated as Reject
  * until the visitor accepts in Cookie settings. A Reject, now or later,
- * stops Google Analytics on the page and deletes its cookies and the
- * on-device notes (forgetTracking). Changes apply at once, no reload, in
+ * stops Google Analytics on the page, pauses the ad script if it is on
+ * the page, and deletes their cookies and the on-device notes
+ * (forgetTracking). The ad script cannot be taken off a page it has run
+ * on: ads it already drew stay until the next page load, which does not
+ * load it. Changes apply at once, no reload, in
  * every open tab: a choice made in one is posted to the others
  * (BroadcastChannel), and every gate (analyticsAllowed) reads the cookie
  * again before saying yes, so another tab's Reject wins at once.
@@ -27,8 +35,11 @@ import { useSyncExternalStore } from "react";
  */
 
 export const CONSENT_COOKIE = "tt_consent";
-/** Bump when what Accept covers changes: an older Accept asks again, an older Reject still holds. */
-export const CONSENT_VERSION = 1;
+/**
+ * Bump when what Accept covers changes: an older Accept asks again, an older Reject still holds.
+ * 1: Google Analytics, the visit note, the tools' guest tag, Google Maps. 2 (28 Nov 2026): Google AdSense too.
+ */
+export const CONSENT_VERSION = 2;
 /** About six months. */
 export const CONSENT_MAX_AGE_S = 182 * 24 * 60 * 60;
 export const GA_ID = "G-KRDVP16TSM";
@@ -57,7 +68,7 @@ export const CONSENTED_LOCAL_KEYS = [
 export const CONSENTED_SESSION_PREFIX = "tt_viewed_";
 
 // ---------------------------------------------------------------------------
-// Pure: the cookie, Global Privacy Control, Google Analytics' cookies
+// Pure: the cookie, Global Privacy Control, Google Analytics' and AdSense's cookies
 
 /** The choice in a Cookie header (or document.cookie); null when there is none to go by. */
 export function parseConsentCookie(cookieHeader: string | null | undefined): ConsentChoice | null {
@@ -97,9 +108,26 @@ export function gaCookieNames(cookieHeader: string | null | undefined): string[]
 }
 
 /**
+ * Google AdSense's cookies in a Cookie header: __gads, __gpi and __eoi, which its
+ * script sets on this site's own domain to pick, cap and measure ads.
+ */
+export function adsCookieNames(cookieHeader: string | null | undefined): string[] {
+  const out = new Set<string>();
+  for (const part of (cookieHeader ?? "").split(";")) {
+    const name = part.split("=")[0].trim();
+    if (/^__(gads|gpi|eoi)$/.test(name)) out.add(name);
+  }
+  return [...out];
+}
+
+/** What AdSense's script keeps in this browser's storage (its settings, its Auto ads layout, its experiment marks): keys that start so. */
+export const ADS_STORAGE_PREFIXES = ["google_", "goog_"] as const;
+
+/**
  * The Domain values a cookie for this host can have been set with: none
  * (host-only), then the host and each parent domain with and without the
- * leading dot. GA sets _ga on the widest one it can (.tapturf.in).
+ * leading dot. GA sets _ga on the widest one it can (.tapturf.in), and
+ * AdSense its own the same way.
  */
 export function cookieDomains(hostname: string): (string | null)[] {
   const out: (string | null)[] = [null];
@@ -122,6 +150,8 @@ export function expiredCookie(name: string, domain: string | null): string {
 // The browser's store
 
 type GaWindow = Window & { gtag?: (...args: unknown[]) => void } & Record<string, unknown>;
+/** The two switches AdSense's script reads off window.adsbygoogle. */
+type AdsFlags = { pauseAdRequests?: number; requestNonPersonalizedAds?: number };
 
 const inBrowser = () => typeof window !== "undefined" && typeof document !== "undefined";
 
@@ -214,8 +244,8 @@ export function getConsent(): Consent {
 }
 
 /**
- * Whether Google Analytics, the visit note, the tool tag and map embeds
- * may run. A yes is checked against the cookie first (cheap), so a Reject
+ * Whether Google Analytics, the ad script, the visit note, the tool tag
+ * and map embeds may run. A yes is checked against the cookie first (cheap), so a Reject
  * stored by another tab wins before anything is sent or kept.
  */
 export function analyticsAllowed(): boolean {
@@ -247,18 +277,26 @@ export function setConsent(choice: ConsentChoice): void {
 
 /**
  * Stop Google Analytics on this page and delete what needs consent:
- * GA's cookies on every domain they may sit on, the on-device visit note,
- * the tools' guest tag and the turf view marks. GA's own flag
- * (ga-disable-<id>) stops any hit still queued; removing window.gtag makes
- * every caller's gtag?.() a no-op. lib/analytics/ga.ts brings both back
- * only after a new Accept.
+ * GA's and AdSense's cookies on every domain they may sit on, what
+ * AdSense's script kept in storage, the on-device visit note, the tools'
+ * guest tag and the turf view marks. GA's own flag (ga-disable-<id>)
+ * stops any hit still queued; removing window.gtag makes every caller's
+ * gtag?.() a no-op. lib/analytics/ga.ts brings both back only after a new
+ * Accept.
+ *
+ * Ads: a script cannot be unloaded. If AdSense's is on this page it is
+ * told to ask for no more ads and none personalised (its own
+ * pauseAdRequests and requestNonPersonalizedAds, and Google's consent
+ * state for ads is set to denied), and no later page load brings it back
+ * (lib/analytics/ads.ts). Ads it already drew on this page stay until the
+ * next page load. Where the script never ran nothing is touched.
  */
 export function forgetTracking(): void {
   if (!inBrowser()) return;
   const w = window as unknown as GaWindow;
   try {
     w[`ga-disable-${GA_ID}`] = true;
-    w.gtag?.("consent", "update", { analytics_storage: "denied" });
+    w.gtag?.("consent", "update", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
   } catch {
     /* ignore */
   }
@@ -268,12 +306,33 @@ export function forgetTracking(): void {
     w.gtag = undefined;
   }
   try {
+    const ads = w.adsbygoogle as AdsFlags | undefined;
+    if (ads && typeof ads === "object") {
+      ads.pauseAdRequests = 1;
+      ads.requestNonPersonalizedAds = 1;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
     const domains = cookieDomains(window.location.hostname);
-    for (const name of gaCookieNames(readCookie())) {
+    const header = readCookie();
+    for (const name of [...gaCookieNames(header), ...adsCookieNames(header)]) {
       for (const d of domains) document.cookie = expiredCookie(name, d);
     }
   } catch {
     /* ignore */
+  }
+  for (const store of [() => localStorage, () => sessionStorage]) {
+    try {
+      const s = store();
+      for (let i = s.length - 1; i >= 0; i--) {
+        const k = s.key(i);
+        if (k && ADS_STORAGE_PREFIXES.some((p) => k.startsWith(p))) s.removeItem(k);
+      }
+    } catch {
+      /* storage blocked: nothing was kept */
+    }
   }
   for (const k of CONSENTED_LOCAL_KEYS) {
     try {

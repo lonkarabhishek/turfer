@@ -4,14 +4,15 @@ import { beaconBody, freshModules, installBrowser, type FakeBrowser } from "../c
 
 /**
  * Every helper that tracks or stores a visit, with and without Accept on
- * the cookie banner (lib/consent.ts): Google Analytics (ga.ts), the visit
- * note (visitor.ts), the tools' guest tag (tools.ts), Call/WhatsApp taps
+ * the cookie banner (lib/consent.ts): Google Analytics (ga.ts), Google
+ * AdSense's script (ads.ts), the visit note (visitor.ts), the tools' guest tag (tools.ts), Call/WhatsApp taps
  * (contactClicks.ts). TapTurf's own anonymous counts run either way.
  */
 
 type Mods = {
   consent: typeof import("../consent");
   ga: typeof import("./ga");
+  ads: typeof import("./ads");
   visitor: typeof import("./visitor");
   tools: typeof import("./tools");
   contact: typeof import("./contactClicks");
@@ -29,6 +30,7 @@ function boot(o: Parameters<typeof installBrowser>[0] = {}): { b: FakeBrowser; m
   const m: Mods = {
     consent: require("../consent"),
     ga: require("./ga"),
+    ads: require("./ads"),
     visitor: require("./visitor"),
     tools: require("./tools"),
     contact: require("./contactClicks"),
@@ -82,7 +84,7 @@ test("GA: never outside production, even with consent", () => {
   }
 });
 
-test("GA: Accept loads gtag.js once, ads storage denied, no automatic page view; events then queue", () => {
+test("GA: Accept loads gtag.js once, Google's consent state granted for analytics and ads, GA's own ad signals off, no automatic page view; events then queue", () => {
   const { b, m } = boot();
   try {
     m.consent.setConsent("accepted");
@@ -93,7 +95,7 @@ test("GA: Accept loads gtag.js once, ads storage denied, no automatic page view;
     });
     assert.deepEqual(b.scripts.map((s) => s.src), ["https://www.googletagmanager.com/gtag/js?id=G-KRDVP16TSM"]);
     const dl = (b.win.dataLayer as IArguments[]).map((a) => [...a]);
-    assert.deepEqual(dl[0], ["consent", "default", { ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied", analytics_storage: "granted" }]);
+    assert.deepEqual(dl[0], ["consent", "default", { ad_storage: "granted", ad_user_data: "granted", ad_personalization: "granted", analytics_storage: "granted" }]);
     assert.equal(dl[1][0], "js");
     assert.deepEqual(dl[2], ["config", "G-KRDVP16TSM", { send_page_view: false, allow_google_signals: false, allow_ad_personalization_signals: false }]);
     assert.deepEqual(dl[3], ["event", "page_view", { page_path: "/pune" }]);
@@ -119,9 +121,145 @@ test("GA: Reject stops it on the page; a new Accept turns it back on without a s
     m.consent.setConsent("accepted");
     production(() => m.ga.gaEvent("turf_view", { turf_id: "t" }));
     const dl = (b.win.dataLayer as IArguments[]).map((a) => [...a]);
-    assert.deepEqual(dl.slice(-2), [["consent", "update", { analytics_storage: "granted" }], ["event", "turf_view", { turf_id: "t" }]]);
+    assert.deepEqual(dl.slice(-2), [["consent", "update", { ad_storage: "granted", ad_user_data: "granted", ad_personalization: "granted", analytics_storage: "granted" }], ["event", "turf_view", { turf_id: "t" }]]);
     assert.equal(b.scripts.length, 1);
     assert.equal(b.win["ga-disable-G-KRDVP16TSM"], false);
+  } finally {
+    b.uninstall();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Google AdSense
+
+const ADS_SRC = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4556049898419830";
+type AdsFlags = { pauseAdRequests?: number; requestNonPersonalizedAds?: number };
+
+test("ads: no consent, nothing loads and nothing is made, even in production", () => {
+  for (const [label, cookie, gpc] of [
+    ["no choice yet", null, false],
+    ["a Reject", "rejected.v2", false],
+    ["an Accept from before ads", "accepted.v1", false],
+    ["Global Privacy Control", null, true],
+  ] as const) {
+    const { b, m } = boot({ gpc });
+    try {
+      if (cookie) b.jar.put("tt_consent", cookie);
+      production(() => {
+        assert.equal(m.ads.startAds("/"), false, label);
+        assert.equal(m.ads.startAds("/turf/kings-turf-arena-nashik"), false, label);
+      });
+      assert.equal(b.scripts.length, 0, label);
+      assert.equal("adsbygoogle" in b.win, false, label);
+    } finally {
+      b.uninstall();
+    }
+  }
+});
+
+test("ads: never outside production, even with consent", () => {
+  const { b, m } = boot();
+  try {
+    m.consent.setConsent("accepted");
+    assert.equal(m.ads.startAds("/"), false);
+    assert.equal(b.scripts.length, 0);
+    assert.equal("adsbygoogle" in b.win, false);
+  } finally {
+    b.uninstall();
+  }
+});
+
+test("ads: Accept adds the owner's script once, exactly as AdSense gave it; later pages add no second", () => {
+  const { b, m } = boot();
+  try {
+    m.consent.setConsent("accepted");
+    production(() => {
+      assert.equal(m.ads.startAds("/"), true);
+      assert.equal(m.ads.startAds("/turfs"), true);
+      assert.equal(m.ads.startAds("/turf/kings-turf-arena-nashik"), true);
+    });
+    assert.deepEqual(b.scripts, [{ async: true, src: ADS_SRC, crossOrigin: "anonymous" }], "async, crossorigin anonymous, that src, and nothing else on it");
+  } finally {
+    b.uninstall();
+  }
+});
+
+test("ads: never on a person's own pages or the scorers, with consent, in production", () => {
+  const { b, m } = boot();
+  try {
+    m.consent.setConsent("accepted");
+    production(() => {
+      for (const path of ["/admin", "/admin/traffic", "/my", "/my/turf/abc", "/report/tok", "/email/off", "/dashboard", "/login", "/login/complete", "/account/link", "/u/asha", "/game/create", "/tournament/new", "/tools/cricket-live-scorer", "/tools/live-scoreboard", "/tools/turf-session", "/live/abc123", null, undefined, ""]) {
+        assert.equal(m.ads.startAds(path), false, String(path));
+      }
+    });
+    assert.equal(b.scripts.length, 0);
+    assert.equal("adsbygoogle" in b.win, false, "and nothing of it is made on a page it never ran on");
+  } finally {
+    b.uninstall();
+  }
+});
+
+test("ads: a move to a page ads never load on pauses the script that is already here; a move back lifts it, no second script", () => {
+  const { b, m } = boot();
+  try {
+    m.consent.setConsent("accepted");
+    production(() => m.ads.startAds("/turfs"));
+    assert.equal(b.scripts.length, 1);
+    production(() => assert.equal(m.ads.startAds("/dashboard"), false));
+    // The script had not run yet: the flags wait on the array it starts from, and nothing is pushed onto it.
+    const ads = b.win.adsbygoogle as unknown[] & AdsFlags;
+    assert.equal(Array.isArray(ads) && ads.length, 0);
+    assert.deepEqual([ads.pauseAdRequests, ads.requestNonPersonalizedAds], [1, 1]);
+    production(() => assert.equal(m.ads.startAds("/turfs"), true));
+    assert.deepEqual([ads.pauseAdRequests, ads.requestNonPersonalizedAds], [0, 0]);
+    assert.equal(ads.length, 0);
+    assert.equal(b.scripts.length, 1);
+  } finally {
+    b.uninstall();
+  }
+});
+
+test("ads: Reject after Accept pauses the script, deletes its cookies and loads nothing on later pages; a new Accept lifts the pause without a second script", () => {
+  const { b, m } = boot();
+  try {
+    m.consent.setConsent("accepted");
+    production(() => m.ads.startAds("/"));
+    // The script has run: it put its own object where the array was, and set its cookies.
+    const ads: Record<string, unknown> & AdsFlags = { loaded: true };
+    b.win.adsbygoogle = ads;
+    b.jar.put("__gads", "ID=1", "tapturf.in");
+    b.jar.put("__gpi", "UID=2", "tapturf.in");
+    b.jar.put("__eoi", "ID=3", "tapturf.in");
+
+    m.consent.setConsent("rejected");
+    assert.deepEqual([ads.pauseAdRequests, ads.requestNonPersonalizedAds], [1, 1], "paused at once, by the Reject itself");
+    assert.deepEqual(b.jar.names(), ["tt_consent"], "its cookies are gone");
+    production(() => {
+      assert.equal(m.ads.startAds("/"), false);
+      assert.equal(m.ads.startAds("/turfs"), false, "no new load on a later page");
+    });
+    assert.equal(b.scripts.length, 1);
+    assert.deepEqual([ads.pauseAdRequests, ads.requestNonPersonalizedAds], [1, 1]);
+
+    m.consent.setConsent("accepted");
+    production(() => assert.equal(m.ads.startAds("/turfs"), true));
+    assert.deepEqual([ads.pauseAdRequests, ads.requestNonPersonalizedAds], [0, 0]);
+    assert.equal(b.scripts.length, 1, "the script is here already");
+    assert.deepEqual(Object.keys(ads).sort(), ["loaded", "pauseAdRequests", "requestNonPersonalizedAds"], "only its two switches were touched");
+  } finally {
+    b.uninstall();
+  }
+});
+
+test("ads: a Reject stored by another tab stops the load here before the script is added", () => {
+  const { b, m } = boot();
+  try {
+    m.consent.setConsent("accepted");
+    b.jar.put("tt_consent", "rejected.v2"); // the other tab; nothing fired here
+    production(() => assert.equal(m.ads.startAds("/"), false));
+    assert.equal(b.scripts.length, 0);
+    assert.equal(m.consent.getConsent(), "denied");
   } finally {
     b.uninstall();
   }
@@ -290,7 +428,7 @@ test("tool uses: a Reject stored by another tab stops the tag here before the ne
   try {
     m.account.setSignInToken(null);
     m.consent.setConsent("accepted");
-    b.jar.put("tt_consent", "rejected.v1"); // the other tab; this one is still on screen
+    b.jar.put("tt_consent", "rejected.v2"); // the other tab; this one is still on screen
     m.tools.trackTool("tool_used", "toss");
     assert.equal("device" in (await beaconBody(b.beacons[0])), false);
     assert.equal(b.local.getItem("tt_tools_device"), null);

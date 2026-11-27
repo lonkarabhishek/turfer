@@ -57,8 +57,8 @@ const SECTIONS: LegalSection[] = [
           <strong>Browsing without an account.</strong> You can look at every turf, court and game without
           signing in. We then collect only TapTurf&rsquo;s own anonymous counts (see section 5) and the
           preferences stored on your device (section 6). Only if you accept cookies do we also use Google
-          Analytics, and keep each use of our free tools under a random tag your browser keeps (see
-          &ldquo;When you use our free tools&rdquo; below).
+          Analytics, load Google AdSense to show ads (section 5), and keep each use of our free tools under a
+          random tag your browser keeps (see &ldquo;When you use our free tools&rdquo; below).
         </p>
         <p>
           <strong>When you sign in with your phone number.</strong> We store your mobile number and the
@@ -450,7 +450,13 @@ const SECTIONS: LegalSection[] = [
           <strong>Legal reasons.</strong> We will share information if the law requires it, or to protect the
           rights and safety of players, venues or TapTurf.
         </p>
-        <p>We do not sell personal information, and we do not show third-party advertising.</p>
+        <p>
+          <strong>Advertising.</strong> Only if you accept cookies, TapTurf loads Google AdSense, which shows ads
+          on TapTurf. Google is not one of the service providers above: it decides which ads to show and uses
+          what its ad code collects for its own advertising, under its own policies (see &ldquo;Ads&rdquo; in
+          section 5). We give it nothing from your account: not your name, your number or your email.
+        </p>
+        <p>We do not sell personal information.</p>
       </>
     ),
   },
@@ -463,12 +469,15 @@ const SECTIONS: LegalSection[] = [
           <strong>The cookie banner.</strong> On your first visit a banner asks whether we may use the cookies
           and tools below, which TapTurf does not need to work. Accept and Reject are side by side and equally
           easy, and none of these load or are stored before you choose. Your choice is kept on your device in a
-          cookie called tt_consent for about six months, and then we ask again. If your browser sends Global
+          cookie called tt_consent for about six months, and then we ask again. We also ask again if Accept
+          comes to cover more than it did when you chose it, as on 28 November 2026, when ads were added. A
+          Reject is kept. If your browser sends Global
           Privacy Control, we treat that as Reject unless you choose Accept yourself. You can change your choice
           at any time with Cookie settings: in the menu on phones, at the bottom of every page on a computer,
           or <CookieSettingsButton className="font-semibold underline underline-offset-2 hover:text-accent-600">right here</CookieSettingsButton>.
           Choosing Reject, then or later, stops Google Analytics at once and deletes its cookies and the notes
-          described below from your device.
+          described below from your device. It also stops Google AdSense asking for new ads and deletes its
+          cookies. Ads already on the page you are looking at stay until you open or reload a page.
         </p>
         <p>
           <strong>Only if you accept.</strong>
@@ -478,9 +487,11 @@ const SECTIONS: LegalSection[] = [
             Google Analytics, to count visits and see which pages people use: page views, the turfs you open,
             the city and sport filters you use, and taps on Call or WhatsApp. It sets cookies (named _ga) and
             records an approximate location derived from your IP address (Google Analytics does not store the
-            address itself), your device type and the pages you view. We have turned off Google signals and ad
-            personalisation, so this is not used to follow you across other websites or for advertising.
+            address itself), your device type and the pages you view. In Google Analytics we have turned off
+            Google signals and ad personalisation, so what it collects is not used to follow you across other
+            websites or for advertising.
           </li>
+          <li>Ads from Google AdSense (see &ldquo;Ads&rdquo; below).</li>
           <li>The short visit note your device keeps, described under &ldquo;When you sign up&rdquo; below.</li>
           <li>The random tag for your free tool uses, described under &ldquo;When you use our free tools&rdquo;.</li>
           <li>Maps from Google on turf and game pages (see below).</li>
@@ -495,6 +506,29 @@ const SECTIONS: LegalSection[] = [
           sends your sign-in, which our server checks only to count the view as a signed-in one, keeping nothing of
           who you are (see &ldquo;When you visit TapTurf&rdquo;). The site works exactly the same whichever you
           choose.
+        </p>
+        <p id="ads" className="scroll-mt-24">
+          <strong>Ads.</strong> After you accept, TapTurf loads Google AdSense, Google&rsquo;s advertising
+          service, so that ads can show on the pages you browse. Its code sets cookies on your device (named
+          __gads, __gpi and __eoi) and, with your IP address and the page you are on, Google and its partners
+          use them to show ads, to limit how often you see one and to measure them. Google may use them to show
+          you personalised ads, based on your visits to TapTurf and to other websites. You can turn
+          personalised ads off in{" "}
+          <a href="https://adssettings.google.com" target="_blank" rel="noopener noreferrer">
+            Google&rsquo;s ads settings
+          </a>
+          , and Google explains{" "}
+          <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">
+            how it uses information from sites that use its services
+          </a>
+          . Nothing of Google AdSense loads before you accept, and nothing of it loads on a page you open or
+          reload after you reject. If you reject after accepting, it is told to ask for no more ads and its
+          cookies are deleted, but ads already on the page you are looking at stay until you open or reload a
+          page. Ads never load on your Me tab, the sign-in pages, a player&rsquo;s profile, the pages where you
+          post a game or start a tournament, myTapturf, an owner&rsquo;s report, the email pages, our admin, or
+          the Live Cricket Scorer, the Live Scoreboard, a turf session and live score pages. If you move to one
+          of those from a page that had ads, without the page loading again, new ads stop but one already on
+          screen can stay until the next page load.
         </p>
         <p id="signup">
           <strong>When you sign up.</strong> If you accepted cookies, while you browse your device keeps a short note of how you first
@@ -548,7 +582,7 @@ const SECTIONS: LegalSection[] = [
         your cookie choice (section 5), banners you closed, whether you dismissed the &ldquo;install app&rdquo;
         prompt, whether we already asked you to pick a username, whether you tapped &ldquo;Not now&rdquo; on the username we gave you (so we wait 7 days before showing it again), the TapTurf profiles you tagged recently, the
         WhatsApp number you last gave players for a game, the matches and tournaments you score with our
-        free tools, which live scores and tournaments it opened in the last two days and when it last opened the map (so a reload is not counted as another view), and, so we can ask whether you got a slot without asking too often, the turf you last tapped Call or WhatsApp on (until you close the tab; it is sent to us only with your answer, if you give one) and when we last asked or you answered. If you asked a turf for a slot, the day and time you asked about are kept with that, and what you picked waits in the tab while you sign in (until you send it or close the tab). Only if you accept cookies does it also keep Google Analytics&rsquo; cookies, the short
+        free tools, which live scores and tournaments it opened in the last two days and when it last opened the map (so a reload is not counted as another view), and, so we can ask whether you got a slot without asking too often, the turf you last tapped Call or WhatsApp on (until you close the tab; it is sent to us only with your answer, if you give one) and when we last asked or you answered. If you asked a turf for a slot, the day and time you asked about are kept with that, and what you picked waits in the tab while you sign in (until you send it or close the tab). Only if you accept cookies does it also keep Google Analytics&rsquo; and Google AdSense&rsquo;s cookies, what Google AdSense&rsquo;s code keeps in your browser&rsquo;s storage, the short
         visit note described under &ldquo;When you sign up&rdquo; and the random tag described under
         &ldquo;When you use our free tools&rdquo;; choosing Reject deletes them. For a live link or a live tournament it also keeps the key that lets only this browser update
         it; our server stores just a one-way hash of the key. While you are signed in, your browser also runs

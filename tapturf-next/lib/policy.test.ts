@@ -6,6 +6,16 @@ import { PRIVACY_NOTICE, PRIVACY_UPDATED, privacyNoticeText } from "./policy";
 
 const privacyPage = fs.readFileSync(path.join(process.cwd(), "app/privacy/page.tsx"), "utf8");
 
+/**
+ * The latest site-wide notice: Google AdSense (28 Nov 2026). The changes the tests below are about added none
+ * of their own, which each says by naming this one.
+ */
+const NOTICE_NOW = "2026-11-28-ads";
+const EMAILS_NOTICE =
+  "If your account has an email Google confirmed, TapTurf now emails you about your games: a welcome, join requests and answers, game changes and reminders. Resend sends them for us. Turn each kind off on the Me tab or with the link in any email. We don't track opens or taps, and we never email about booking requests.";
+const BOOKING_NOTICE_START =
+  "On turfs that take booking requests on TapTurf, you can now ask for a free hour. When you send one, that turf's owner and managers see your name, your number and your note, so they can confirm it and reach you; nobody else does. You pay at the turf; nothing is paid on TapTurf.";
+
 test("policy: the friends a host says are in already, and tagging", () => {
   const page = privacyPage.replace(/\s+/g, " ");
   const at = page.indexOf("<strong>Things you do on TapTurf.</strong>");
@@ -18,7 +28,7 @@ test("policy: the friends a host says are in already, and tagging", () => {
   assert.match(things, /A game&rsquo;s page also lists its activity, such as when it was posted or changed and when each player joined\./);
   assert.doesNotMatch(things, /until they say yes only you see who you tagged/, "the sentence from before is gone");
   // No new site-wide notice for it (the site owner's call); the policy's date moves.
-  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_NOTICE.id, NOTICE_NOW);
   assert.equal(PRIVACY_UPDATED, "2026-11-28");
 });
 
@@ -28,16 +38,59 @@ test("policy notice: a new id, so people who dismissed the last one see it", () 
   assert.ok(PRIVACY_NOTICE.id.slice(0, 10) <= PRIVACY_UPDATED, "a change the policy's date already covers");
 });
 
-test("policy notice: emails, and where the policy says it", () => {
+test("policy notice: Google AdSense, and where the policy says it", () => {
   assert.equal(
     PRIVACY_NOTICE.text,
-    "If your account has an email Google confirmed, TapTurf now emails you about your games: a welcome, join requests and answers, game changes and reminders. Resend sends them for us. Turn each kind off on the Me tab or with the link in any email. We don't track opens or taps, and we never email about booking requests.",
+    "If you accept cookies, TapTurf now also loads Google AdSense, which shows ads, uses cookies to show and measure them and may personalise them, and if you reject, none of it loads.",
   );
-  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_NOTICE.id, "2026-11-28-ads");
+  assert.equal(NOTICE_NOW, PRIVACY_NOTICE.id);
   assert.equal(PRIVACY_UPDATED, "2026-11-28");
-  assert.equal(PRIVACY_NOTICE.anchor, "emails");
+  assert.equal(PRIVACY_NOTICE.anchor, "ads");
+  assert.doesNotMatch(PRIVACY_NOTICE.text, /[—–;]|\bbook/i, "plain words: no dashes, no semicolons");
   const at = privacyPage.indexOf(`id="${PRIVACY_NOTICE.anchor}"`);
   assert.ok(at >= 0, `the policy has #${PRIVACY_NOTICE.anchor}`);
+  const para = privacyPage.slice(at, privacyPage.indexOf("</p>", at)).replace(/\s+/g, " ");
+  // What loads, only after Accept, and what it sets.
+  assert.match(para, /<strong>Ads\.<\/strong> After you accept, TapTurf loads Google AdSense, Google&rsquo;s advertising service, so that ads can show on the pages you browse\./);
+  assert.match(para, /Its code sets cookies on your device \(named __gads, __gpi and __eoi\) and, with your IP address and the page you are on, Google and its partners use them to show ads, to limit how often you see one and to measure them\./);
+  assert.match(para, /Google may use them to show you personalised ads, based on your visits to TapTurf and to other websites\./);
+  // Google's own settings and its own explanation, linked.
+  assert.match(para, /<a href="https:\/\/adssettings\.google\.com" target="_blank" rel="noopener noreferrer"> Google&rsquo;s ads settings <\/a>/);
+  assert.match(para, /<a href="https:\/\/policies\.google\.com\/technologies\/partner-sites" target="_blank" rel="noopener noreferrer"> how it uses information from sites that use its services <\/a>/);
+  // Before Accept and after Reject; and what a Reject cannot undo, said plainly.
+  assert.match(para, /Nothing of Google AdSense loads before you accept, and nothing of it loads on a page you open or reload after you reject\./);
+  assert.match(para, /If you reject after accepting, it is told to ask for no more ads and its cookies are deleted, but ads already on the page you are looking at stay until you open or reload a page\./);
+  // Where ads never load: every kind of page on lib/ads.ts's lists.
+  assert.match(para, /Ads never load on your Me tab, the sign-in pages, a player&rsquo;s profile, the pages where you post a game or start a tournament, myTapturf, an owner&rsquo;s report, the email pages, our admin, or the Live Cricket Scorer, the Live Scoreboard, a turf session and live score pages\./);
+  assert.match(para, /If you move to one of those from a page that had ads, without the page loading again, new ads stop but one already on screen can stay until the next page load\./);
+  const page = privacyPage.replace(/\s+/g, " ");
+  // The cookie names the page gives are the ones a Reject deletes (lib/consent.ts adsCookieNames).
+  const consent = fs.readFileSync(path.join(process.cwd(), "lib/consent.ts"), "utf8");
+  assert.match(consent, /if \(\/\^__\(gads\|gpi\|eoi\)\$\/\.test\(name\)\) out\.add\(name\);/);
+  assert.match(consent, /export const CONSENT_VERSION = 2;/, "an Accept from before ads asks again");
+  // Said wherever the page lists what Accept turns on, who gets data and what the device keeps.
+  assert.match(page, /Only if you accept cookies do we also use Google Analytics, load Google AdSense to show ads \(section 5\), and keep each use of our free tools under a random tag/, "browsing without an account");
+  assert.match(page, /<strong>Advertising\.<\/strong> Only if you accept cookies, TapTurf loads Google AdSense, which shows ads on TapTurf\. Google is not one of the service providers above: it decides which ads to show and uses what its ad code collects for its own advertising, under its own policies \(see &ldquo;Ads&rdquo; in section 5\)\. We give it nothing from your account: not your name, your number or your email\./, "who we share with");
+  assert.match(page, /<p>We do not sell personal information\.<\/p>/);
+  assert.doesNotMatch(page, /we do not show third-party advertising/, "the sentence from before is gone");
+  assert.match(page, /We also ask again if Accept comes to cover more than it did when you chose it, as on 28 November 2026, when ads were added\. A Reject is kept\./, "the banner asks again");
+  assert.match(page, /It also stops Google AdSense asking for new ads and deletes its cookies\. Ads already on the page you are looking at stay until you open or reload a page\./, "what Reject does");
+  assert.match(page, /<li>Ads from Google AdSense \(see &ldquo;Ads&rdquo; below\)\.<\/li>/, "in the list of what loads only if you accept");
+  assert.match(page, /In Google Analytics we have turned off Google signals and ad personalisation, so what it collects is not used to follow you across other websites or for advertising\./, "Google Analytics' own part in ads is still off");
+  assert.match(page, /Only if you accept cookies does it also keep Google Analytics&rsquo; and Google AdSense&rsquo;s cookies, what Google AdSense&rsquo;s code keeps in your browser&rsquo;s storage, the short visit note/, "stored on your device");
+  // Google AdSense is not listed among the companies that work only on our instructions.
+  const providers = page.slice(page.indexOf("<strong>Service providers.</strong>"), page.indexOf("<strong>Legal reasons.</strong>"));
+  assert.match(providers, /They process data on our instructions and cannot use it for their own purposes/);
+  assert.doesNotMatch(providers, /AdSense/);
+});
+
+test("policy notice: emails (the notice before), and where the policy says it", () => {
+  assert.equal(PRIVACY_NOTICE.earlier.id, "2026-11-12-emails", "the emails notice's id, so those who dismissed it see only what is new");
+  assert.ok(PRIVACY_NOTICE.earlier.text.startsWith(`${EMAILS_NOTICE} ${BOOKING_NOTICE_START}`), "the emails notice, then the ones it had replaced");
+  assert.equal(PRIVACY_UPDATED, "2026-11-28");
+  const at = privacyPage.indexOf(`id="emails"`);
+  assert.ok(at >= 0, "the policy has #emails");
   const para = privacyPage.slice(at, privacyPage.indexOf("</p>", at)).replace(/\s+/g, " ");
   assert.match(para, /If your account has an email Google confirmed, we email you about your account and your games/);
   assert.match(para, /a welcome when you make your account; when someone asks to join a game you host, and when a request is still waiting for your answer; when a host accepts your request; when a game you are in or asked to join is cancelled, or its venue, day or time changes; and a reminder the day before a game and about 3 hours before it starts/, "the six kinds");
@@ -57,15 +110,10 @@ test("policy notice: emails, and where the policy says it", () => {
   assert.match(page, /we email you about your games at that address/, "the Google sign-in paragraph");
 });
 
-test("policy notice: booking requests (the notice before), and where the policy says it", () => {
-  assert.equal(PRIVACY_NOTICE.earlier.id, "2026-11-06-booking-requests", "the booking requests notice's id, so those who dismissed it see only what is new");
-  assert.ok(
-    PRIVACY_NOTICE.earlier.text.startsWith(
-      "On turfs that take booking requests on TapTurf, you can now ask for a free hour. When you send one, that turf's owner and managers see your name, your number and your note, so they can confirm it and reach you; nobody else does. You pay at the turf; nothing is paid on TapTurf.",
-    ),
-  );
+test("policy notice: booking requests (two notices before), and where the policy says it", () => {
+  assert.ok(PRIVACY_NOTICE.earlier.text.includes(BOOKING_NOTICE_START), "still said to anyone who never dismissed it");
   const at = privacyPage.indexOf(`id="booking-requests"`);
-  assert.ok(at >= 0, `the policy has #${PRIVACY_NOTICE.anchor}`);
+  assert.ok(at >= 0, "the policy has #booking-requests");
   const para = privacyPage.slice(at, privacyPage.indexOf("</p>", at)).replace(/\s+/g, " ");
   assert.match(para, /If you send a booking request\./);
   assert.match(para, /your name and the phone number on your account \(you need one confirmed with a one-time code\)/, "what is kept");
@@ -160,7 +208,7 @@ test("policy: asking whether you got a slot after a Call or WhatsApp tap, and wh
   assert.match(things, /when you tap Call or WhatsApp on a turf page\. After you tap Call or WhatsApp, we may ask you once, when you are back on TapTurf, whether you got a slot; your answer \(and the time, if you pick one\) is stored without your name, number or account: only the turf, what you answered and whether you were signed in\./);
   assert.match(page, /so we can ask whether you got a slot without asking too often, the turf you last tapped Call or WhatsApp on \(until you close the tab; it is sent to us only with your answer, if you give one\) and when we last asked or you answered/, "the browser's notes, under Stored on your device");
   // No new site-wide notice for it: the answer names nobody. The date already covers the day it was written.
-  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_NOTICE.id, NOTICE_NOW);
   assert.ok(PRIVACY_UPDATED >= "2026-11-12");
 });
 
@@ -175,7 +223,7 @@ test("policy: Ask for a slot, what is kept and what never reaches us", () => {
   const table = sql.slice(sql.indexOf("create table if not exists private.slot_asks ("), sql.indexOf(");", sql.indexOf("create table if not exists private.slot_asks (")));
   assert.deepEqual([...table.matchAll(/^  (\w+) /gm)].map((m) => m[1]), ["id", "turf_id", "slot_date", "slot_hour", "slot_minute", "minutes", "sport", "players", "signed_in", "created_at"]);
   // No new site-wide notice for it (an ask names nobody); the policy's date moves to the day it ships.
-  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_NOTICE.id, NOTICE_NOW);
   assert.equal(PRIVACY_UPDATED, "2026-11-28");
 });
 
@@ -192,7 +240,7 @@ test("policy: the medal on your photo, who sees it and how to turn it off", () =
   // Only for people whose profile is public, asked on every read.
   assert.match(sql, /join public\.usernames n on n\.user_id = b\.user_id and n\.taggable/);
   // No new site-wide notice for it (the medals were on the public profile already); the policy's date moves to the day it ships.
-  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_NOTICE.id, NOTICE_NOW);
   assert.equal(PRIVACY_UPDATED, "2026-11-28");
 });
 
@@ -207,7 +255,7 @@ test("policy: a host can delete a game they posted, and what is kept", () => {
   assert.deepEqual([...sql.matchAll(/^alter table public\.games add column if not exists (\w+) /gm)].map((m) => m[1]), ["removed_at", "removed_status"], "kept: when it was taken off and the state it was in");
   assert.doesNotMatch(sql, /create table/i, "no new table: nothing else is stored");
   // No new site-wide notice for it (nothing new is collected or shared); the policy's date moves to the day it ships.
-  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_NOTICE.id, NOTICE_NOW);
   assert.equal(PRIVACY_UPDATED, "2026-11-28");
 });
 
@@ -230,7 +278,7 @@ test("policy: tools used signed in count toward medals, and the profile shows ho
   assert.match(para("played-with"), /Only you see your list; it is never public \(your public profile shows only how many people are on it, as a number\)\./);
   assert.match(page, /your profile also shows your game and review counts, how many players you have played with \(a number, never who\), your current weekly streak \(a number of weeks\), medals and reviewed turfs/);
   // No new site-wide notice (the medals and the counts were on the public profile already; this adds one more count); the policy's date moves to the day it ships.
-  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_NOTICE.id, NOTICE_NOW);
   assert.equal(PRIVACY_UPDATED, "2026-11-28");
 });
 
@@ -255,13 +303,13 @@ test("policy: a tournament you start signed in names you if your profile is publ
   const host = fs.readFileSync(path.join(process.cwd(), "lib/tournament/host.ts"), "utf8");
   assert.match(host, /export const HOST_COPY_MAX_MS = 90_000;/);
   // No new site-wide notice was added with it; the policy's date moves to the day it ships.
-  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_NOTICE.id, NOTICE_NOW);
   assert.equal(PRIVACY_UPDATED, "2026-11-28");
 });
 
 test("policy notice: the notice it replaced still reaches anyone who never dismissed it", () => {
   assert.equal(privacyNoticeText(PRIVACY_NOTICE.earlier.id), PRIVACY_NOTICE.text, "dismissed the last one: only what is new");
-  for (const seen of [null, "2026-10-25-cities", "something else"]) {
+  for (const seen of [null, "2026-11-06-booking-requests", "2026-10-25-cities", "something else"]) {
     const t = privacyNoticeText(seen);
     assert.ok(t.startsWith(PRIVACY_NOTICE.text), "what is new comes first");
     assert.ok(t.endsWith(PRIVACY_NOTICE.earlier.text), `then the earlier notice (${seen})`);
@@ -298,7 +346,7 @@ test("policy: the Me tab lists the live matches and tournaments you started, to 
   const passport = fs.readFileSync(path.join(process.cwd(), "lib/profile/passport.ts"), "utf8");
   assert.match(passport, /bestStreak: p\.streak\.best, streak: p\.streak\.current, turfers: count/, "the public passport carries it as a number, beside the best streak");
   // No new site-wide notice was added with it; the policy's date moves to the day it ships.
-  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_NOTICE.id, NOTICE_NOW);
   assert.equal(PRIVACY_UPDATED, "2026-11-28");
 });
 
@@ -333,7 +381,7 @@ test("policy: a tournament with a TapTurf turf as its venue is listed on that tu
   assert.match(card, /data-nosnippet/);
   assert.match(card, /if \(!card\) return null;/);
   // No new site-wide notice was added with it; the policy's date moves to the day it ships.
-  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_NOTICE.id, NOTICE_NOW);
   assert.equal(PRIVACY_UPDATED, "2026-11-28");
 });
 
@@ -354,7 +402,7 @@ test("policy: a tournament's page lists its changes with their times, never who 
   const lines = fs.readFileSync(path.join(process.cwd(), "lib/tournament/activity.ts"), "utf8");
   assert.match(lines, /i\.host\?\.name \? `\$\{i\.host\.name\} \$\{verb\} the tournament` : `Tournament \$\{verb\}`/);
   // No new site-wide notice for it (every line is something the page already showed); the policy's date moves to the day it ships.
-  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_NOTICE.id, NOTICE_NOW);
   assert.equal(PRIVACY_UPDATED, "2026-11-28");
 });
 
@@ -379,6 +427,6 @@ test("policy: every account is given a username, private until its person keeps 
   assert.match(words, /export const SNOOZE_MS = 7 \* 24 \* 60 \* 60 \* 1000;/, "7 days, as the page says");
   assert.match(words, /It stays private until you say so\./, "the notice says the same");
   // No new site-wide notice: nothing new is collected or shown. The policy's date moves to the day it ships.
-  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_NOTICE.id, NOTICE_NOW);
   assert.equal(PRIVACY_UPDATED, "2026-11-28");
 });

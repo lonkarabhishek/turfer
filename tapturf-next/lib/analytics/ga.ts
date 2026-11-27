@@ -8,6 +8,14 @@ import { analyticsAllowed, GA_ID } from "../consent";
  * window.gtag and deletes GA's cookies; startAnalytics() undoes that only
  * on a new Accept, and never loads gtag.js twice.
  *
+ * Google's consent state (gtag "consent") is one state for every Google
+ * tag on the page, the ad script (lib/analytics/ads.ts) among them.
+ * Accept covers ads since 28 Nov 2026 (lib/consent.ts CONSENT_VERSION 2),
+ * so all four kinds are granted on Accept and denied on Reject: left at
+ * denied, Google's tags are told to write no advertising cookies, which
+ * is not what the visitor chose. Google Analytics' own part in ads stays
+ * off in its config: no Google signals, no ad personalisation signals.
+ *
  * Production only, so local dev traffic doesn't reach GA. Page views are
  * sent by components/analytics/GoogleAnalytics.tsx, one per URL; the
  * config sends none of its own, so the page open when the visitor accepts
@@ -15,6 +23,9 @@ import { analyticsAllowed, GA_ID } from "../consent";
  */
 
 type GaWindow = Window & { dataLayer?: unknown[]; gtag?: (...args: unknown[]) => void } & Record<string, unknown>;
+
+/** Google's consent state after Accept: analytics and the three kinds for ads. */
+const GRANTED = { ad_storage: "granted", ad_user_data: "granted", ad_personalization: "granted", analytics_storage: "granted" } as const;
 
 let loaded = false;
 
@@ -35,12 +46,12 @@ export function startAnalytics(): boolean {
     }
     if (loaded) {
       // Accepted again after a Reject on this page: the script is here already.
-      if (wasOff) w.gtag("consent", "update", { analytics_storage: "granted" });
+      if (wasOff) w.gtag("consent", "update", GRANTED);
       return true;
     }
     loaded = true;
-    // No ads on TapTurf: only analytics storage is granted.
-    w.gtag("consent", "default", { ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied", analytics_storage: "granted" });
+    // What Accept covers: analytics, and ads from Google AdSense (which reads this state too).
+    w.gtag("consent", "default", GRANTED);
     w.gtag("js", new Date());
     w.gtag("config", GA_ID, { send_page_view: false, allow_google_signals: false, allow_ad_personalization_signals: false });
     const s = document.createElement("script");
