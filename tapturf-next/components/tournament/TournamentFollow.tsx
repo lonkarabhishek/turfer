@@ -11,6 +11,7 @@ import { formatNrr, formatOvers } from "@/lib/cricket/overs";
 import { viewsLabel } from "@/lib/live/views";
 import { turfPath } from "@/lib/utils/turfPath";
 import { aboutOf, scoredLiveCount } from "@/lib/tournament/about";
+import { activityWhen, sameActivity, takenDownLine } from "@/lib/tournament/activity";
 import { dayLabel, fixtureTitle, groupFixtures, rangeLabel, timeLabel } from "@/lib/tournament/format";
 import { hostNote, sameHost } from "@/lib/tournament/host";
 import { formatLabel, resolve, type Resolution, type Resolved } from "@/lib/tournament/standings";
@@ -19,11 +20,12 @@ import { TOURNAMENT_LIVE_POLL_MS, TOURNAMENT_POLL_MS, TOURNAMENT_POLL_TIMEOUT_MS
 import { changeTournament, claimTournament, errorText, readTournament } from "./api";
 import { FixtureSheet, HostLine, ManageRow, ResultSheet, SettingsSheet, TeamSheet } from "./OrganiserSheets";
 import { ShareSheet } from "./ShareSheet";
+import { TournamentActivity } from "./TournamentActivity";
 import { TournamentAbout } from "./TournamentAbout";
 import { useTournamentViews } from "./useTournamentViews";
 
 const TOOL = "live_tournament";
-type Tab = "table" | "matches" | "playoffs" | "manage";
+type Tab = "table" | "matches" | "playoffs" | "manage" | "activity";
 type Open = { kind: "share" } | { kind: "result"; r: Resolved } | { kind: "fixture"; r: Resolved | null } | { kind: "settings" } | { kind: "team"; team: Team } | null;
 
 // A colour per team, so a team is found at a glance in the table and the fixtures.
@@ -69,7 +71,8 @@ function scoreOf(r: Resolved, side: "a" | "b"): { score: string; overs: string }
  * it last changed (TournamentAbout). In the organiser's browser (it holds the secret) it is also
  * where they run it: results, live scoring, fixtures, teams and settings.
  * On a phone the parts are tabs; on a wide screen the table and the
- * fixtures sit side by side.
+ * fixtures sit side by side. Activity (TournamentActivity: what happened
+ * and when, from the same polls) is the last tab and the last section.
  */
 export function TournamentFollow({ code, initial }: { code: string; initial: TournamentGetResponse }) {
   const router = useRouter();
@@ -109,9 +112,11 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
 
   const take = useCallback((next: TournamentGetResponse) => {
     const cur = latest.current;
-    // The highest rev wins; the live scores, and who is named as starting it, can move without one.
+    // The highest rev wins; the live scores, who is named as starting it and the log of changes can move without one.
     if (next.tournament.rev < cur.tournament.rev) return;
-    if (next.tournament.rev === cur.tournament.rev && JSON.stringify(next.live) === JSON.stringify(cur.live) && sameHost(next.host, cur.host)) return;
+    // An answer whose log could not be asked keeps the one the page has.
+    if (!next.activity && cur.activity) next = { ...next, activity: cur.activity };
+    if (next.tournament.rev === cur.tournament.rev && JSON.stringify(next.live) === JSON.stringify(cur.live) && sameHost(next.host, cur.host) && sameActivity(next.activity, cur.activity)) return;
     latest.current = next;
     setData(next);
   }, []);
@@ -253,12 +258,19 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
   };
 
   if (t.status === "removed") {
+    const off = takenDownLine(t.updatedAt);
+    const offWhen = off && activityWhen(off, now);
     return (
       <div className="mx-auto max-w-xl px-4 py-10">
         <section className="rounded-3xl bg-primary-900 text-white p-6">
           <p className="text-[12px] font-bold uppercase tracking-wide text-accent-300">Tournament</p>
           <h1 className="mt-1 text-[22px] font-bold leading-tight">This tournament has been taken down</h1>
           <p className="mt-2 text-[15px] text-white/75">The organiser took it off TapTurf. If it is still on, ask them for a new link.</p>
+          {offWhen && (
+            <p data-nosnippet className="mt-3 text-[13px] text-white/60">
+              <time dateTime={offWhen.iso}>Taken down {offWhen.ago ? `${offWhen.ago} · ${offWhen.stamp}` : offWhen.stamp}</time>
+            </p>
+          )}
         </section>
         <Ctas venue={null} />
       </div>
@@ -278,7 +290,10 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
     { key: "matches", label: "Matches" },
     ...(hasPlayoffs ? [{ key: "playoffs" as const, label: "Playoffs" }] : []),
     ...(organiser ? [{ key: "manage" as const, label: "Manage" }] : []),
+    { key: "activity", label: "Activity" },
   ];
+  // Five tabs (an organiser's, with playoffs) on a narrow phone: each as wide as its word, and a size smaller on the narrowest, so every word fits whole.
+  const tight = tabs.length >= 5 ? "max-[389px]:flex-auto max-[339px]:text-[13px]" : "";
   const shown = (k: Tab) => (tab === k ? "" : "hidden lg:block");
 
   return (
@@ -415,7 +430,7 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
       <div role="tablist" aria-label="Tournament" className="lg:hidden sticky top-[60px] z-20 -mx-4 px-4 py-2 mt-3 bg-white/90 backdrop-blur-sm">
         <div className="flex gap-1 p-1 rounded-2xl bg-primary-100">
           {tabs.map((x) => (
-            <button key={x.key} type="button" role="tab" aria-selected={tab === x.key} onClick={() => setTab(x.key)} className={`flex-1 h-10 rounded-xl text-[14px] font-bold transition-colors ${tab === x.key ? "bg-white text-primary-900 shadow-soft" : "text-primary-600"}`}>
+            <button key={x.key} type="button" role="tab" aria-selected={tab === x.key} onClick={() => setTab(x.key)} className={`flex-1 h-10 rounded-xl text-[14px] font-bold transition-colors ${tight} ${tab === x.key ? "bg-white text-primary-900 shadow-soft" : "text-primary-600"}`}>
               {x.label}
             </button>
           ))}
@@ -515,6 +530,8 @@ export function TournamentFollow({ code, initial }: { code: string; initial: Tou
           </div>
         </section>
       </div>
+
+      <TournamentActivity code={code} data={data} res={res} now={now} className={shown("activity")} />
 
       <Ctas venue={t.settings.venue ? { id: t.settings.venue.id, slug: t.settings.venue.slug, name: t.settings.venue.name } : null} code={code} />
 

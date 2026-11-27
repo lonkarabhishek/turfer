@@ -229,7 +229,10 @@ const SECTIONS: LegalSection[] = [
           applies to tournaments started before 23 November 2026, when this page said your name did not go
           with them: if yours is one, we sent you a notice in the app. Your number
           and email never go with it, and if your profile is not public only TapTurf&rsquo;s team sees which
-          account runs it. Nothing about the people following a tournament is
+          account runs it. Changes to a tournament are listed on its page with their times, such as a team
+          renamed, a match added, moved or taken out, a match scored live, a result or a setting changed: what
+          changed and when, never who made the change, unless the page already names the organiser as the
+          one who started it. Nothing about the people following a tournament is
           kept: opening its page adds one to its view count (and, once a day per browser, to its count of
           viewers), which identifies nobody.
         </p>

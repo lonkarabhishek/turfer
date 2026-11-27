@@ -63,6 +63,8 @@ const fns = async () => q(`select p.oid::regprocedure::text as f, md5(p.prosrc) 
 const before = await fns();
 await db.exec(sql);
 await db.exec(sql); // safe to run again
+// With a later tournament file on top (TOURNAMENT_CHECK_WITH=<its name>, as tournament_activity.check.mjs runs this): everything below must hold with it applied too.
+if (process.env.TOURNAMENT_CHECK_WITH) await db.exec(`begin; ${fs.readFileSync(`${M}/${process.env.TOURNAMENT_CHECK_WITH}`, "utf8")}; commit;`);
 const after = (await fns()).filter((r) => !/tournament/.test(r.f));
 eq(after, before, "every function from before is as it was");
 const [{ n: overloads }] = await q(`select count(*)::int as n from pg_proc where proname = 'tournament_update'`);

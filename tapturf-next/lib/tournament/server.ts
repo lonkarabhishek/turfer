@@ -9,6 +9,7 @@ import { toViewCount, type ViewCount } from "../live/views";
 import { MAX_TRACKED, windowCounter } from "../limits";
 import { accountRpcIfThere } from "../account/server";
 import { later } from "../account/route";
+import { ACTIVITY_UNKNOWN, pollActivity, toActivityRead, type ActivityRead } from "./activity";
 import { mintTournamentCode } from "./codes";
 import { HOST_UNKNOWN, hostCopyFresh, toHostRead, type HostRead } from "./host";
 import { liveNowOf, liveResultOf, sameLiveResult } from "./live";
@@ -152,6 +153,46 @@ export async function getTournamentHost(code: string): Promise<HostRead> {
   return readHost(code);
 }
 
+/** Before 20261128_tournament_activity.sql the function is not there: left alone a minute per instance. */
+let activityOffUntil = 0;
+
+/**
+ * The tournament's log of changes, straight from the database
+ * (public.tournament_activity): what followers could already see, noted as
+ * it happened. Throws on a read that failed, so the data cache keeps its
+ * last copy; a database without the function is "could not be asked".
+ */
+async function readActivity(code: string): Promise<ActivityRead> {
+  const key = tournamentKey();
+  if (!key || Date.now() < activityOffUntil) return ACTIVITY_UNKNOWN;
+  const { data, error } = await createReadOnlyClient().rpc("tournament_activity", { p_key: key, p_code: code });
+  if (error) {
+    if (missingFn(error.code)) {
+      activityOffUntil = Date.now() + 60_000;
+      return ACTIVITY_UNKNOWN;
+    }
+    throw new Error(`tournament activity read failed: ${error.code} ${error.message}`);
+  }
+  return toActivityRead(data);
+}
+
+/**
+ * The same from Next's data cache, beside the tournament's own copy: 30 s
+ * and the tournament's tag, so every change that could add a line (the
+ * organiser's, a finished live scorecard's result) purges it with the
+ * tournament. fresh: past the shared copy, for the organiser's read right
+ * after a change. Never throws: a failed read is "could not be asked",
+ * and the tab shows what the page can work out.
+ */
+export async function getTournamentActivity(code: string, fresh = false): Promise<ActivityRead> {
+  try {
+    return fresh ? await readActivity(code) : await unstable_cache(() => readActivity(code), ["tournament-activity", code], { revalidate: 30, tags: [`tournament:${code}`] })();
+  } catch (e) {
+    console.warn("tournament: activity read failed", code, e);
+    return ACTIVITY_UNKNOWN;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* A live scorecard's tournament                                       */
 /* ------------------------------------------------------------------ */
@@ -258,7 +299,8 @@ const LIVE_READS = 40;
  * and who started it when that can be said (getTournamentHost; not asked
  * for one taken down). The page's first render and every poll carry the
  * organiser, so an open page drops a name that is no longer public at its
- * next poll.
+ * next poll. And the newest of its log of changes, for the Activity tab
+ * (getTournamentActivity), in the same answer: no request of its own.
  * fresh: the tournament straight from the database, not the shared copy or
  * a read already under way that may predate a change (the organiser's
  * read right after one). Throws when the tournament could not be read;
@@ -270,10 +312,15 @@ export async function tournamentView(code: string, fresh = false): Promise<Tourn
   const now = Date.now();
   const linked = t.fixtures.filter((f) => f.live && !f.result).slice(-LIVE_READS);
   // The organiser is read beside the live scorecards, only for a tournament that is on. It never rejects.
-  const [pairs, host] = await Promise.all([Promise.all(linked.map(async (f) => [String(f.id), await liveOf(t, f, now)] as const)), t.status === "on" ? getTournamentHost(code) : HOST_UNKNOWN]);
+  const [pairs, host, activity] = await Promise.all([
+    Promise.all(linked.map(async (f) => [String(f.id), await liveOf(t, f, now)] as const)),
+    t.status === "on" ? getTournamentHost(code) : HOST_UNKNOWN,
+    // Its log of changes rides in the same answer (the newest few; the rest are asked for only when "Show all" is tapped). It never rejects.
+    t.status === "on" ? getTournamentActivity(code, fresh) : ACTIVITY_UNKNOWN,
+  ]);
   const live: Record<string, LiveNow> = {};
   for (const [id, l] of pairs) if (l) live[id] = l;
-  return { tournament: t, live, at: Date.now(), ...(host.known ? { host: host.host } : {}) };
+  return { tournament: t, live, at: Date.now(), ...(host.known ? { host: host.host } : {}), ...(activity.known ? { activity: pollActivity(activity.log) } : {}) };
 }
 
 /** The same, once per render: the page's metadata and body share one. */
