@@ -138,7 +138,7 @@ test("RSC fetches and prefetches of other pages skip the proxy (unchanged), old 
 
 test("never: the API, admin, Next's files, files with an extension, robots, sitemap, manifest", () => {
   for (const h of [BROWSER, CRAWLERS.googlebot]) {
-    for (const path of ["/api/revalidate", "/api", "/admin", "/admin/users", "/_next/static/chunks/a.js", "/logo.png", "/google2bcb6655f66f4b80.html", "/robots.txt", "/sitemap.xml", "/manifest.webmanifest", "/favicon.ico", "/images/x.jpg"]) {
+    for (const path of ["/api/revalidate", "/api", "/admin", "/admin/users", "/_next/static/chunks/a.js", "/logo.png", "/google2bcb6655f66f4b80.html", "/ads.txt", "/BingSiteAuth.xml", "/robots.txt", "/sitemap.xml", "/manifest.webmanifest", "/favicon.ico", "/images/x.jpg"]) {
       assert.equal(proxyRuns(path, h), false, path);
     }
   }

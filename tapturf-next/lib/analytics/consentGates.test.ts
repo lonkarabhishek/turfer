@@ -325,3 +325,26 @@ test("Reject's list is exactly the keys these modules keep with consent", () => 
     b.uninstall();
   }
 });
+
+test("AdSense is verification only: a meta tag and ads.txt, which load nothing; no ad script, ad unit or ad call anywhere", () => {
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const fs = require("node:fs") as typeof import("node:fs");
+  const path = require("node:path") as typeof import("node:path");
+  /* eslint-enable @typescript-eslint/no-require-imports */
+  const root = process.cwd();
+  // The two things that tell AdSense whose site this is (the site owner, 27 Nov 2026: "i wont start showing ads, its just verifications").
+  assert.equal(fs.readFileSync(path.join(root, "public/ads.txt"), "utf8"), "google.com, pub-4556049898419830, DIRECT, f08c47fec0942fa0\n");
+  const layout = fs.readFileSync(path.join(root, "app/layout.tsx"), "utf8");
+  assert.match(layout, /<meta name="google-adsense-account" content="ca-pub-4556049898419830" \/>/);
+  // Nothing of Google's ad code is in the app: no loader, no unit, no push. Adding one means the cookie banner's rule first.
+  const hits: string[] = [];
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${e.name}`;
+      if (e.isDirectory()) walk(rel);
+      else if (/\.(tsx?|css)$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) && /adsbygoogle|googlesyndication|doubleclick/.test(fs.readFileSync(path.join(root, rel), "utf8"))) hits.push(rel);
+    }
+  };
+  for (const dir of ["app", "components", "lib"]) walk(dir);
+  assert.deepEqual(hits, []);
+});

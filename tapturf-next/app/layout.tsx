@@ -102,6 +102,9 @@ export default function RootLayout({
         <link rel="preconnect" href="https://lh3.googleusercontent.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://drive.google.com" />
         <link rel="dns-prefetch" href="https://lh3.googleusercontent.com" />
+        {/* Site verification for Google AdSense (with public/ads.txt). It loads nothing. No ads run on TapTurf:
+            the ad script is not on any page, and if it is ever added it must wait for Accept on the cookie banner. */}
+        <meta name="google-adsense-account" content="ca-pub-4556049898419830" />
       </head>
       <body className={`${inter.variable} antialiased`}>
         {/* First in the page so the keyboard reaches it first; it shows itself only
