@@ -306,12 +306,12 @@ test("policy: a tournament with a TapTurf turf as its venue is listed on that tu
   const page = privacyPage.replace(/\s+/g, " ");
   const at = page.indexOf('<p id="live-tournaments"');
   const para = page.slice(at, page.indexOf("</p>", at));
-  assert.match(para, /A tournament whose organiser picks a TapTurf turf as its venue is listed on that turf&rsquo;s page while it is on, with its name, format, progress and links to its page and to any of its matches being scored live, never who organises it; change or remove the venue under Manage and it leaves that page within about ten minutes\./);
-  assert.match(para, /This also applies to tournaments that were on before 27 November 2026: if yours is one and you were signed in, we sent you a notice in the app\./);
+  assert.match(para, /A tournament kept with your account \(you were signed in when you made it, or signed in on its page since\) with a TapTurf turf picked as its venue is listed on that turf&rsquo;s page while it is on, with its name, format, progress and links to its page and to any of its matches being scored live, never who organises it; one run without signing in is not listed there\. Change or remove the venue under Manage and it leaves that page within about ten minutes\./);
+  assert.match(para, /This also applies to tournaments that were on before 27 November 2026: if yours is one, we sent you a notice in the app\./);
   // The old promise that tournaments and live links are listed nowhere is gone; the one place is said where others' view is described.
   assert.doesNotMatch(page, /tournaments are not listed anywhere on TapTurf and are hidden/);
   assert.doesNotMatch(page, /Links are not listed anywhere on TapTurf and are hidden/);
-  assert.match(page, /tournaments are hidden from search engines, and they are not listed anywhere on TapTurf, with one exception: a tournament whose organiser picked a TapTurf turf as its venue is listed on that turf&rsquo;s page while it is on\./);
+  assert.match(page, /tournaments are hidden from search engines, and they are not listed anywhere on TapTurf, with one exception: a tournament whose organiser was signed in and picked a TapTurf turf as its venue is listed on that turf&rsquo;s page while it is on\./);
   assert.match(page, /Links are hidden from search engines and are not listed anywhere on TapTurf, except that a match of a tournament listed on its venue&rsquo;s page \(see &ldquo;Live tournaments&rdquo;\) is linked from that page while it is being scored\. Anyone who has a link can forward it/);
   assert.match(page, /A session started from a game is also shown on that game&rsquo;s page to anyone who can see the game, and, when the game is at a turf listed on TapTurf, on that turf&rsquo;s page while it is on, as any live tournament with that venue is\./);
   // What the sentence says is what the read gives the page (20261128_turf_events.sql): nothing about the organiser.
@@ -319,12 +319,16 @@ test("policy: a tournament with a TapTurf turf as its venue is listed on that tu
   const from = sql.indexOf("as $$", sql.indexOf("create or replace function public.turf_events_now")) + 5;
   const body = sql.slice(from, sql.indexOf("$$;", from));
   assert.match(body, /private\.live_key_ok\(p_key\)/, "the function's body was found");
-  assert.doesNotMatch(body, /user_id|usernames|public\.users|secret|ip_hash|\bphone\b|\bemail\b/, "no account, name, secret, network hash, number or email");
+  assert.doesNotMatch(body, /usernames|public\.users|secret|ip_hash|\bphone\b|\bemail\b/, "no name, secret, network hash, number or email");
+  // The account is only a condition (a tournament made without signing in is listed on no turf's page), never part of the answer.
+  assert.deepEqual(body.match(/.*user_id.*/g)?.map((l) => l.trim()), ["and t.user_id is not null"], "only a tournament kept with an account, and the account goes no further");
   assert.deepEqual([...body.matchAll(/^\s+'(\w+)', (?:k\.|\(select count|to_char)/gm)].map((m) => m[1]), ["code", "name", "format", "legs", "matches", "playoffs", "started", "starts", "played", "total", "live"], "of a tournament: its code, name, format, dates, counts and live matches (and its next match)");
   assert.match(body, /where t\.status = 'on'/, "only a tournament that is on");
   // The organiser is told where they choose it, and the card is never in the server HTML or a search snippet.
   const picker = fs.readFileSync(path.join(process.cwd(), "components/tournament/VenuePicker.tsx"), "utf8");
   assert.match(picker, /export const VENUE_SHOWS_NOTE = "This tournament will show on the turf's page while it is on\.";/);
+  assert.match(picker, /export const VENUE_SHOWS_SIGN_IN_NOTE = "Sign in and this tournament will show on the turf's page while it is on\.";/);
+  assert.match(picker, /\{user \? VENUE_SHOWS_NOTE : VENUE_SHOWS_SIGN_IN_NOTE\}/, "someone not signed in is told to sign in for it");
   const card = fs.readFileSync(path.join(process.cwd(), "components/turf/TurfEventsCard.tsx"), "utf8");
   assert.match(card, /data-nosnippet/);
   assert.match(card, /if \(!card\) return null;/);

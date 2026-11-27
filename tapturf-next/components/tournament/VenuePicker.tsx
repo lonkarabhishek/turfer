@@ -2,19 +2,26 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, MapPin, Search, X } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { cityInfo } from "@/lib/city";
 import type { Venue } from "@/lib/tournament/types";
 
 type Hit = { id: string; slug: string | null; name: string; area: string | null; city: string | null };
 
-/** Said under a picked venue, in the create sheet and under Manage: the turf's page lists the tournament (lib/tournament/turfEvents.ts). */
+/**
+ * Said under a picked venue, in the create sheet and under Manage: the turf's page lists the tournament
+ * (lib/tournament/turfEvents.ts), but only one kept with an account, which signing in does (on create, and
+ * on the tournament's page for one made before). So someone not signed in is told what would make it show.
+ */
 export const VENUE_SHOWS_NOTE = "This tournament will show on the turf's page while it is on.";
+export const VENUE_SHOWS_SIGN_IN_NOTE = "Sign in and this tournament will show on the turf's page while it is on.";
 
 /**
  * The tournament's ground, picked from TapTurf's turfs by name (the
  * listing's own search, GET /api/turfs/list?q=), so its page links to the
- * turf, and the turf's page lists the tournament while it is on (one quiet
- * line under the picked turf says so; the X takes the venue off).
+ * turf, and the turf's page lists the tournament while it is on, when it
+ * is kept with an account (one quiet line under the picked turf says so,
+ * or says to sign in for it; the X takes the venue off).
  * Optional; none picked is fine.
  */
 export function VenuePicker({ value, onChange }: { value: Venue | null; onChange: (v: Venue | null) => void }) {
@@ -22,6 +29,7 @@ export function VenuePicker({ value, onChange }: { value: Venue | null; onChange
   const [hits, setHits] = useState<Hit[] | null>(null);
   const [busy, setBusy] = useState(false);
   const seq = useRef(0);
+  const { user, loading } = useAuth();
 
   useEffect(() => {
     const term = q.trim();
@@ -60,7 +68,8 @@ export function VenuePicker({ value, onChange }: { value: Venue | null; onChange
             <X className="w-4 h-4" />
           </button>
         </div>
-        <p className="mt-1.5 text-[12px] leading-snug text-primary-500">{VENUE_SHOWS_NOTE}</p>
+        {/* Nothing while the sign-in is still being read: never the wrong line for a moment. */}
+        {(user || !loading) && <p className="mt-1.5 text-[12px] leading-snug text-primary-500">{user ? VENUE_SHOWS_NOTE : VENUE_SHOWS_SIGN_IN_NOTE}</p>}
       </div>
     );
   }

@@ -456,6 +456,9 @@ test("the route: one shared copy for a minute, never indexed; the list is read w
   // The organiser is told where they pick the venue, in both sheets (one picker).
   const picker = read("components/tournament/VenuePicker.tsx");
   assert.match(picker, /export const VENUE_SHOWS_NOTE = "This tournament will show on the turf's page while it is on\.";/);
-  assert.match(picker, /\{VENUE_SHOWS_NOTE\}/);
+  assert.match(picker, /export const VENUE_SHOWS_SIGN_IN_NOTE = "Sign in and this tournament will show on the turf's page while it is on\.";/);
+  assert.match(picker, /\{\(user \|\| !loading\) && <p [^>]*>\{user \? VENUE_SHOWS_NOTE : VENUE_SHOWS_SIGN_IN_NOTE\}<\/p>\}/, "signed in: it will show; not signed in: sign in and it will; nothing while the sign-in is still being read");
+  // Only a tournament kept with an account is in the read (20261128_turf_events.sql).
+  assert.match(read("supabase/migrations/20261128_turf_events.sql"), /where t\.status = 'on'\n\s+-- [^\n]*\n\s+and t\.user_id is not null\n/);
   for (const f of ["components/tournament/TournamentCreate.tsx", "components/tournament/OrganiserSheets.tsx"]) assert.match(read(f), /<VenuePicker value=\{venue\} onChange=\{setVenue\} \/>/, f);
 });

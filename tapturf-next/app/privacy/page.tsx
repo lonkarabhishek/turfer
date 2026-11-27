@@ -220,12 +220,13 @@ const SECTIONS: LegalSection[] = [
           Manager into a live one, what you type is sent to our server so others can follow it: the
           tournament&rsquo;s and teams&rsquo; names and short codes, the venue you picked from TapTurf&rsquo;s
           turfs, the dates, the points and overs, the fixtures and their results, and for a match you score
-          live, its live link&rsquo;s code and its result when it ends. A tournament whose organiser picks a
-          TapTurf turf as its venue is listed on that turf&rsquo;s page while it is on, with its name, format,
-          progress and links to its page and to any of its matches being scored live, never who organises it;
-          change or remove the venue under Manage and it leaves that page within about ten minutes. This also
-          applies to tournaments that were on before 27 November 2026: if yours is one and you were signed in,
-          we sent you a notice in the app. We also keep a one-way hash of your
+          live, its live link&rsquo;s code and its result when it ends. A tournament kept with your account
+          (you were signed in when you made it, or signed in on its page since) with a TapTurf turf picked as
+          its venue is listed on that turf&rsquo;s page while it is on, with its name, format, progress and
+          links to its page and to any of its matches being scored live, never who organises it; one run
+          without signing in is not listed there. Change or remove the venue under Manage and it leaves that
+          page within about ten minutes. This also applies to tournaments that were on before 27 November
+          2026: if yours is one, we sent you a notice in the app. We also keep a one-way hash of your
           network address (never the address itself) so one network cannot make tournaments in bulk. No login
           is needed to run one. If you are signed in, the tournament is kept with your account so you can
           manage it from another phone. A tournament you start while signed in shows your name, photo and a
@@ -392,7 +393,8 @@ const SECTIONS: LegalSection[] = [
           one of a tournament&rsquo;s matches names the tournament and links to it, as the tournament links to
           that score, so anyone with either link can reach the other. Like live links, tournaments are hidden
           from search engines, and they are not listed anywhere on TapTurf, with one exception: a tournament
-          whose organiser picked a TapTurf turf as its venue is listed on that turf&rsquo;s page while it is on. Take it down from its page at any time, or email <Email /> and we will.
+          whose organiser was signed in and picked a TapTurf turf as its venue is listed on that turf&rsquo;s
+          page while it is on. Take it down from its page at any time, or email <Email /> and we will.
         </p>
         <p>
           <strong>Your profile.</strong> If you pick a username, your username, name, photo and join month are

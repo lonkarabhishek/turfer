@@ -9,7 +9,9 @@
 // comment, no backslash anywhere, search_path '', the header's md5 is the
 // repo's latest body, nothing replaced, no table, no index); the grants and
 // settings are tournament_get's; a wrong key is refused; a tournament counts
-// only when it is on, its venue is a listed turf and it is not stale (the 14
+// only when it is on, it is kept with an account (one made without signing
+// in is nowhere in the answer, and appears once it gets an account), its
+// venue is a listed turf and it is not stale (the 14
 // India days edge, or a match being scored right now); a live fixture shows
 // while its scorecard is live and updated in the last 2 hours and not after,
 // never one taken out, never one with a result; played, total and next are
@@ -51,7 +53,8 @@ ok(!/\bgrant\b[^;]*\bon\s+(?!function public\.turf_events_now\()/i.test(code), "
 const from = NEW.indexOf("as $$", NEW.indexOf("create or replace function public.turf_events_now")) + 5;
 const BODY = NEW.slice(from, NEW.indexOf("$$;", from));
 ok(/^\ndeclare\n  v_today date := \(now\(\) at time zone 'Asia\/Kolkata'\)::date;\nbegin\n  if not private\.live_key_ok\(p_key\) then\n    return jsonb_build_object\('r', 'unavailable'\);\n  end if;/.test(BODY), "the key is checked before anything is read, and refused as tournament_get refuses it");
-ok(!/user_id|usernames|public\.users|player_badges|secret|ip_hash|\bemail\b|\bphone\b|\bwrites\b|\brev\b/i.test(BODY), "its body reads nothing about who organises it: no account, no secret, no network hash");
+ok(!/usernames|public\.users|player_badges|secret|ip_hash|\bemail\b|\bphone\b|\bwrites\b|\brev\b/i.test(BODY), "its body reads nothing about who organises it: no name, no secret, no network hash");
+eq(BODY.match(/.*user_id.*/g)?.map((l) => l.trim()), ["and t.user_id is not null"], "the account is one condition (only a tournament kept with an account) and is never selected or answered");
 const MADE = [...NEW.matchAll(/create or replace function (\w+)\.(\w+)\(/gi)].map((m) => `${m[1]}.${m[2]}`);
 eq(MADE, ["public.turf_events_now"], "exactly one function");
 eq((code.match(/security definer/g) ?? []).length, 1, "security definer");
@@ -59,7 +62,7 @@ eq((code.match(/set search_path = ''/g) ?? []).length, 1, "with an empty search_
 eq((code.match(/\bstable\b/g) ?? []).length, 1, "stable");
 eq((code.match(/revoke all on function public\.turf_events_now\(text\) from public, anon, authenticated;/g) ?? []).length, 1, "revoked from public, anon and authenticated before its grant");
 eq((code.match(/grant execute on function public\.turf_events_now\(text\) to anon, authenticated;/g) ?? []).length, 1, "granted as tournament_get is");
-for (const w of ["if a\n-- tournament is setup or a live match is setup on turf show that please\n-- on the turf page", "Replaced: none.", "Never who organises it", "No table is altered", "No index is added", "create index if not exists tournaments_venue_on_idx", "The app works before this file", "production\n-- was not read for this file", "Safe to run again", "Nothing here matches a venue by its typed text", "Never in a title, a description, an og tag or JSON-LD", "At most 3 tournaments a turf", "at most 200\n--     turfs"])
+for (const w of ["if a\n-- tournament is setup or a live match is setup on turf show that please\n-- on the turf page", "Replaced: none.", "Never who organises it", "No table is altered", "No index is added", "create index if not exists tournaments_venue_on_idx", "The app works before this file", "production\n-- was not read for this file", "Safe to run again", "Nothing here matches a venue by its typed text", "Never in a title, a description, an og tag or JSON-LD", "At most 3 tournaments a turf", "at most 200\n--     turfs", "it is kept with an\n--     account", "Only a tournament kept with an account", "The account is only asked\n--     for, never answered"])
   ok(NEW.includes(w), `the header says: ${w.replace(/\n-- */g, " ")}`);
 
 // The header's md5: the md5 of that function's latest body in the repo's migrations (file name order), as md5(prosrc) gives it.
@@ -103,6 +106,7 @@ ok(!/\bupdate\b|create or replace|\bgrant\b|\brevoke\b/i.test(ncode), "it change
 ok(/where not exists \(select 1 from public\.notifications q\s+where q\.user_id = x\.user_id and q\.type = 'tournament_on_turf_page'\)/.test(ncode), "and adds nothing where its own notice is already there");
 eq((NOTICE.match(/'tournament_on_turf_page'/g) ?? []).length, 2, "its type is said twice: the row and the check for it");
 ok(!/email_|private\.email/.test(ncode), "it queues no email");
+ok(/where t\.status = 'on'\n\s+and t\.user_id is not null\n/.test(ncode) && /join public\.users u on u\.id = t\.user_id/.test(ncode), "it writes only for a tournament kept with an account that exists");
 
 // ── The database before it: the real files, with stand-ins for what they read. ──
 const db = new PGlite();
@@ -160,7 +164,7 @@ const T = (n) => `11111111-1111-4111-8111-${String(n).padStart(12, "0")}`;
 const KINGS = T(1), GREEN = T(2), CLOSED = T(3), BUSY = T(4), NOTURF = T(99);
 for (const [id, name, slug, active] of [[KINGS, "Kings Turf Arena", "kings-turf-arena", true], [GREEN, "Greenfield Sports Hub", "greenfield-sports-hub", true], [CLOSED, "Closed Box Arena", "closed-box-arena", false], [BUSY, "Busy Turf", null, true]])
   await q(`insert into public.turfs (id, name, slug, city, is_active) values ($1, $2, $3, 'pune', $4)`, [id, name, slug, active]);
-// 1 Asha and 2 Ravi have accounts; 3 has an account and only a stale tournament; nobody else signed in.
+// 1 Asha and 2 Ravi have accounts; 3 Kiran has an account and at first only a stale tournament.
 for (const [n, name, phone, email] of [[1, "Asha Rao", "+919800000001", "asha@example.test"], [2, "Ravi Kumar", "+919800000002", "ravi@example.test"], [3, "Kiran Shah", "+919800000003", null]])
   await q(`insert into public.users (id, name, phone, email) values ($1, $2, $3, $4)`, [U(n), name, phone, email]);
 
@@ -195,8 +199,8 @@ const INN = (runs) => ({ runs, wickets: 4, balls: 36, allOut: false });
 const HAND = { a: INN(63), b: INN(54), result: "auto", battedFirst: "a" };
 
 eq(await now(), [], "nothing made yet: an empty list, not null");
-// 1 Asha's league at Kings.          2 a league with no venue.          3 a league at a turf that is not listed.
-// 4 a league whose venue is no turf. 5 Ravi's series at Greenfield.     6 nobody's league at Greenfield (never signed in).
+// 1 Asha's league at Kings.          2 a league with no venue.          3 Ravi's league at a turf that is not listed.
+// 4 Ravi's league whose venue is no turf. 5 Ravi's series at Greenfield. 6 nobody's league at Greenfield (never signed in).
 // 7 Kiran's league at Greenfield, gone quiet. 8 Asha's second, a series at Greenfield.
 eq(await create(1, league("Sunday Box League", venueOf(KINGS, "Kings Turf Arena"))), "ok", "1: a league with a final at Kings");
 eq(await create(2, league("No Venue Cup", null)), "ok", "2: no venue");
@@ -206,7 +210,7 @@ eq(await create(5, series("Titans v Strikers", venueOf(GREEN, "Greenfield Sports
 eq(await create(6, league("Walk-in League", venueOf(GREEN, "Greenfield Sports Hub"), { legs: 2, playoffs: "semis" })), "ok", "6: a double round robin with semi-finals at Greenfield, nobody signed in");
 eq(await create(7, league("Old League", venueOf(GREEN, "Greenfield Sports Hub"))), "ok", "7: another at Greenfield");
 eq(await create(8, series("Asha's Series", venueOf(GREEN, "Greenfield Sports Hub"), { starts: "2026-12-05", ends: "2026-12-06" })), "ok", "8: a series at Greenfield with dates of its own");
-for (const [n, u] of [[1, 1], [5, 2], [7, 3], [8, 1]]) eq(await attach(n, U(u)), "ok", `tournament ${n} kept with account ${u}`);
+for (const [n, u] of [[1, 1], [3, 2], [4, 2], [5, 2], [7, 3], [8, 1]]) eq(await attach(n, U(u)), "ok", `tournament ${n} kept with account ${u}`);
 
 // ── 1. Grants and settings: tournament_get's. ──
 const priv = async (fn, args) => Object.fromEntries(await Promise.all(["anon", "authenticated", "public"].map(async (role) => [role, (await one(`select has_function_privilege($1, 'public.${fn}(${args})', 'execute') as p`, [role])).p])));
@@ -229,6 +233,26 @@ eq(Object.keys((await at(KINGS))[0]).sort().join(), "code,format,legs,live,match
 eq(Object.keys((await at(KINGS))[0].next).sort().join(), "away,day,home,n,slot,stage,time", "the next match: seven keys and no other");
 eq(Object.keys((await now())[0]).sort().join(), "tournaments,turf", "a turf's entry: its id and its tournaments");
 eq((await now()).map((x) => x.turf).sort(), [KINGS, GREEN].sort(), "only the two listed turfs with something on: not the one with no venue, the turf not listed, or the made-up id");
+// Only a tournament kept with an account: the walk-in league (made without signing in) is nowhere, though it is on, at a listed turf and changed just now.
+eq((await codesAt(GREEN)).sort(), [C(5), C(7), C(8)].sort(), "Greenfield: the three kept with an account, not the one made without signing in");
+ok(!JSON.stringify(await now()).includes(C(6)), "a tournament with a turf venue and no account is nowhere in the answer");
+eq((await one(`select status, user_id, settings -> 'venue' ->> 'id' as venue from private.tournaments where code = $1`, [C(6)])), { status: "on", user_id: null, venue: GREEN }, "(it is on, its venue is Greenfield, and it has no account)");
+eq((await one(`select public.tournament_get($1, $2) as r`, [LIVE, C(6)])).r.name, "Walk-in League", "its own page reads it exactly as before");
+// The same at a turf with nothing else on: the turf itself is not in the list.
+eq(await create(9, league("Guest Cup", venueOf(BUSY, "Busy Turf"))), "ok", "9: a league at the busy turf, nobody signed in");
+eq(await at(BUSY), null, "a turf whose only tournament has no account has nothing on");
+eq(await attach(9, U(3)), "ok", "its organiser signs in on its page: it is kept with their account");
+eq(await codesAt(BUSY), [C(9)], "and it appears, on the very next call");
+await db.exec(`update private.tournaments set user_id = null where code = '${C(9)}'`);
+eq(await at(BUSY), null, "the account gone from it (an erased account): gone from the turf's page");
+// An account the read is never told more about: it is not looked up, only whether the tournament has one.
+await db.exec(`update private.tournaments set user_id = '${U(404)}' where code = '${C(9)}'`);
+eq(await codesAt(BUSY), [C(9)], "kept with an account is all that is asked");
+eq(await change(9, "remove"), "ok", "the guest cup is taken down");
+eq(await at(BUSY), null, "and is nowhere");
+// The walk-in league's organiser signs in: now Greenfield has four, and only three are answered.
+eq(await attach(6, U(3)), "ok", "the walk-in league is kept with an account");
+ok((await codesAt(GREEN)).includes(C(6)), "it appears at Greenfield");
 eq((await codesAt(GREEN)).length, 3, "Greenfield has four: only three are answered");
 eq(await at(CLOSED), null, "a turf that is not listed has nothing");
 eq(await at(NOTURF), null, "a venue id that is no turf is nowhere, whatever name was typed with it");
@@ -349,13 +373,13 @@ for (const role of ["anon", "authenticated"]) {
 
 // ── 9. The notice: one row per signed-in organiser whose tournament shows. ──
 const notices = () => q(`select user_id, type, title, message, metadata, is_read from public.notifications order by user_id`);
-// Asha: 1 at Kings (changed just now) and 8 at Greenfield. Ravi: 5 at Greenfield. Kiran: only 7, gone quiet. 6 was nobody's and is off.
+// Asha: 1 at Kings (changed just now) and 8 at Greenfield. Ravi: 5 at Greenfield (3 and 4 are at no listed turf). Kiran: 7, gone quiet, and 6 and 9, taken down.
 await db.exec(`begin; ${NOTICE}; commit;`);
 const SAYS = (t, turf) => `${t} now shows on ${turf}'s page on TapTurf, because you picked that turf as its venue. To take it off, change the venue under Manage.`;
 eq(await notices(), [
   { user_id: U(1), type: "tournament_on_turf_page", title: "Your tournament now shows on the turf's page", message: SAYS("Sunday Box League", "Kings Turf Arena"), metadata: { code: C(1) }, is_read: false },
   { user_id: U(2), type: "tournament_on_turf_page", title: "Your tournament now shows on the turf's page", message: SAYS("Titans v Strikers", "Greenfield Sports Hub"), metadata: { code: C(5) }, is_read: false },
-], "one each for Asha (her tournament changed last, though she has two showing) and Ravi; none for Kiran, whose only one went quiet; none for a tournament with no account");
+], "one each for Asha (her tournament changed last, though she has two showing) and Ravi; none for Kiran, whose one that is on went quiet");
 for (const n of await notices()) ok(n.title.length <= 120 && n.message.length <= 400 && !/[—–]/.test(n.title + n.message), "within the notification's lengths, and no dash");
 await db.exec(`begin; ${NOTICE}; commit;`);
 eq((await notices()).length, 2, "run again: still two");
@@ -366,12 +390,21 @@ await db.exec(`begin; ${NOTICE}; commit;`);
 eq((await notices()).map((n) => [n.user_id, n.metadata.code, n.is_read]), [[U(1), C(1), true], [U(2), C(5), false], [U(3), C(7), false]], "Kiran gets his; Asha's read one is not sent again");
 // Who is never told: a tournament off, with no venue, at a turf not listed, or kept with an account that is gone.
 await db.exec(`delete from public.notifications`);
-await db.exec(`update private.tournaments set user_id = '${U(2)}' where code in ('${C(2)}', '${C(3)}', '${C(4)}', '${C(6)}')`);
+await db.exec(`update private.tournaments set user_id = '${U(2)}' where code in ('${C(2)}', '${C(6)}')`);
 await db.exec(`update private.tournaments set user_id = '${U(77)}' where code = '${C(5)}'`);
 await db.exec(`begin; ${NOTICE}; commit;`);
 eq((await notices()).map((n) => [n.user_id, n.metadata.code]), [[U(1), C(1)], [U(3), C(7)]], "Ravi now has only a tournament with no venue, one at a turf not listed, one at a made-up turf and one taken down: no row; an account that does not exist gets none");
-await db.exec(`update private.tournaments set user_id = null where code in ('${C(2)}', '${C(3)}', '${C(4)}', '${C(6)}')`);
+await db.exec(`update private.tournaments set user_id = null where code = '${C(2)}'`);
+await db.exec(`update private.tournaments set user_id = '${U(3)}' where code = '${C(6)}'`);
 await db.exec(`update private.tournaments set user_id = '${U(2)}' where code = '${C(5)}'`);
+// A tournament that would show but for its account: made without signing in, at a listed turf, changed just now. Nobody is told, and it is not in the answer.
+await db.exec(`delete from public.notifications where user_id = '${U(2)}'`);
+await db.exec(`update private.tournaments set user_id = null where code = '${C(5)}'`);
+await db.exec(`begin; ${NOTICE}; commit;`);
+eq([(await notices()).filter((n) => n.user_id === U(2)).length, (await codesAt(GREEN)).includes(C(5))], [0, false], "the series with no account: no row for anyone, and not on Greenfield's page");
+await db.exec(`update private.tournaments set user_id = '${U(2)}' where code = '${C(5)}'`);
+await db.exec(`begin; ${NOTICE}; commit;`);
+eq([(await notices()).filter((n) => n.user_id === U(2)).map((n) => n.metadata.code), (await codesAt(GREEN)).includes(C(5))], [[C(5)], true], "kept with Ravi's account again: he is told, and it shows");
 // A stale tournament with a match on now is told too (it shows).
 await db.exec(`delete from public.notifications where user_id = '${U(1)}'`);
 await changed(1, 40);
@@ -386,9 +419,9 @@ await changed(8, 0);
 await db.exec(`
 insert into public.turfs (id, name, is_active)
 select ('22222222-2222-4222-8222-' || lpad(n::text, 12, '0'))::uuid, 'Cap Turf ' || n, true from generate_series(1, 205) n;
-insert into private.tournaments (code, secret_hashes, name, format, settings, created_at, updated_at)
+insert into private.tournaments (code, secret_hashes, name, format, settings, user_id, created_at, updated_at)
 select 'c' || lpad(n::text, 11, '0'), t.secret_hashes, 'Cap Series ' || n, t.format,
-       jsonb_set(t.settings, '{venue,id}', to_jsonb('22222222-2222-4222-8222-' || lpad(n::text, 12, '0'))),
+       jsonb_set(t.settings, '{venue,id}', to_jsonb('22222222-2222-4222-8222-' || lpad(n::text, 12, '0'))), t.user_id,
        now() - interval '3 hours', now() - interval '3 hours' - n * interval '1 minute'
   from private.tournaments t cross join generate_series(1, 205) n where t.code = '${C(5)}';
 `);
@@ -401,7 +434,10 @@ eq([capped.some((x) => x.turf === CAP(198)), capped.some((x) => x.turf === CAP(1
 ok(capped.every((x) => x.tournaments.length >= 1 && x.tournaments.length <= 3), "every turf answered has one to three tournaments");
 ok(JSON.stringify(capped).length < 120_000, "200 turfs is still a small answer");
 // Four more at the busy turf: three are answered, the one with a match on first, then the ones changed last.
-for (const n of [31, 32, 33, 34]) eq(await create(n, league(`Busy League ${n}`, venueOf(BUSY, "Busy Turf"))), "ok", `tournament ${n} at the busy turf`);
+for (const n of [31, 32, 33, 34]) {
+  eq(await create(n, league(`Busy League ${n}`, venueOf(BUSY, "Busy Turf"))), "ok", `tournament ${n} at the busy turf`);
+  eq(await attach(n, U(3)), "ok", `kept with an account`);
+}
 for (const [n, mins] of [[31, 50], [32, 10], [33, 30], [34, 20]]) await db.exec(`update private.tournaments set updated_at = now() - interval '${mins} minutes' where code = '${C(n)}'`);
 eq(await codesAt(BUSY), [C(32), C(34), C(33)], "three at most, the one changed last first");
 await scorecard(9);

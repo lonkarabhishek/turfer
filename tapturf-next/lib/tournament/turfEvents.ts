@@ -6,7 +6,10 @@ import type { Format, Playoffs, Slot, Stage } from "./types";
  * 27 Nov 2026: "if a tournament is setup or a live match is setup on turf
  * show that please on the turf page"). A live tournament whose organiser
  * picked a TapTurf turf as its venue (settings.venue, the picker in its
- * create and Manage sheets) shows on that turf's page while it is on: its
+ * create and Manage sheets) and was signed in (it is kept with an account;
+ * one made without signing in is on no turf's page, since the venue's id
+ * comes from the browser and anyone could otherwise put any name on any
+ * turf's page) shows on that turf's page while it is on: its
  * name, its format, when it started, how many matches are played, a link
  * to its points table and fixtures, its next match, and each of its
  * matches being scored right now as a "Live now" row linking to the live
@@ -16,7 +19,8 @@ import type { Format, Playoffs, Slot, Stage } from "./types";
  * someone typed, never a turf's id (two turfs can share a name), so it is
  * not shown: a match reaches a turf's page only through the tournament it
  * is a fixture of. A turf session made from a game on a listed turf is
- * such a tournament (it sends the game's turf as its venue), so it shows.
+ * such a tournament (it sends the game's turf as its venue, and only
+ * someone signed in can make one), so it shows.
  *
  * The data is one small list for all of India, the same for everyone:
  * public.turf_events_now (supabase/migrations/20261128_turf_events.sql),

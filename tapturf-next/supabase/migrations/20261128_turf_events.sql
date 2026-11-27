@@ -61,15 +61,24 @@ set local lock_timeout = '5s';
 --                     result and no scorecard yet, exactly as
 --                     public.live_tournament picks it: {stage, slot, n,
 --                     home, away, day, time}, or null when there is none
---     A tournament counts when its status is on, its venue is a turf that
---     is listed (public.turfs.is_active), and it is not stale: it was
---     changed in the last 14 of India's days (the tournament page's own
---     QUIET_AFTER_DAYS, lib/tournament/about.ts), or one of its matches is
---     being scored right now. At most 3 tournaments a turf (one with a
+--     A tournament counts when its status is on, it is kept with an
+--     account (private.tournaments.user_id is set: its organiser was
+--     signed in when they made it, or signed in on its page since), its
+--     venue is a turf that is listed (public.turfs.is_active), and it is
+--     not stale: it was changed in the last 14 of India's days (the
+--     tournament page's own QUIET_AFTER_DAYS, lib/tournament/about.ts), or
+--     one of its matches is being scored right now. At most 3 tournaments a turf (one with a
 --     match on now first, then the one changed last) and at most 200
 --     turfs (the same order), so the answer stays small whatever is made.
 --     A turf with nothing on is not in the list. Without anything on
 --     anywhere the answer is [].
+--     Only a tournament kept with an account: the venue's id comes from
+--     the organiser's browser, so without this anyone, signed in or not,
+--     could put a tournament of any name on any listed turf's page. One
+--     made without an account is on no turf's page (its own page and link
+--     work exactly as before) and shows once its organiser signs in on
+--     it, which keeps it with their account. The account is only asked
+--     for, never answered.
 --     Never who organises it: no account id, no name, no secret's hash,
 --     no network hash, and nothing from public.users or public.usernames.
 --     Nothing of a tournament that was taken down, and nothing of a
@@ -86,17 +95,18 @@ set local lock_timeout = '5s';
 --    where s.nspname = 'private' and p.proname = 'live_key_ok';
 --   private.live_key_ok              dc6dd849755acae1b79619d94e377586  20261021_accounts_usernames.sql
 -- Read and left as they are: private.tournaments (code, name, format,
--- settings, status, created_at, updated_at), private.tournament_fixtures,
--- private.tournament_teams (name), public.live_matches (code, status,
--- updated_at) and public.turfs (id, is_active). No table is altered and
--- nothing is written anywhere.
+-- settings, status, created_at, updated_at, and whether user_id is set),
+-- private.tournament_fixtures, private.tournament_teams (name),
+-- public.live_matches (code, status, updated_at) and public.turfs (id,
+-- is_active). No table is altered and nothing is written anywhere.
 -- No index is added: private.tournaments had 7 rows on 27 Nov 2026, so
 -- the read is one pass over it, then each kept tournament's fixtures and
 -- teams by their primary keys, its live scorecards by theirs and its turf
 -- by its own. When the table grows to thousands, add
 --   create index if not exists tournaments_venue_on_idx
 --     on private.tournaments ((settings -> 'venue' ->> 'id'), updated_at)
---     where status = 'on' and jsonb_typeof(settings -> 'venue') = 'object';
+--     where status = 'on' and user_id is not null
+--       and jsonb_typeof(settings -> 'venue') = 'object';
 -- and the read stays a walk over the tournaments that have a venue.
 --
 -- Needs 20261021_live_matches.sql, 20261021_accounts_usernames.sql and
@@ -161,6 +171,8 @@ begin
                        order by f.seq, f.id
                        limit 3) x) l
        where t.status = 'on'
+         -- Only one kept with an account: a tournament made without signing in is on no turf's page.
+         and t.user_id is not null
          and jsonb_typeof(t.settings -> 'venue') = 'object'
     ), fresh as (
       -- Not stale: changed in the last 14 of India's days, or a match on now. Three a turf, a match on now first.
@@ -220,4 +232,4 @@ $$;
 revoke all on function public.turf_events_now(text) from public, anon, authenticated;
 -- As public.tournament_get: the Next server calls it with the app's anon key and the live write key (p_key); the key is the gate.
 grant execute on function public.turf_events_now(text) to anon, authenticated;
-comment on function public.turf_events_now(text) is 'Live write key only: every listed turf with a live tournament on right now (status on, that turf as its venue, changed in the last 14 India days or a match being scored now), 200 turfs and 3 tournaments a turf at most: each tournament''s code, name, format, India start date, matches played and in all, its matches on a live scorecard right now with the two sides, and its next match. Nothing about who organises it.';
+comment on function public.turf_events_now(text) is 'Live write key only: every listed turf with a live tournament on right now (status on, kept with an account, that turf as its venue, changed in the last 14 India days or a match being scored now), 200 turfs and 3 tournaments a turf at most: each tournament''s code, name, format, India start date, matches played and in all, its matches on a live scorecard right now with the two sides, and its next match. Nothing about who organises it.';

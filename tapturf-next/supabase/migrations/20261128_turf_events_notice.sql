@@ -11,14 +11,15 @@ set local lock_timeout = '5s';
 --
 -- So this file writes one in-app notification (type
 -- tournament_on_turf_page) to each account that has a tournament which
--- public.turf_events_now starts returning: it is on, its venue is a listed
--- turf, and it was changed in the last 14 of India's days or has a match
--- being scored right now. One per organiser, not per tournament; it names
+-- public.turf_events_now starts returning: it is on, it is kept with that
+-- account, its venue is a listed turf, and it was changed in the last 14
+-- of India's days or has a match being scored right now. One per organiser, not per tournament; it names
 -- their most recently changed such tournament and that turf, and its
 -- metadata carries the tournament's code. The app links it to the
 -- tournament's page, where Manage has the venue (lib/my/claimNotice.ts
--- notificationLink). An organiser who never signed in has no account, so
--- there is nobody to tell; the venue picker says it from now on.
+-- notificationLink). A tournament whose organiser never signed in is on
+-- no turf's page and has no account, so there is nothing to say and
+-- nobody to tell; the venue picker tells them to sign in for it.
 --
 -- Run again, it finds its own notice and adds nothing. No email goes with
 -- it (private.email_kind_of knows no such type, so the email trigger
@@ -55,6 +56,7 @@ select x.user_id,
           join public.turfs s on s.id = (t.settings -> 'venue' ->> 'id')::uuid and s.is_active
           join public.users u on u.id = t.user_id
          where t.status = 'on'
+           and t.user_id is not null
            and jsonb_typeof(t.settings -> 'venue') = 'object'
            -- Exactly the tournaments public.turf_events_now counts: changed in the last 14 of India's days, or a match on now.
            and ((now() at time zone 'Asia/Kolkata')::date - (t.updated_at at time zone 'Asia/Kolkata')::date <= 14
