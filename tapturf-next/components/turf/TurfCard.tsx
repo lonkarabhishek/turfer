@@ -32,9 +32,10 @@ interface TurfCardProps {
    */
   sport?: CardSport | null;
   /**
-   * /map with Trending on: the turf's rank among the most viewed in the
-   * last 24 hours, 7 days or 30 days (lib/map/trending.ts), shown as a
-   * small coral tag. Unset everywhere else.
+   * The turf's rank among the most viewed in the last 24 hours, 7 days or
+   * 30 days (lib/map/trending.ts), shown as a small coral tag: on /map
+   * with Trending on, and on every other list from the same answer once
+   * the page is idle (TrendTurfCard.tsx, lib/map/trendingClient.ts).
    */
   trendRank?: number | null;
   /** The window that rank is over, in words, as lib/map/trending.ts trendSpan says it ("the last 7 days"); the last 24 hours when unset. */
@@ -162,7 +163,8 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
             below so the picture reads clean, App Store style. The
             trending pick gets a thin gold frame and one badge; a turf its
             owner manages on myTapturf gets the green Claimed label
-            under it (no frame and no motion: that stays the trending pick's). */}
+            under it (no frame and no motion: that stays the trending pick's);
+            a turf among the most viewed gets the coral "Trending #N" under both. */}
         <div className={trending ? "spotlight-frame rounded-[18px]" : ""}>
         <div
           className="relative w-full aspect-[4/3] overflow-hidden rounded-2xl bg-primary-100"
@@ -182,13 +184,6 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
                   Trending this week
                 </span>
               )}
-              {!!trendRank && (
-                // The map's Trending coral (lib/map/clusters.ts MAP_COLORS.trend, 5.0:1 on white); the h3 says it for screen readers.
-                <span aria-hidden className="inline-flex h-6 items-center gap-1 rounded-full bg-white/95 pl-1.5 pr-2.5 text-[11px] font-semibold text-[#D81B4F] tabular-nums shadow-soft">
-                  <TrendingUp className="w-3.5 h-3.5" strokeWidth={2.75} />
-                  Trending #{trendRank}
-                </span>
-              )}
               {turf.claimed && (
                 // The h3 says it once for screen readers, next to the name.
                 <span aria-hidden className="inline-flex h-6 items-center gap-1 rounded-full bg-white/95 pl-1 pr-2.5 text-[11px] font-semibold text-accent-800 shadow-soft">
@@ -196,10 +191,18 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
                   Claimed
                 </span>
               )}
+              {!!trendRank && (
+                // The map's Trending coral (lib/map/clusters.ts MAP_COLORS.trend, 5.0:1 on white); the h3 says it for screen readers.
+                // Last in the column: off the map it arrives after the page has loaded (TrendTurfCard.tsx), and nothing above it moves.
+                <span aria-hidden data-nosnippet className="inline-flex h-6 items-center gap-1 rounded-full bg-white/95 pl-1.5 pr-2.5 text-[11px] font-semibold text-[#D81B4F] tabular-nums shadow-soft">
+                  <TrendingUp className="w-3.5 h-3.5" strokeWidth={2.75} />
+                  Trending #{trendRank}
+                </span>
+              )}
             </div>
           )}
           {/* The signed-in player's own "Played here" (after the page loads; never in the HTML). */}
-          <PlayedBadge turfId={turf.id} wide={!trending && !turf.claimed} />
+          <PlayedBadge turfId={turf.id} wide={!trending && !turf.claimed && !trendRank} />
           {rendered.length > 0 ? (
             <div
               className="flex h-full w-full"
@@ -294,7 +297,7 @@ export function TurfCard({ turf, distanceKm, priority = false, trending = false,
                 </>
               )}
               {/* As the map's pins say it (lib/map/trending.ts trendWords, not imported: this card is on every list). */}
-              {!!trendRank && <span className="sr-only">, trending, number {trendRank} by views in {trendOver}</span>}
+              {!!trendRank && <span data-nosnippet className="sr-only">, trending, number {trendRank} by views in {trendOver}</span>}
             </h3>
             {turf.rating > 0 && (
               <span className="flex items-center gap-1 text-[14px] text-primary-900 shrink-0">

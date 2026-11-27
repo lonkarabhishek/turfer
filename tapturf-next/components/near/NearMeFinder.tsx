@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Check, Loader2, LocateFixed, MapPin, Navigation, X } from "lucide-react";
-import { TurfCard } from "@/components/turf/TurfCard";
+import { TrendTurfCard } from "@/components/turf/TrendTurfCard";
 import { getUserLocation } from "@/lib/utils/location";
 import { guessCityFromAddress, isCity, isCitySlug, labelFor, nearestCity as cityNear, readCityChoice, setCityPref } from "@/lib/city";
 import type { Turf } from "@/types/turf";
@@ -253,9 +253,10 @@ export function NearMeFinder({
               )}
             </div>
           )}
+          {/* A turf among the most viewed says "Trending #N", as on /map: read only once there are cards to show. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
             {result.turfs.map((t, i) => (
-              <TurfCard key={t.id} turf={t} distanceKm={t.distanceKm} priority={i < 2} sport={sport} />
+              <TrendTurfCard key={t.id} turf={t} distanceKm={t.distanceKm} priority={i < 2} sport={sport} />
             ))}
           </div>
           {sport ? (

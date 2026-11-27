@@ -7,7 +7,7 @@ import { labelFor, type CityId } from "@/lib/city";
 import { getLiveCities } from "@/lib/queries/cities";
 import { citySportLinks, sportBySlug, sportVenues, turfPlaysSport } from "@/lib/sports";
 import { areaFor } from "@/lib/utils/area";
-import { TurfCard } from "@/components/turf/TurfCard";
+import { TrendTurfCard } from "@/components/turf/TrendTurfCard";
 import { forCard } from "@/lib/utils/cardTurf";
 import { NearMeFinder } from "@/components/near/NearMeFinder";
 import { ByCityLinks } from "@/components/sport/ByCityLinks";
@@ -329,7 +329,7 @@ export default async function TurfNearMePage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-8">
             {b.turfs.slice(0, CARDS_PER_CITY).map((t, i) => (
-              <TurfCard key={t.id} turf={forCard(t)} priority={bi === 0 && i < 2} />
+              <TrendTurfCard key={t.id} turf={forCard(t)} priority={bi === 0 && i < 2} />
             ))}
           </div>
 

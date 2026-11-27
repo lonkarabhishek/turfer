@@ -6,7 +6,10 @@ import { enoughTrending, joinTrending, readTrendingAuto, trendingRanks, type Tre
 
 /**
  * GET /api/map/trending: /map's "Trending" view, the page fetches it only
- * when the visitor turns Trending on. The turfs most viewed in the last 24
+ * when the visitor turns Trending on; a turf's own page and the lists'
+ * cards read the same answer, once per tab in 10 minutes and only when the
+ * page is idle (lib/map/trendingClient.ts), to say "Trending #3" for the
+ * same turfs. The turfs most viewed in the last 24
  * hours, 7 days or 30 days, the window picked by how many views the whole
  * site has (public.map_turf_trending_auto, 20261102_map_trending_window.sql:
  * 30 days while views are few, then 7, then 24 hours; never a count), each

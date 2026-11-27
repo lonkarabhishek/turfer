@@ -4,6 +4,8 @@ import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } fr
 import Link from "next/link";
 import { Search, ChevronDown, Navigation, Loader2, X, RotateCw, SlidersHorizontal, CalendarClock } from "lucide-react";
 import { TurfCard } from "@/components/turf/TurfCard";
+import { useTrending } from "@/components/turf/useTrending";
+import { trendCard } from "@/lib/map/trendingClient";
 import { TrendingSpotlight, type SpotlightTurf } from "@/components/turf/TrendingSpotlight";
 import { FilterSheet } from "@/components/search/FilterSheet";
 import { getUserLocation, type Coords } from "@/lib/utils/location";
@@ -129,6 +131,9 @@ export function TurfListingClient({
   // What the list is of: "court" on a badminton page, else "turf".
   const noun = sportPage && sportPage.venue !== "turf" ? sportPage.venue : "turf";
 
+  // The turfs trending by views (the map's own answer, read once per tab when the page is idle): each one's card says
+  // "Trending #N". Only a label: no order here reads it, and it is never in the server's cards.
+  const trend = useTrending();
   const [filters, setFilters] = useState<ListFilters>(DEFAULT_FILTERS);
   // The box as typed; filters.q follows it TYPE_MS after the last key.
   const [search, setSearch] = useState("");
@@ -672,6 +677,7 @@ export function TurfListingClient({
                   cityLabel={cityLabel || !isCity(turf.city) ? undefined : labelFor(turf.city)}
                   sport={cardSport}
                   free={free && freeNow != null ? freeLine(parseFreeCard(free), freeNow) : null}
+                  {...trendCard(trend, turf)}
                 />
               ))}
               {Array.from({ length: Math.min(pendingMore, 4) }, (_, i) => (

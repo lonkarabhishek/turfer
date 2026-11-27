@@ -1,4 +1,23 @@
 import { mapPoint } from "./data";
+import { TRENDING_MIN_TURFS, TRENDING_TOP, isTrendWindow, trendRank, type TrendWindow, type TrendWire } from "./trendWire";
+
+// The window, a turf's rank, the route's answer read back and the words for them: lib/map/trendWire.ts (no imports of its
+// own, so the turf page and the lists read them without this file's map code), handed out here under the same names.
+export {
+  TREND_WINDOWS,
+  TRENDING_MIN_TURFS,
+  TRENDING_TOP,
+  enoughTrending,
+  isTrendWindow,
+  parseTrendWindow,
+  parseTrending,
+  trendLegend,
+  trendRank,
+  trendSpan,
+  trendWords,
+  type TrendWindow,
+  type TrendWire,
+} from "./trendWire";
 
 /**
  * /map's "Trending" view: the turfs most viewed in the last 24 hours, 7
@@ -12,13 +31,10 @@ import { mapPoint } from "./data";
  * only) and hands out only the window and each turf's rank, never a count;
  * GET /api/map/trending puts each rank on its turf's map point and key and
  * says the window, and the page marks those turfs' pins and cards, only
- * once the visitor turns Trending on. Pure, relative imports only, so `npm
- * run test:list` compiles it on its own.
+ * once the visitor turns Trending on. A turf's own page and every list's
+ * cards say the same ranks from the same answer (lib/map/trendingClient.ts).
+ * Pure, relative imports only, so `npm run test:list` compiles it on its own.
  */
-
-/** The window Trending ranks over: the last 24 hours, the last 7 days or the last 30 days. */
-export type TrendWindow = "24h" | "7d" | "30d";
-export const TREND_WINDOWS: readonly TrendWindow[] = ["24h", "7d", "30d"];
 
 /** Trending uses 24 hours once the site's turf page views in the last 24 hours (the estimate below, every turf on the map) are this many or more. */
 export const TRENDING_DAY_TOTAL = 2000;
@@ -26,10 +42,6 @@ export const TRENDING_DAY_TOTAL = 2000;
 export const TRENDING_WEEK_TOTAL = 5000;
 /** A turf needs 3 views or more in the window (in 24 hours, an estimated 3) to trend. */
 export const TRENDING_MIN_VIEWS = 3;
-/** Fewer trending turfs than this is not enough to call anything trending: Trending then shows none. */
-export const TRENDING_MIN_TURFS = 5;
-/** The top this many by views in the window (turfs with the same views share a rank). */
-export const TRENDING_TOP = 10;
 /** A turf's own recent daily average is over this many India days: the ones before yesterday. */
 export const TRENDING_BASE_DAYS = 7;
 
@@ -77,10 +89,6 @@ export function trendWindow(total24h: number, total7d: number): TrendWindow {
   if (total24h >= TRENDING_DAY_TOTAL) return "24h";
   if (total7d >= TRENDING_WEEK_TOTAL) return "7d";
   return "30d";
-}
-
-export function isTrendWindow(v: unknown): v is TrendWindow {
-  return typeof v === "string" && (TREND_WINDOWS as readonly string[]).includes(v);
 }
 
 /** India days a 7- or 30-day window counts: today and the 6 (or 29) before it. */
@@ -176,14 +184,6 @@ export async function trendingRanks(
   }
 }
 
-/** A trending turf, as sent: its pin's key, where it is (5 decimals) and its rank, 1 the most viewed. */
-export type TrendWire = { k: string; y: number; x: number; r: number };
-
-export function trendRank(v: unknown): number | null {
-  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN;
-  return Number.isInteger(n) && n >= 1 && n <= TRENDING_TOP ? n : null;
-}
-
 /**
  * Each row's rank on its turf's map point, for the turfs on the map (an
  * active turf with a usable location: the map's own list), most viewed
@@ -207,54 +207,9 @@ export function joinTrending(rows: readonly TrendRow[], turfs: readonly { id: st
   return out.sort((a, b) => a.r - b.r);
 }
 
-/** The trending turfs, or none when there are fewer than TRENDING_MIN_TURFS: too few views to call anything trending. */
-export function enoughTrending<T>(list: readonly T[]): T[] {
-  return list.length >= TRENDING_MIN_TURFS ? [...list] : [];
-}
-
-/** The window the route's answer ranks over; an answer that says none is 24 hours (the route said none before it had others). */
-export function parseTrendWindow(json: unknown): TrendWindow {
-  const w = (json as { window?: unknown } | null)?.window;
-  return isTrendWindow(w) ? w : "24h";
-}
-
-/** The route's answer, read back without trusting it: anything that is not a point with a rank is dropped, and a key seen before. */
-export function parseTrending(json: unknown): TrendWire[] {
-  const list = (json as { trending?: unknown } | null)?.trending;
-  if (!Array.isArray(list)) return [];
-  const seen = new Set<string>();
-  const out: TrendWire[] = [];
-  for (const t of list) {
-    const r = trendRank(t?.r);
-    if (!r || typeof t?.k !== "string" || !t.k || seen.has(t.k)) continue;
-    if (typeof t.y !== "number" || typeof t.x !== "number" || Math.abs(t.y) > 90 || Math.abs(t.x) > 180) continue;
-    seen.add(t.k);
-    out.push({ k: t.k, y: t.y, x: t.x, r });
-  }
-  return out.sort((a, b) => a.r - b.r);
-}
-
 /** The list with the trending items first, most viewed first; the rest keep their order after them. */
 export function trendFirst<T>(items: readonly T[], rankOf: (t: T) => number | null | undefined): T[] {
   const ranked = items.map((item, i) => ({ item, i, r: rankOf(item) ?? Infinity }));
   ranked.sort((a, b) => a.r - b.r || a.i - b.i);
   return ranked.map((x) => x.item);
-}
-
-const SPAN: Record<TrendWindow, string> = { "24h": "the last 24 hours", "7d": "the last 7 days", "30d": "the last 30 days" };
-const SHORT: Record<TrendWindow, string> = { "24h": "last 24 h", "7d": "last 7 days", "30d": "last 30 days" };
-
-/** The window in words, "the last 7 days". */
-export function trendSpan(w: TrendWindow): string {
-  return SPAN[w];
-}
-
-/** The Trending legend on the map, "Most viewed · last 7 days". */
-export function trendLegend(w: TrendWindow): string {
-  return `Most viewed · ${SHORT[w]}`;
-}
-
-/** What a screen reader hears about a trending turf, after its name and price. */
-export function trendWords(rank: number, w: TrendWindow = "24h"): string {
-  return `trending, number ${rank} by views in ${SPAN[w]}`;
 }
