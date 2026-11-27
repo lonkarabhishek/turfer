@@ -200,7 +200,7 @@ export const patchMe = (token: string, patch: MePatch) =>
 /** The Me tab's Emails block: the caller's own address and switches (lib/email/types.ts). */
 export const getEmailPrefs = (token: string) => call<EmailPrefsResponse>(token, "/api/account/emails");
 
-export const patchEmailPrefs = (token: string, patch: Partial<Pick<EmailPrefsResponse, "requests" | "changes" | "reminders">>) =>
+export const patchEmailPrefs = (token: string, patch: Partial<Record<"requests" | "changes" | "reminders" | "slots", boolean>>) =>
   call<EmailPrefsResponse>(token, "/api/account/emails", { method: "PATCH", body: JSON.stringify(patch) });
 
 export const checkUsername = (token: string, u: string) =>

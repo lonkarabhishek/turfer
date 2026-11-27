@@ -25,6 +25,7 @@ import { fail, queueOf, settle, shown, takeBatch, tap, tapMany, unsaved, type Qu
 import { confirmOwnerSlots, getOwnerSlots, saveSlotHours, setOwnerSlots } from "@/lib/my/client";
 import { OWNER_COPY, toggleNotes, type SlotsStatus } from "@/lib/booking/requests";
 import { BookingRequests, useOwnerBookings, type OwnerBookingsHook } from "./BookingRequests";
+import { SlotReminderLine } from "./SlotReminderLine";
 
 /** The first read, made with the dashboard's (components/my/MyTurf.tsx): not back yet, the answer, the database has no free slots yet, or the call failed. */
 export type InitialSlots = undefined | OwnerSlots | { error: string } | "missing" | "failed";
@@ -615,6 +616,8 @@ function Editor({
         {!lineOnTop ? statusRow(true, true, false) : !buttonOnTop && statusRow(false, true, false)}
       </div>
       {footnote}
+      {/* The email reminders to update these slots, and their switch: only where the page has a number (no reminder goes otherwise). */}
+      {hasNumber && <SlotReminderLine />}
       <SaveNote state={busy ? "saving" : failNote ? "error" : flash ? "saved" : null} failed={failNote} />
     </Frame>
   );

@@ -26,7 +26,7 @@ import { useFoldReport } from "./Fold";
  * the API): who gets TapTurf's emails (Off, Test: only me, On for
  * everyone; it changes at once, no deploy), how many in the last 24 hours
  * and 7 days were sent, skipped (and why), failed or queued, as counts
- * only, never an address or a name, and "Send me one of each", the ten
+ * only, never an address or a name, and "Send me one of each", the twelve
  * emails to the site owner's own address, with each one's result.
  */
 export function EmailsCard() {
@@ -164,7 +164,7 @@ export function EmailsCard() {
           Send me one of each
         </h3>
         <p className="mt-1 text-[13px] leading-snug text-primary-600">
-          The ten emails with sample games and players, to your own Google address, with [Test] before each subject, whatever the mode. Once every 10 minutes. Their buttons open the games list.
+          The twelve emails with sample games, players and turfs, to your own Google address, with [Test] before each subject, whatever the mode. Once every 10 minutes. Their buttons open the games list, or myTapturf for the two free slots reminders.
         </p>
         <button
           type="button"

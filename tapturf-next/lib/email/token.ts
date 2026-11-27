@@ -11,7 +11,7 @@ import type { OffGroup } from "./types";
  *   <22 characters: the account id (16 bytes) and the group (1 byte), base64url>.<22: the signature>
  */
 
-const GROUP_BYTE: Record<OffGroup, number> = { requests: 1, changes: 2, reminders: 3, all: 4 };
+const GROUP_BYTE: Record<OffGroup, number> = { requests: 1, changes: 2, reminders: 3, all: 4, slots: 5 };
 const BYTE_GROUP = new Map(Object.entries(GROUP_BYTE).map(([g, b]) => [b, g as OffGroup]));
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

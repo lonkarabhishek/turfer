@@ -1,9 +1,11 @@
 import { afterMidnight, clockText, dayText, escapeHtml, mapsLink, namesText, oneLine, priceText, sportText, venueLine, venueName, whenRange, whenText } from "./format";
+import { daysSince, hiddenNow, SLOT_REMINDER_COPY as SLOT, slotSubject, type SlotTurf } from "./slotReminder";
 import type { EmailGame, EmailJob, RenderedEmail } from "./types";
 import { gamePath } from "../utils/gamePath";
 
 /**
- * The six emails (20261110_email.sql), as pure functions: an email_claim
+ * The six emails (20261110_email.sql) and the owners' slot reminder
+ * (20261129_slot_reminders.sql), as pure functions: an email_claim
  * job in, {subject, preheader, html, text} out. Mobile first: one column at
  * most 560 px wide, inline styles only (mail apps drop style sheets), a
  * light background, TapTurf's green (#15803D, the site's accent-600, white
@@ -18,6 +20,8 @@ import { gamePath } from "../utils/gamePath";
 export type EmailLinks = { site: string; off: string };
 
 type Fact = { label: string; value: string; link?: { label: string; href: string } };
+type Button = { label: string; path: string };
+type Section = { heading: string; lines: string[]; button: Button };
 
 type Content = {
   subject: string;
@@ -27,7 +31,12 @@ type Content = {
   /** Names, one per line (the requests). */
   list?: string[];
   facts?: Fact[];
-  button: { label: string; path: string };
+  /** The one button; left out when each section has its own. */
+  button?: Button;
+  /** Blocks with a button each (a slot reminder about several turfs). */
+  sections?: Section[];
+  /** Paragraphs after the button or the sections. */
+  after?: string[];
   /** Why they got it: one sentence. */
   why: string;
   /** The footer link's words. */
@@ -242,9 +251,52 @@ function reminder(job: EmailJob, g: EmailGame): Content {
   };
 }
 
+/** Where a turf's "Update slots" button goes: its Slots tab (the first tab). A sample's (path /my) goes to myTapturf. */
+const slotsPath = (job: EmailJob, t: SlotTurf) => (job.path === "/my" ? "/my" : `/my/turf/${t.id}`);
+
+/**
+ * An owner's reminder to update free slots: what is true and why it
+ * matters, a button per turf, how little it takes, and on the 5th that it
+ * is the last until they next update. Null when no turf it names is hidden
+ * from players right now (it would not be true).
+ */
+function slotReminder(job: EmailJob): Content | null {
+  const at = Date.parse(job.now ?? "");
+  const now = Number.isFinite(at) ? at : Date.now();
+  const turfs = (job.turfs ?? []).filter((t) => hiddenNow(t, now)).map((t) => ({ ...t, name: oneLine(t.name, 60) || "Your turf" }));
+  if (turfs.length === 0) return null;
+  const more = typeof job.more === "number" && job.more > 0 ? Math.floor(job.more) : 0;
+  const base = {
+    subject: slotSubject(turfs[0].name, turfs.length - 1 + more),
+    preheader: SLOT.preheader,
+    title: SLOT.title,
+    why: SLOT.why(turfs.length + more > 1),
+    offLabel: SLOT.offLabel,
+  };
+  const asks = (t: SlotTurf) => (Number.isInteger(t.asks) && t.asks > 0 ? [SLOT.asks(t.asks)] : []);
+  const after = [turfs.every((t) => t.updated_at === null) ? SLOT.quickNever : SLOT.quick, ...(job.last ? [SLOT.last] : [])];
+  if (turfs.length === 1 && more === 0) {
+    const t = turfs[0];
+    const n = daysSince(t.updated_at, now);
+    return {
+      ...base,
+      paragraphs: [hello(job.name), SLOT.rule, n === null ? SLOT.never(t.name) : SLOT.stale(t.name, n), ...asks(t)],
+      button: { label: SLOT.button, path: slotsPath(job, t) },
+      after,
+    };
+  }
+  const sections: Section[] = turfs.map((t) => {
+    const n = daysSince(t.updated_at, now);
+    return { heading: t.name, lines: [n === null ? SLOT.neverShort : SLOT.staleShort(n), ...asks(t)], button: { label: SLOT.button, path: slotsPath(job, t) } };
+  });
+  if (more > 0) sections.push({ heading: SLOT.moreHeading, lines: [SLOT.more(more)], button: { label: SLOT.moreButton, path: job.path === "/my" ? "/my" : "/my?list=1" } });
+  return { ...base, paragraphs: [hello(job.name), SLOT.rule, SLOT.several], sections, after };
+}
+
 /** What a job says, or null when the job can't be written (a game email without its game). */
 export function contentOf(job: EmailJob): Content | null {
   if (job.kind === "welcome") return welcome(job);
+  if (job.kind === "slot_reminder") return slotReminder(job);
   const g = job.game;
   if (!g || !g.id) return null;
   switch (job.kind) {
@@ -294,14 +346,27 @@ function listHtml(items: string[]): string {
     .join("")}</table>`;
 }
 
-function buttonHtml(label: string, href: string): string {
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 2px 0;"><tr><td align="center" bgcolor="${GREEN}" style="border-radius:999px;background:${GREEN};">` +
+function buttonHtml(label: string, href: string, top = 22): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:${top}px 0 2px 0;"><tr><td align="center" bgcolor="${GREEN}" style="border-radius:999px;background:${GREEN};">` +
     `<a href="${escapeHtml(href)}" data-button="1" style="display:inline-block;padding:14px 28px;font-family:${FONT};font-size:16px;font-weight:700;line-height:1.2;color:#FFFFFF;text-decoration:none;border-radius:999px;">${escapeHtml(label)}</a>` +
     `</td></tr></table>`;
 }
 
+/** A block of its own: a name, a line or two, its button. */
+function sectionsHtml(sections: Section[], site: string): string {
+  return sections
+    .map(
+      (s) =>
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 12px 0;background:${PANEL};border:1px solid ${LINE};border-radius:12px;"><tr><td style="padding:16px 16px 18px 16px;">` +
+        `<p style="margin:0 0 6px 0;font-family:${FONT};font-size:17px;line-height:1.35;font-weight:700;color:${INK};">${escapeHtml(s.heading)}</p>` +
+        s.lines.map((l) => `<p style="margin:0 0 6px 0;font-family:${FONT};font-size:15px;line-height:1.5;color:${BODY};">${escapeHtml(l)}</p>`).join("") +
+        buttonHtml(s.button.label, siteLink(site, s.button.path), 12) +
+        `</td></tr></table>`,
+    )
+    .join("\n");
+}
+
 function html(c: Content, links: EmailLinks): string {
-  const button = siteLink(links.site, c.button.path);
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>${escapeHtml(c.subject)}</title></head>
 <body style="margin:0;padding:0;background:${PAGE};-webkit-text-size-adjust:100%;">
@@ -314,7 +379,9 @@ function html(c: Content, links: EmailLinks): string {
 ${c.paragraphs.map((x) => p(x)).join("\n")}
 ${c.list?.length ? listHtml(c.list) : ""}
 ${c.facts?.length ? factsHtml(c.facts) : ""}
-${buttonHtml(c.button.label, button)}
+${c.sections?.length ? sectionsHtml(c.sections, links.site) : ""}
+${c.button ? buttonHtml(c.button.label, siteLink(links.site, c.button.path)) : ""}
+${c.after?.length ? c.after.map((x, i) => p(x, i === 0 ? `margin-top:${c.button ? 20 : 8}px;` : "")).join("\n") : ""}
 </td></tr>
 <tr><td style="padding:20px 8px 0 8px;font-family:${FONT};font-size:13px;line-height:1.5;color:${MUTED};">
 <p style="margin:0 0 8px 0;">${escapeHtml(c.why)} <a href="${escapeHtml(links.off)}" style="color:${MUTED};text-decoration:underline;">${escapeHtml(c.offLabel)}</a></p>
@@ -335,7 +402,10 @@ function text(c: Content, links: EmailLinks): string {
     }
     lines.push("");
   }
-  lines.push(`${c.button.label}: ${siteLink(links.site, c.button.path)}`, "", "--", c.why, `${c.offLabel}: ${links.off}`, "Reply to this email to reach TapTurf.");
+  for (const s of c.sections ?? []) lines.push(s.heading, ...s.lines, `${s.button.label}: ${siteLink(links.site, s.button.path)}`, "");
+  if (c.button) lines.push(`${c.button.label}: ${siteLink(links.site, c.button.path)}`, "");
+  if (c.after?.length) lines.push(...c.after.flatMap((x) => [x, ""]));
+  lines.push("--", c.why, `${c.offLabel}: ${links.off}`, "Reply to this email to reach TapTurf.");
   return lines.join("\n");
 }
 

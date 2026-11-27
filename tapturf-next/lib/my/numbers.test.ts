@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { numberInput, numberKind, numberPatch, pageHasNumber, readCallNumber, readWhatsApp, saveMessage, shownCallNumber } from "./numbers";
 import { normalizeIndianPhone } from "../utils/phone";
-import { hasUsableContact } from "../utils/contact";
+import { contactFieldsOf, hasUsableContact, parseContactInfo } from "../utils/contact";
 import { getPhone } from "../utils/seo";
 import type { Turf } from "../../types/turf";
 
@@ -75,6 +75,20 @@ test("pageHasNumber is the turf page's own rule (Call or WhatsApp shown); not kn
   assert.equal(pageHasNumber({ owner_phone: null, contact_phone: null, landline_phone: null, whatsapp_phone: null }), false, "a claimed turf with no number");
   assert.equal(pageHasNumber({ owner_phone: null, contact_phone: null, landline_phone: null, whatsapp_phone: "+919000000002" }), true, "a WhatsApp number alone");
   assert.equal(pageHasNumber({ whatsapp_phone: null }), null, "an older database: not known");
+});
+
+// The same rows scripts/sql-tests/slot_reminders.check.mjs runs through private.turf_page_has_number.
+test("the page-has-a-number table: the turf page's rule, pageHasNumber and the database's twin agree row by row", () => {
+  type Row = { why: string; owner_phone: string | null; contact_info: unknown; landline_phone: string | null; whatsapp_phone: string | null; has: boolean };
+  const rows = (JSON.parse(readFileSync(join(process.cwd(), "lib/my/pageNumber.cases.json"), "utf8")) as { cases: Row[] }).cases;
+  assert.ok(rows.length >= 25);
+  assert.ok(rows.some((r) => r.has) && rows.some((r) => !r.has));
+  for (const r of rows) {
+    assert.equal(hasUsableContact(contactFieldsOf(r)), r.has, `hasUsableContact: ${r.why}`);
+    const phone: unknown = parseContactInfo(r.contact_info)?.phone;
+    const mine = { owner_phone: r.owner_phone, contact_phone: (phone ?? null) as string | null, landline_phone: r.landline_phone, whatsapp_phone: r.whatsapp_phone };
+    assert.equal(pageHasNumber(mine), r.has, `pageHasNumber: ${r.why}`);
+  }
 });
 
 test("numberPatch sends a number only when it changes", () => {

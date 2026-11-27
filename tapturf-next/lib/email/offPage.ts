@@ -26,6 +26,7 @@ export const OFF_NOUN: Record<OffGroup, string> = {
   requests: "join request emails",
   changes: "game change emails",
   reminders: "reminder emails",
+  slots: "reminders to update your free slots",
   all: "all TapTurf emails",
 };
 

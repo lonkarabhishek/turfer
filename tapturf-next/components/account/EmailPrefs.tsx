@@ -5,21 +5,23 @@ import Link from "next/link";
 import { Loader2, Mail } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getEmailPrefs, patchEmailPrefs, quietToken } from "@/lib/account/client";
-import { EMAIL_GROUPS, GROUP_DETAIL, GROUP_LABEL, type EmailGroup, type EmailPrefsResponse } from "@/lib/email/types";
+import { EMAIL_GROUPS, GROUP_DETAIL, GROUP_LABEL, type EmailPrefsResponse, type SwitchGroup } from "@/lib/email/types";
 import type { AppUser } from "@/types/user";
 
 /**
  * The Me tab's Emails block (Profile, #emails, where the link in every
  * email's page points): the address we email, only the account's own one
  * Google confirmed, and three switches that save as they are tapped (Join
- * requests and answers, Game changes, Reminders). An account with no such
- * address gets one line on how to add one. Hidden until the database has
+ * requests and answers, Game changes, Reminders). An account that runs a
+ * claimed turf has a fourth, "Reminders to update your free slots"
+ * (prefs.slots is not null; 20261129_slot_reminders.sql). An account with
+ * no such address gets one line on how to add one. Hidden until the database has
  * emails (ready: false). /api/account/emails, lib/email/server.ts.
  */
 export function EmailPrefs({ user }: { user: AppUser }) {
   const { getToken, signedInWith } = useAuth();
   const [prefs, setPrefs] = useState<EmailPrefsResponse | null>(null);
-  const [busy, setBusy] = useState<EmailGroup | null>(null);
+  const [busy, setBusy] = useState<SwitchGroup | null>(null);
   const [error, setError] = useState("");
   const ref = useRef<HTMLElement>(null);
   const scrolled = useRef(false);
@@ -49,7 +51,10 @@ export function EmailPrefs({ user }: { user: AppUser }) {
 
   if (!prefs?.ready) return null;
 
-  const flip = async (group: EmailGroup) => {
+  // The owners' fourth switch, only for an account that runs a claimed turf.
+  const groups: readonly SwitchGroup[] = prefs.slots === null ? EMAIL_GROUPS : [...EMAIL_GROUPS, "slots"];
+
+  const flip = async (group: SwitchGroup) => {
     if (busy) return;
     const next = !prefs[group];
     setError("");
@@ -80,7 +85,7 @@ export function EmailPrefs({ user }: { user: AppUser }) {
       {prefs.email ? (
         <>
           <p className="mt-1.5 text-[13px] leading-snug text-primary-500">
-            We email you at <span className="font-semibold text-primary-800 break-all">{prefs.email}</span> about your games. Only you see this.
+            We email you at <span className="font-semibold text-primary-800 break-all">{prefs.email}</span> about your games{prefs.slots === null ? "" : " and your turf"}. Only you see this.
           </p>
           {prefs.suppressed && (
             <p className="mt-2 rounded-xl bg-hot-500/10 px-3 py-2 text-[13px] leading-snug text-hot-600" role="status">
@@ -88,10 +93,10 @@ export function EmailPrefs({ user }: { user: AppUser }) {
             </p>
           )}
           <div className="mt-2 divide-y divide-primary-100">
-            {EMAIL_GROUPS.map((g) => {
-              const on = prefs[g];
+            {groups.map((g) => {
+              const on = !!prefs[g];
               return (
-                <div key={g}>
+                <div key={g} id={g === "slots" ? "emails-slots" : undefined}>
                 <button
                   type="button"
                   role="switch"

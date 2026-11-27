@@ -96,7 +96,7 @@ const problem = (reason: TestProblem, status: number, seconds?: number) => json(
 
 /**
  * POST /api/admin/emails/test { send: true }: "Send me one of each". The
- * ten emails (lib/email/samples.ts) with "[Test] " before each subject, to
+ * twelve emails (lib/email/samples.ts) with "[Test] " before each subject, to
  * the site owner's own Google-confirmed address (admin_email_test, which
  * also allows it once in 10 minutes), through the same send as every email
  * (lib/email/send.ts: From, Reply-To, List-Unsubscribe, Idempotency-Key),
