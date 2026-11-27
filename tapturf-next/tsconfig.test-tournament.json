@@ -30,6 +30,7 @@
     "lib/tournament/about.test.ts",
     "lib/tournament/host.test.ts",
     "lib/tournament/scorecard.test.ts",
-    "lib/tournament/turfEvents.test.ts"
+    "lib/tournament/turfEvents.test.ts",
+    "lib/tournament/activity.test.ts"
   ]
 }

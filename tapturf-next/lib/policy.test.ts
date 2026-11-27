@@ -336,3 +336,24 @@ test("policy: a tournament with a TapTurf turf as its venue is listed on that tu
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
   assert.equal(PRIVACY_UPDATED, "2026-11-27");
 });
+
+test("policy: a tournament's page lists its changes with their times, never who made them", () => {
+  const page = privacyPage.replace(/\s+/g, " ");
+  const at = page.indexOf('<p id="live-tournaments"');
+  const para = page.slice(at, page.indexOf("</p>", at));
+  assert.match(para, /Changes to a tournament are listed on its page with their times, such as a team renamed, a match added, moved or taken out, a match scored live, a result or a setting changed: what changed and when, never who made the change, unless the page already names the organiser as the one who started it\./);
+  // What the sentence says is what the file keeps (20261128_tournament_activity.sql): one column on the tournament's own row, and nothing in it that reads an account, a secret, a network hash or a person.
+  const sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20261128_tournament_activity.sql"), "utf8");
+  const code = sql.replace(/^\s*--.*$/gm, "");
+  assert.deepEqual([...code.matchAll(/^alter table (\S+) add column if not exists (\w+) /gm)].map((m) => `${m[1]}.${m[2]}`), ["private.tournaments.activity"], "kept: the log, on the tournament's row");
+  assert.doesNotMatch(code, /create table/i, "no new table: nothing else is stored");
+  const bodies = [...code.matchAll(/create or replace function [\s\S]*?\bas \$\$([\s\S]*?)\$\$;/g)].map((m) => m[1]);
+  assert.equal(bodies.length, 5, "its five functions");
+  for (const body of bodies) assert.doesNotMatch(body, /user_id|secret|ip_hash|\bemail\b|\bphone\b|public\.users|usernames/i, "nothing about who: no function reads an account, a secret, a network hash, a number or an email");
+  // The organiser is named in a line only where the page was served one (lib/tournament/host.ts decides that, as for the masthead).
+  const lines = fs.readFileSync(path.join(process.cwd(), "lib/tournament/activity.ts"), "utf8");
+  assert.match(lines, /i\.host\?\.name \? `\$\{i\.host\.name\} \$\{verb\} the tournament` : `Tournament \$\{verb\}`/);
+  // No new site-wide notice for it (every line is something the page already showed); the policy's date moves to the day it ships.
+  assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
+  assert.equal(PRIVACY_UPDATED, "2026-11-27");
+});

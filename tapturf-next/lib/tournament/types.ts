@@ -1,4 +1,5 @@
 import type { Innings, PointsConfig, ResultChoice } from "../cricket/nrr";
+import type { ActivityWire } from "./activity";
 
 /**
  * Live tournaments (/tournament/<code>): the contract shared by the
@@ -179,9 +180,13 @@ export type TournamentHost = { username: string; name: string; photo: string | n
  * live. host: who started it; null when there is nobody to name (no
  * account, or no public profile); left out when it could not be asked
  * (before 20261123_tournament_host.sql, or a read that failed), which also
- * names nobody.
+ * names nobody. activity: the newest entries of the tournament's log of
+ * changes and how many there are (lib/tournament/activity.ts); left out
+ * when it could not be asked (before 20261128_tournament_activity.sql, a
+ * read that failed, a tournament taken down): the Activity tab then shows
+ * only what the page can work out.
  */
-export type TournamentGetResponse = { tournament: Tournament; live: Record<string, LiveNow>; at: number; host?: TournamentHost | null };
+export type TournamentGetResponse = { tournament: Tournament; live: Record<string, LiveNow>; at: number; host?: TournamentHost | null; activity?: ActivityWire };
 
 /** POST /api/tournament body. fixtures: as the organiser's browser made them (lib/tournament/fixtures.ts); left out, the server makes them. */
 export type CreateBody = {

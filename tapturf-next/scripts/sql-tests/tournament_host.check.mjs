@@ -163,6 +163,8 @@ passed++;
 
 await db.exec(fs.readFileSync(`${M}/20261102_live_tournaments.sql`, "utf8"));
 await db.exec(`begin; ${fs.readFileSync(`${M}/20261121_player_badges.sql`, "utf8")}; commit;`);
+// With a later tournament file under it (TOURNAMENT_CHECK_WITH=<its name>, as tournament_activity.check.mjs runs this): everything below must hold with it applied too.
+if (process.env.TOURNAMENT_CHECK_WITH) await db.exec(`begin; ${fs.readFileSync(`${M}/${process.env.TOURNAMENT_CHECK_WITH}`, "utf8")}; commit;`);
 
 const fns = () => q(`select p.oid::regprocedure::text as f, md5(p.prosrc) as h, p.prosecdef, p.proconfig, p.provolatile from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in ('public','private') and p.proname not in ('tournament_host', 'live_tournament') order by 1`);
 const columns = () => q(`select table_schema, table_name, column_name, data_type from information_schema.columns where table_schema in ('public', 'private') order by 1, 2, ordinal_position`);
