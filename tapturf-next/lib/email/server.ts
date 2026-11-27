@@ -7,19 +7,35 @@ import { emailConfig, sendEmail, type SendResult } from "./send";
 import { svixKey, svixVerify } from "./svix";
 import { renderEmail } from "./templates";
 import { offKey, offToken, readOffToken } from "./token";
+import { TURFS_MAX } from "./slotReminder";
 import { CLAIM_MAX, GROUP_OF, SITE, type EmailJob, type EmailKind, type EmailPrefsResponse, type OffGroup } from "./types";
 
 // Emails (supabase/migrations/20261110_email.sql; lib/email/types.ts has
 // the API): the sender the database calls, Resend's webhook, the Me tab's
 // switches (the verified caller, as the games routes) and the link in an
-// email. Relative imports only (npm run test:email).
+// email. The owners' slot reminder (20261129_slot_reminders.sql) goes
+// through the same sender; its switch has two functions of its own
+// (slot_reminder_pref, slot_reminder_pref_set), absent before that file.
+// Relative imports only (npm run test:email).
 
-const KINDS: readonly EmailKind[] = ["welcome", "join_request", "request_waiting", "request_accepted", "game_cancelled", "game_changed", "reminder"];
+const KINDS: readonly EmailKind[] = ["welcome", "join_request", "request_waiting", "request_accepted", "game_cancelled", "game_changed", "reminder", "slot_reminder"];
 const json = (body: object, status = 200) => NextResponse.json(body, { status, headers: PRIVATE_HEADERS });
 
 /* ------------------------------------------------------------------ */
 /* The sender                                                          */
 /* ------------------------------------------------------------------ */
+
+/** A slot reminder names 1 to 5 turfs, each with its id, its name, when it was last updated (or never) and a count. */
+function slotJobOk(job: EmailJob): boolean {
+  const turfs: unknown = job.turfs;
+  if (!Array.isArray(turfs) || turfs.length < 1 || turfs.length > TURFS_MAX) return false;
+  return turfs.every((t) => {
+    const x = (t ?? {}) as Record<string, unknown>;
+    return isUuid(x.id) && typeof x.name === "string" && x.name.trim() !== ""
+      && (x.updated_at === null || (typeof x.updated_at === "string" && Number.isFinite(Date.parse(x.updated_at))))
+      && typeof x.asks === "number" && Number.isInteger(x.asks) && x.asks >= 0;
+  });
+}
 
 /** A job as email_claim sends it, or null when it is not well formed. */
 export function jobOf(x: unknown): EmailJob | null {
@@ -28,6 +44,7 @@ export function jobOf(x: unknown): EmailJob | null {
   if (typeof j.to !== "string" || !/^[^@\s<>,;"]+@[^@\s<>,;"]+\.[^@\s<>,;"]+$/.test(j.to) || j.to.length > 254) return null;
   if (typeof j.path !== "string") return null;
   const job = j as unknown as EmailJob;
+  if (job.kind === "slot_reminder") return slotJobOk(job) ? job : null;
   if (job.kind !== "welcome" && (!job.game || typeof job.game !== "object" || !isUuid(job.game.id) || !job.game.venue)) return null;
   return job;
 }
@@ -176,9 +193,9 @@ async function who(req: Request, allow: (req: Request) => boolean): Promise<{ us
   return { userId: r.ok.id };
 }
 
-const NOT_READY: EmailPrefsResponse = { ready: false, email: null, suppressed: false, requests: true, changes: true, reminders: true };
+const NOT_READY: EmailPrefsResponse = { ready: false, email: null, suppressed: false, requests: true, changes: true, reminders: true, slots: null };
 
-function prefsOf(d: Record<string, unknown>): EmailPrefsResponse {
+function prefsOf(d: Record<string, unknown>, slots: boolean | null): EmailPrefsResponse {
   return {
     ready: true,
     email: typeof d.email === "string" ? d.email : null,
@@ -186,38 +203,67 @@ function prefsOf(d: Record<string, unknown>): EmailPrefsResponse {
     requests: d.requests !== false,
     changes: d.changes !== false,
     reminders: d.reminders !== false,
+    slots,
   };
+}
+
+type RpcAnswer = Awaited<ReturnType<typeof accountRpcIfThere>>;
+
+/**
+ * The slot reminder switch as slot_reminder_pref (or _set) answers it: on
+ * or off for an account that runs a claimed turf. Null for anyone else, a
+ * database without the function, or a read that failed: the switch is then
+ * not shown, and the other three are as they were.
+ */
+function slotsOf(res: RpcAnswer): boolean | null {
+  if (!("data" in res) || res.data.r !== "ok" || res.data.owner !== true) return null;
+  return res.data.slots !== false;
 }
 
 /** GET /api/account/emails: the caller's own address (only when Google confirmed it) and switches. */
 export async function getEmailPrefs(req: Request): Promise<NextResponse> {
   const w = await who(req, allowRead);
   if ("reply" in w) return w.reply;
-  const res = await accountRpcIfThere("email_prefs_get", { p_user_id: w.userId });
+  const [res, slots] = await Promise.all([
+    accountRpcIfThere("email_prefs_get", { p_user_id: w.userId }),
+    accountRpcIfThere("slot_reminder_pref", { p_user_id: w.userId }),
+  ]);
   if ("missing" in res) return accountReply(NOT_READY);
   if ("unavailable" in res) return accountError("unavailable");
-  return res.data.r === "ok" ? accountReply(prefsOf(res.data)) : accountError("bad");
+  return res.data.r === "ok" ? accountReply(prefsOf(res.data, slotsOf(slots))) : accountError("bad");
 }
 
-/** PATCH /api/account/emails { requests?, changes?, reminders? }: the caller's own switches. */
+/** PATCH /api/account/emails { requests?, changes?, reminders?, slots? }: the caller's own switches. */
 export async function patchEmailPrefs(req: Request): Promise<NextResponse> {
   const w = await who(req, allowWrite);
   if ("reply" in w) return w.reply;
   const body = await readSmallJson(req, 500);
-  const keys = ["requests", "changes", "reminders"] as const;
+  const three = ["requests", "changes", "reminders"] as const;
+  const keys = [...three, "slots"] as const;
   if (!body || Object.keys(body).some((k) => !(keys as readonly string[]).includes(k)) || !keys.some((k) => typeof body[k] === "boolean")
       || keys.some((k) => body[k] !== undefined && typeof body[k] !== "boolean")) {
     return accountError("bad");
   }
-  const res = await accountRpcIfThere("email_prefs_set", {
-    p_user_id: w.userId,
-    p_requests: body.requests ?? null,
-    p_changes: body.changes ?? null,
-    p_reminders: body.reminders ?? null,
-  });
+  // The slot reminders' switch first (its own function, 20261129_slot_reminders.sql): a database without it changes nothing.
+  let slots: RpcAnswer | null = null;
+  if (typeof body.slots === "boolean") {
+    slots = await accountRpcIfThere("slot_reminder_pref_set", { p_user_id: w.userId, p_on: body.slots });
+    if ("missing" in slots) return accountReply(NOT_READY, "unavailable");
+    if ("unavailable" in slots) return accountError("unavailable");
+    if (slots.data.r !== "ok") return accountError("bad");
+  }
+  const res = three.some((k) => typeof body[k] === "boolean")
+    ? await accountRpcIfThere("email_prefs_set", {
+        p_user_id: w.userId,
+        p_requests: body.requests ?? null,
+        p_changes: body.changes ?? null,
+        p_reminders: body.reminders ?? null,
+      })
+    : await accountRpcIfThere("email_prefs_get", { p_user_id: w.userId });
   if ("missing" in res) return accountReply(NOT_READY, "unavailable");
   if ("unavailable" in res) return accountError("unavailable");
-  return res.data.r === "ok" ? accountReply(prefsOf(res.data)) : accountError("bad");
+  if (res.data.r !== "ok") return accountError("bad");
+  return accountReply(prefsOf(res.data, slotsOf(slots ?? (await accountRpcIfThere("slot_reminder_pref", { p_user_id: w.userId })))));
 }
 
 /* ------------------------------------------------------------------ */
@@ -275,7 +321,10 @@ export async function postOff(req: Request): Promise<NextResponse> {
   if (!key) return oneClick ? plain(503, "Try again later.") : page({ state: "error", token: t ?? undefined });
   const who = readOffToken(key, t);
   if (!who || !t) return oneClick ? plain(400, "This link doesn't work.") : page({ state: "bad" });
-  const res = await accountRpcIfThere("email_unsubscribe", { p_user_id: who.userId, p_group: who.group });
+  // The slot reminders' link turns off that one kind, through its own function (20261129_slot_reminders.sql).
+  const res = who.group === "slots"
+    ? await accountRpcIfThere("slot_reminder_pref_set", { p_user_id: who.userId, p_on: false })
+    : await accountRpcIfThere("email_unsubscribe", { p_user_id: who.userId, p_group: who.group });
   if (!("data" in res) || res.data.r !== "ok") {
     // An account that is gone has nothing to turn off.
     if ("data" in res && res.data.r === "bad") return oneClick ? plain(200, "Unsubscribed.") : page({ state: "done", group: who.group });

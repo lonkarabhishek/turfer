@@ -43,6 +43,7 @@ export const SKIP_LABEL: Record<string, string> = {
   off: "They turned it off",
   suppressed: "Bounced or marked spam",
   no_address: "No confirmed email",
+  updated: "Slots updated first",
   other: "Other",
 };
 
@@ -128,7 +129,7 @@ export function emailFoldLine(s: EmailAdminStatus): string {
   return `${MODE_LABEL[s.mode]} · ${parts.join(", ")} in 24 hours`;
 }
 
-/** The ten test emails, in the order they go: a key and what the card calls each. */
+/** The twelve test emails, in the order they go: a key and what the card calls each. */
 export const TEST_KINDS = [
   { key: "welcome", label: "Welcome" },
   { key: "join_request", label: "Join request" },
@@ -140,6 +141,8 @@ export const TEST_KINDS = [
   { key: "reminder_tomorrow", label: "Reminder: tomorrow" },
   { key: "reminder_soon", label: "Reminder: in about 3 hours" },
   { key: "reminder_tonight", label: "Reminder: tonight, after midnight" },
+  { key: "slot_reminder", label: "Free slots reminder" },
+  { key: "slot_reminder_last", label: "Free slots reminder: two turfs, the last one" },
 ] as const;
 
 export type TestKey = (typeof TEST_KINDS)[number]["key"];

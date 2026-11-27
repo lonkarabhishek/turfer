@@ -1,0 +1,32 @@
+{
+  "about": "Whether a turf's page shows Call or WhatsApp (lib/utils/contact.ts hasUsableContact, which lib/my/numbers.ts pageHasNumber and the Free slots editor read) and its twin in the database, private.turf_page_has_number (20261129_slot_reminders.sql): npm run test:my and scripts/sql-tests/slot_reminders.check.mjs both run every row. contact_info is the column as stored: an object, the same as JSON text, or nothing. Made-up numbers only.",
+  "cases": [
+    { "why": "no number anywhere", "owner_phone": null, "contact_info": null, "landline_phone": null, "whatsapp_phone": null, "has": false },
+    { "why": "a mobile to call", "owner_phone": "9000000101", "contact_info": null, "landline_phone": null, "whatsapp_phone": null, "has": true },
+    { "why": "a mobile written with +91 and spaces", "owner_phone": "+91 90000 00101", "contact_info": null, "landline_phone": null, "whatsapp_phone": null, "has": true },
+    { "why": "12 digits with 91", "owner_phone": "919000000107", "contact_info": null, "landline_phone": null, "whatsapp_phone": null, "has": true },
+    { "why": "a leading 0", "owner_phone": "09000000108", "contact_info": null, "landline_phone": null, "whatsapp_phone": null, "has": true },
+    { "why": "091 before the number", "owner_phone": "0919000000109", "contact_info": null, "landline_phone": null, "whatsapp_phone": null, "has": true },
+    { "why": "junk in the call column", "owner_phone": "12345", "contact_info": null, "landline_phone": null, "whatsapp_phone": null, "has": false },
+    { "why": "a number that starts with 1", "owner_phone": "1000000111", "contact_info": null, "landline_phone": null, "whatsapp_phone": null, "has": false },
+    { "why": "toll-free", "owner_phone": "1800 123 4567", "contact_info": null, "landline_phone": null, "whatsapp_phone": "junk", "has": false },
+    { "why": "a foreign number", "owner_phone": "+44 20 7946 0958", "contact_info": null, "landline_phone": null, "whatsapp_phone": null, "has": false },
+    { "why": "a landline with its STD code as the call number", "owner_phone": "0253 200 0123", "contact_info": null, "landline_phone": null, "whatsapp_phone": null, "has": true },
+    { "why": "only the landline column", "owner_phone": null, "contact_info": null, "landline_phone": "0253 200 0123", "whatsapp_phone": null, "has": true },
+    { "why": "a 7-digit landline without its STD code", "owner_phone": null, "contact_info": null, "landline_phone": "2000123", "whatsapp_phone": null, "has": false },
+    { "why": "contact_info.phone, a mobile", "owner_phone": null, "contact_info": { "phone": "09000000102" }, "landline_phone": null, "whatsapp_phone": null, "has": true },
+    { "why": "contact_info.phone, a landline", "owner_phone": null, "contact_info": { "phone": "0253 200 0124" }, "landline_phone": null, "whatsapp_phone": null, "has": true },
+    { "why": "contact_info.phone, junk", "owner_phone": null, "contact_info": { "phone": "call the desk" }, "landline_phone": null, "whatsapp_phone": null, "has": false },
+    { "why": "contact_info.phone as a number, not text", "owner_phone": null, "contact_info": { "phone": 9000000104 }, "landline_phone": null, "whatsapp_phone": null, "has": false },
+    { "why": "contact_info with no phone", "owner_phone": null, "contact_info": {}, "landline_phone": null, "whatsapp_phone": null, "has": false },
+    { "why": "contact_info a list", "owner_phone": null, "contact_info": [{ "phone": "9000000112" }], "landline_phone": null, "whatsapp_phone": null, "has": false },
+    { "why": "contact_info kept as JSON text", "owner_phone": null, "contact_info": "{\"phone\":\"9000000103\"}", "landline_phone": null, "whatsapp_phone": null, "has": true },
+    { "why": "contact_info as text that is not JSON", "owner_phone": null, "contact_info": "call us", "landline_phone": null, "whatsapp_phone": null, "has": false },
+    { "why": "contact_info an empty text", "owner_phone": null, "contact_info": "", "landline_phone": null, "whatsapp_phone": null, "has": false },
+    { "why": "contact_info as JSON text of a bare number string", "owner_phone": null, "contact_info": "\"9000000106\"", "landline_phone": null, "whatsapp_phone": null, "has": false },
+    { "why": "a WhatsApp mobile alone", "owner_phone": null, "contact_info": null, "landline_phone": null, "whatsapp_phone": "+919000000002", "has": true },
+    { "why": "an empty call number and a WhatsApp mobile with 0091", "owner_phone": "", "contact_info": null, "landline_phone": null, "whatsapp_phone": "0091 90000 00105", "has": true },
+    { "why": "a landline in the WhatsApp column alone", "owner_phone": null, "contact_info": null, "landline_phone": null, "whatsapp_phone": "0253 200 0123", "has": false },
+    { "why": "junk in every column", "owner_phone": "n/a", "contact_info": { "phone": "-" }, "landline_phone": "0", "whatsapp_phone": "none", "has": false }
+  ]
+}

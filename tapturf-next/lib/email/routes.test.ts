@@ -203,7 +203,7 @@ test("GET and PATCH /api/account/emails: the verified caller's own, through the 
   net.rpc.email_prefs_set = (a) => ({ r: "ok", email: "asha.standin@example.com", suppressed: false, requests: a.p_requests ?? true, changes: a.p_changes ?? false, reminders: a.p_reminders ?? true, all_off: false });
   assert.equal((await getEmailPrefs(req("/api/account/emails"))).status, 401, "signed in only");
   let r = await getEmailPrefs(req("/api/account/emails", { token: phoneToken() }));
-  assert.deepEqual(await r.json(), { ready: true, email: "asha.standin@example.com", suppressed: false, requests: true, changes: false, reminders: true });
+  assert.deepEqual(await r.json(), { ready: true, email: "asha.standin@example.com", suppressed: false, requests: true, changes: false, reminders: true, slots: null });
   assert.equal(r.headers.get("cache-control"), "private, no-store");
   assert.equal(net.calls("email_prefs_get")[0].args.p_user_id, ASHA, "the account the sign-in opens, never one the browser names");
   r = await patchEmailPrefs(req("/api/account/emails", { method: "PATCH", token: phoneToken(), body: { reminders: false } }));
@@ -215,6 +215,48 @@ test("GET and PATCH /api/account/emails: the verified caller's own, through the 
   net.rpc.email_prefs_get = () => Response.json({ code: "PGRST202", message: "no function" }, { status: 404 });
   r = await getEmailPrefs(req("/api/account/emails", { token: phoneToken() }));
   assert.equal((await r.json()).ready, false, "before the migration: the block hides");
+});
+
+test("the slot reminders' switch: only for an account that runs a turf, through its own two functions", async () => {
+  net.reset();
+  net.rpc.account_resolve = () => dbProfile({ id: ASHA });
+  const three = { r: "ok", email: "asha.standin@example.com", suppressed: false, requests: true, changes: true, reminders: true, all_off: false };
+  net.rpc.email_prefs_get = () => three;
+  net.rpc.email_prefs_set = (a) => ({ ...three, reminders: a.p_reminders ?? true });
+  let on = true;
+  net.rpc.slot_reminder_pref = () => ({ r: "ok", owner: true, slots: on });
+  net.rpc.slot_reminder_pref_set = (a) => {
+    on = a.p_on as boolean;
+    return { r: "ok", owner: true, slots: on };
+  };
+  let r = await getEmailPrefs(req("/api/account/emails", { token: phoneToken() }));
+  assert.equal((await r.json()).slots, true, "an owner: the switch, on until turned off");
+  assert.deepEqual(net.calls("slot_reminder_pref")[0].args, { p_key: "test-account-key", p_user_id: ASHA });
+  r = await patchEmailPrefs(req("/api/account/emails", { method: "PATCH", token: phoneToken(), body: { slots: false } }));
+  assert.deepEqual([r.status, (await r.json()).slots], [200, false]);
+  assert.deepEqual(net.calls("slot_reminder_pref_set")[0].args, { p_key: "test-account-key", p_user_id: ASHA, p_on: false });
+  assert.equal(net.calls("email_prefs_set").length, 0, "the other three are read, not written");
+  r = await patchEmailPrefs(req("/api/account/emails", { method: "PATCH", token: phoneToken(), body: { slots: true, reminders: false } }));
+  const both = await r.json();
+  assert.deepEqual([both.slots, both.reminders], [true, false], "both in one save");
+  assert.deepEqual(net.calls("email_prefs_set")[0].args, { p_key: "test-account-key", p_user_id: ASHA, p_requests: null, p_changes: null, p_reminders: false });
+  assert.equal((await patchEmailPrefs(req("/api/account/emails", { method: "PATCH", token: phoneToken(), body: { slots: "off" } }))).status, 400);
+  // Someone who runs no turf: no switch.
+  net.rpc.slot_reminder_pref = () => ({ r: "ok", owner: false, slots: true });
+  r = await getEmailPrefs(req("/api/account/emails", { token: phoneToken() }));
+  assert.equal((await r.json()).slots, null);
+  // Before 20261129_slot_reminders.sql: the three switches as they were, no fourth, and a change to it says so.
+  const missing = () => Response.json({ code: "PGRST202", message: "no function" }, { status: 404 });
+  net.rpc.slot_reminder_pref = missing;
+  net.rpc.slot_reminder_pref_set = missing;
+  r = await getEmailPrefs(req("/api/account/emails", { token: phoneToken() }));
+  assert.deepEqual(await r.json(), { ready: true, email: "asha.standin@example.com", suppressed: false, requests: true, changes: true, reminders: true, slots: null });
+  r = await patchEmailPrefs(req("/api/account/emails", { method: "PATCH", token: phoneToken(), body: { reminders: false } }));
+  assert.deepEqual([r.status, (await r.json()).reminders], [200, false], "the three still save");
+  const sets = net.calls("email_prefs_set").length;
+  r = await patchEmailPrefs(req("/api/account/emails", { method: "PATCH", token: phoneToken(), body: { slots: false, reminders: true } }));
+  assert.equal(r.status, 503);
+  assert.equal(net.calls("email_prefs_set").length, sets, "and nothing else is written with it");
 });
 
 /* ---------------- the link in an email ---------------- */
@@ -250,4 +292,57 @@ test("/email/off: GET asks and changes nothing; POST turns off; one-click too", 
   r = await postOff(new Request(`http://localhost/email/off?t=${t}`, { method: "POST", body: `t=${t}`, headers: { "x-forwarded-for": "10.9.9.4" } }));
   assert.equal(r.status, 503);
   assert.match(await r.text(), /Try again/);
+});
+
+test("/email/off for slot reminders: turns off only that kind, through its own function", async () => {
+  net.reset();
+  net.rpc.slot_reminder_pref_set = () => ({ r: "ok", owner: true, slots: false });
+  const t = offToken(offKey("test-account-key"), RAVI, "slots");
+  let r = await getOff(req(`/email/off?t=${t}`));
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.match(html, /Turn off reminders to update your free slots\?/);
+  assert.match(html, /For turf owners: an email every 2 days while your free slots are out of date, 5 in a row at most\./);
+  assert.equal(net.rpcCalls.length, 0, "opening the link changes nothing");
+  r = await postOff(new Request(`http://localhost/email/off?t=${t}`, { method: "POST", body: `t=${t}`, headers: { "content-type": "application/x-www-form-urlencoded", "x-forwarded-for": "10.9.8.1" } }));
+  assert.equal(r.status, 200);
+  assert.match(await r.text(), /We won't send you reminders to update your free slots any more\./);
+  r = await postOff(new Request(`http://localhost/email/off?t=${t}`, { method: "POST", body: "List-Unsubscribe=One-Click", headers: { "content-type": "application/x-www-form-urlencoded", "x-forwarded-for": "10.9.8.2" } }));
+  assert.deepEqual([r.status, await r.text()], [200, "Unsubscribed."]);
+  assert.deepEqual(net.calls("slot_reminder_pref_set").map((c) => c.args), Array(2).fill({ p_key: "test-account-key", p_user_id: RAVI, p_on: false }));
+  assert.equal(net.calls("email_unsubscribe").length, 0, "no other kind is touched");
+  // Before the migration: try later, nothing turned off.
+  net.rpc.slot_reminder_pref_set = () => Response.json({ code: "PGRST202", message: "no function" }, { status: 404 });
+  r = await postOff(new Request(`http://localhost/email/off?t=${t}`, { method: "POST", body: `t=${t}`, headers: { "x-forwarded-for": "10.9.8.3" } }));
+  assert.equal(r.status, 503);
+});
+
+test("dispatch: a slot reminder goes through the same sender, with its own turn-off link", async () => {
+  await withEnv(LOCAL, async () => {
+    net.reset();
+    const TURF = "cccccccc-cccc-4ccc-8ccc-000000000001";
+    const now = new Date().toISOString();
+    const slot = { id: id(7), kind: "slot_reminder", group: "slots", user_id: ASHA, to: "asha.standin@example.com", name: "Asha", attempt: 1, path: `/my/turf/${TURF}`,
+      n: 1, last: false, more: 0, now, turfs: [{ id: TURF, name: "Kings Turf Arena", updated_at: new Date(Date.now() - 73 * 3600000).toISOString(), asks: 4 }] };
+    net.rpc.email_claim = () => ({ r: "ok", jobs: [slot, { ...slot, id: id(8), turfs: [] }], skipped: 0, more: false });
+    net.rpc.email_report = () => ({ r: "ok" });
+    const resend = fakeResend();
+    const r = await dispatch(post(), okSecret, { fetch: resend.f, ...noSleep });
+    assert.deepEqual(await r.json(), { ok: true, sent: 1, retry: 0, failed: 0, skipped: 0 });
+    assert.equal(resend.sent.length, 1);
+    const b = resend.sent[0].body;
+    assert.deepEqual(b.to, ["asha.standin@example.com"]);
+    assert.equal(b.subject, "Update your free slots: Kings Turf Arena");
+    assert.deepEqual(b.tags, [{ name: "kind", value: "slot_reminder" }]);
+    assert.ok(String(b.html).includes(`https://www.tapturf.in/my/turf/${TURF}`));
+    assert.ok((b.headers as Record<string, string>)["List-Unsubscribe"].includes(offToken(offKey("test-account-key"), ASHA, "slots")));
+    assert.deepEqual(net.calls("email_report")[0].args.p_results, [{ id: id(7), result: "sent", provider_id: "re_1" }, { id: id(8), result: "failed", error: "not well formed" }]);
+  });
+  const TURF = "cccccccc-cccc-4ccc-8ccc-000000000001";
+  const ok = { id: id(7), kind: "slot_reminder", user_id: ASHA, to: "asha.standin@example.com", path: "/my", turfs: [{ id: TURF, name: "Kings Turf Arena", updated_at: null, asks: 0 }] };
+  assert.ok(jobOf(ok), "never marked: no time");
+  assert.equal(jobOf({ ...ok, turfs: [{ ...ok.turfs[0], id: "x" }] }), null);
+  assert.equal(jobOf({ ...ok, turfs: [{ ...ok.turfs[0], updated_at: "soon" }] }), null);
+  assert.equal(jobOf({ ...ok, turfs: [{ ...ok.turfs[0], asks: -1 }] }), null);
+  assert.equal(jobOf({ ...ok, turfs: Array(6).fill(ok.turfs[0]) }), null, "5 turfs at most");
 });

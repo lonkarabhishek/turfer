@@ -1,27 +1,35 @@
 /**
  * Emails (supabase/migrations/20261110_email.sql): the six the site owner
  * approved, sent through Resend from /api/email/dispatch. Types and
- * constants shared by the sender, the templates and the Me tab. No imports.
+ * constants shared by the sender, the templates and the Me tab. Its one
+ * import is the slot reminders' own words (lib/email/slotReminder.ts).
  *
  *   GET   /api/account/emails                   -> EmailPrefsResponse (the caller's own)
- *   PATCH /api/account/emails  { requests?, changes?, reminders? } -> EmailPrefsResponse
+ *   PATCH /api/account/emails  { requests?, changes?, reminders?, slots? } -> EmailPrefsResponse
  *   GET   /email/off?t=<token>                   the link in an email: what it turns off, and a button
  *   POST  /email/off?t=<token>                   turns it off (the button, or a mail app's one-click)
  *   POST  /api/email/dispatch                    from the database (x-revalidate-secret)
  *   POST  /api/email/webhook                     from Resend (Svix signature): bounces and complaints
  */
 
-/** What an email is about: one per outbox kind (private.email_outbox.kind). */
-export type EmailKind = "welcome" | "join_request" | "request_waiting" | "request_accepted" | "game_cancelled" | "game_changed" | "reminder";
+import { SLOT_SWITCH_DETAIL, SLOT_SWITCH_LABEL, type SlotTurf } from "./slotReminder";
 
-/** The Me tab's three switches, and all of them (the Welcome email's link). */
+/**
+ * What an email is about: one per outbox kind (private.email_outbox.kind),
+ * and slot_reminder (20261129_slot_reminders.sql), which the outbox keeps as
+ * a 'reminder' row about slots and the job names by its own kind.
+ */
+export type EmailKind = "welcome" | "join_request" | "request_waiting" | "request_accepted" | "game_cancelled" | "game_changed" | "reminder" | "slot_reminder";
+
+/** The Me tab's three switches for everyone, the turf owners' fourth (slots), and all of them (the Welcome email's link). */
 export type EmailGroup = "requests" | "changes" | "reminders";
-export type OffGroup = EmailGroup | "all";
+export type SwitchGroup = EmailGroup | "slots";
+export type OffGroup = SwitchGroup | "all";
 
 export const EMAIL_GROUPS: readonly EmailGroup[] = ["requests", "changes", "reminders"];
 
 /** The switch each kind belongs to (private.email_group); Welcome has none, its link turns off all. */
-export const GROUP_OF: Record<EmailKind, EmailGroup | null> = {
+export const GROUP_OF: Record<EmailKind, SwitchGroup | null> = {
   welcome: null,
   join_request: "requests",
   request_waiting: "requests",
@@ -29,6 +37,7 @@ export const GROUP_OF: Record<EmailKind, EmailGroup | null> = {
   game_cancelled: "changes",
   game_changed: "changes",
   reminder: "reminders",
+  slot_reminder: "slots",
 };
 
 /** The switches' names, on the Me tab and on the page a link opens. */
@@ -36,6 +45,7 @@ export const GROUP_LABEL: Record<OffGroup, string> = {
   requests: "Join requests and answers",
   changes: "Game changes",
   reminders: "Reminders",
+  slots: SLOT_SWITCH_LABEL,
   all: "All TapTurf emails",
 };
 
@@ -44,6 +54,7 @@ export const GROUP_DETAIL: Record<OffGroup, string> = {
   requests: "When someone asks to join your game, a request still waiting, and when a host lets you in.",
   changes: "When a game you are in or asked to join is cancelled, or its venue, day or time changes.",
   reminders: "The day before a game and about 3 hours before it starts.",
+  slots: SLOT_SWITCH_DETAIL,
   all: "Every email from TapTurf about your account and your games.",
 };
 
@@ -103,6 +114,14 @@ export type EmailJob = {
   /** game_changed: what changed, and what the day and time were. */
   changes?: ("venue" | "time")[];
   from?: { date?: string; start_time?: string };
+  /** slot_reminder: the turfs that need an update (5 at most), and how many more there are. */
+  turfs?: SlotTurf[];
+  more?: number;
+  /** slot_reminder: which reminder in a row this is, and whether it is the last until the next update. */
+  n?: number;
+  last?: boolean;
+  /** slot_reminder: when the database wrote the job ("3 days ago" is counted from it). */
+  now?: string;
 };
 
 /** What a template makes. */
@@ -118,4 +137,10 @@ export type EmailPrefsResponse = {
   requests: boolean;
   changes: boolean;
   reminders: boolean;
+  /**
+   * Reminders to update free slots: on or off for an account that runs a
+   * claimed turf. Null for anyone else, and before the database has them
+   * (20261129_slot_reminders.sql): the switch is not shown.
+   */
+  slots: boolean | null;
 };

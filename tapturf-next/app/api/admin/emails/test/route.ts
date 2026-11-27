@@ -3,7 +3,7 @@ import { isAdmin } from "@/lib/admin/auth";
 import { ownerTokenRpc } from "@/lib/admin/db";
 import { emailTest } from "@/lib/email/admin";
 
-// "Send me one of each" on the admin's Emails card: the ten emails, "[Test] " before each subject, to the site
+// "Send me one of each" on the admin's Emails card: the twelve emails, "[Test] " before each subject, to the site
 // owner's own Google-confirmed address, through the same send as every email, whatever the mode, at most once in
 // 10 minutes (lib/email/admin.ts emailTest). The site owner only: isAdmin() here, and admin_email_test checks again.
 

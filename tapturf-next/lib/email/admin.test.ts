@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emailSetMode, emailStatus, emailTest, sendingOf, type AdminRpc } from "./admin";
 import { countsOf, EMAIL_MODES, emailFoldLine, isEmailMode, MODE_DETAIL, MODE_LABEL, sendingNote, skipLabel, TEST_KINDS, testLineText, testProblemText, toEmailStatus } from "./mode";
-import { SAMPLE_GAME_ID, sampleJobs } from "./samples";
+import { SAMPLE_GAME_ID, SAMPLE_TURF_IDS, sampleJobs } from "./samples";
 import { renderEmail } from "./templates";
 import { readOffToken, offKey } from "./token";
 
@@ -105,22 +105,24 @@ test("sending: Resend's key on production or the local stand-in, and the account
 
 /* ---------------- the samples ---------------- */
 
-test("one of each: ten emails, in order, each written, to the owner's address only, with made-up players", () => {
+test("one of each: twelve emails, in order, each written, to the owner's address only, with made-up players and turfs", () => {
   const now = new Date("2026-11-10T13:10:00Z"); // 6:40 PM in India
   const s = sampleJobs({ userId: OWNER_ID, to: OWNER_TO, name: "Site Owner" }, now, uuid);
   assert.deepEqual(s.map((x) => x.key), TEST_KINDS.map((k) => k.key));
-  assert.equal(new Set(s.map((x) => x.job.id)).size, 10, "each its own id (its Idempotency-Key)");
+  assert.equal(s.length, 12);
+  assert.equal(new Set(s.map((x) => x.job.id)).size, 12, "each its own id (its Idempotency-Key)");
   const links = { site: "https://www.tapturf.in", off: "https://www.tapturf.in/email/off?t=T" };
   const out = s.map((x) => ({ key: x.key, e: renderEmail(x.job, links, { subjectPrefix: "[Test] " }) }));
   for (const { key, e } of out) {
     assert.ok(e, `${key}: written`);
     assert.ok(e.subject.startsWith("[Test] "), `${key}: [Test] first`);
     assert.ok(!e.html.includes("/game/"), `${key}: no link to a game that isn't there`);
+    assert.ok(!e.html.includes("/my/turf/"), `${key}: no link to a turf that isn't there`);
   }
   for (const x of s) {
     assert.equal(x.job.to, OWNER_TO);
     assert.equal(x.job.user_id, OWNER_ID);
-    assert.equal(x.job.path, "/games");
+    assert.equal(x.job.path, x.job.kind === "slot_reminder" ? "/my" : "/games");
     if (x.job.game) assert.equal(x.job.game.id, SAMPLE_GAME_ID);
   }
   const subj = Object.fromEntries(out.map((o) => [o.key, o.e!.subject]));
@@ -134,6 +136,16 @@ test("one of each: ten emails, in order, each written, to the owner's address on
   assert.equal(subj.reminder_tomorrow, "[Test] Tomorrow: Football at 7 PM, Green Valley Turf");
   assert.equal(subj.reminder_soon, "[Test] In about 3 hours: Football at 10 PM, Green Valley Turf", "6:40 PM + 3 hours, on the next half hour");
   assert.equal(subj.reminder_tonight, "[Test] Tonight, after midnight: Football at 12:30 AM, Green Valley Turf");
+  assert.equal(subj.slot_reminder, "[Test] Update your free slots: Green Valley Turf");
+  assert.equal(subj.slot_reminder_last, "[Test] Update your free slots: Green Valley Turf and 1 more");
+  const slot = out.find((o) => o.key === "slot_reminder")!.e!;
+  assert.match(slot.text, /Green Valley Turf was last updated 3 days ago, so players see none right now\./);
+  assert.match(slot.text, /Players asked for a slot here 4 times in the last 7 days\./);
+  assert.match(slot.text, /Update slots: https:\/\/www\.tapturf\.in\/my\n/, "the sample's button opens myTapturf");
+  const lastOne = out.find((o) => o.key === "slot_reminder_last")!.e!;
+  assert.match(lastOne.text, /Green Valley Box Arena\nYou haven't marked its free hours yet, so players see none\./);
+  assert.match(lastOne.text, /This is the last reminder for now\./);
+  assert.ok(!s.some((x) => x.job.kind === "slot_reminder" && x.job.turfs!.some((t) => !SAMPLE_TURF_IDS.includes(t.id as (typeof SAMPLE_TURF_IDS)[number]))), "made-up turfs only");
   const joined = out.find((o) => o.key === "join_requests")!.e!.text;
   assert.match(joined, /- Rohan Patil\n- Imran Shaikh\n- Kabir Mehta/);
   assert.match(out.find((o) => o.key === "reminder_soon")!.e!.text, /You're hosting Football\./);
@@ -216,7 +228,7 @@ test("one of each: says plainly when it can't send, before asking the database",
   assert.deepEqual([r.status, sent.length], [400, 0], "only { send: true }");
 });
 
-test("one of each: ten sends through the same send as every email, [Test] first, to the owner only, the result per kind", async () => {
+test("one of each: twelve sends through the same send as every email, [Test] first, to the owner only, the result per kind", async () => {
   const db = fakeRpc({ admin_email_test: { r: "ok", to: OWNER_TO, user_id: OWNER_ID, name: "Site" } });
   const { sent, f } = fakeResend((i) => (i === 4 ? Response.json({ name: "validation_error" }, { status: 422 }) : Response.json({ id: `re_${i}` })));
   const waits: number[] = [];
@@ -226,11 +238,16 @@ test("one of each: ten sends through the same send as every email, [Test] first,
   const j = await r.json();
   assert.equal(j.ok, true);
   assert.deepEqual(j.results.map((x: { key: string }) => x.key), TEST_KINDS.map((k) => k.key));
-  assert.deepEqual(j.results.map((x: { result: string }) => x.result), ["sent", "sent", "sent", "failed", "sent", "sent", "sent", "sent", "sent", "sent"], "each kind's own result");
+  assert.deepEqual(j.results.map((x: { result: string }) => x.result), ["sent", "sent", "sent", "failed", "sent", "sent", "sent", "sent", "sent", "sent", "sent", "sent"], "each kind's own result");
   assert.equal(j.results[3].error, "422 validation_error");
   assert.ok(!JSON.stringify(j).includes("@"), "the answer never holds the address");
-  assert.equal(sent.length, 10);
-  assert.equal(waits.length, 9, "2 a second at most");
+  assert.equal(sent.length, 12);
+  assert.equal(waits.length, 11, "2 a second at most");
+  assert.deepEqual(sent.slice(10).map((x) => x.body.tags), [[{ name: "kind", value: "slot_reminder" }], [{ name: "kind", value: "slot_reminder" }]]);
+  for (const x of sent.slice(10)) {
+    const token = /off\?t=([^>]+)>/.exec((x.body.headers as Record<string, string>)["List-Unsubscribe"])?.[1];
+    assert.equal(readOffToken(offKey("test-account-key"), token ?? null)?.group, "slots", "a slot reminder's link turns off only slot reminders");
+  }
   for (const s of sent) {
     assert.equal(s.url, "http://127.0.0.1:9/resend/emails");
     assert.deepEqual(s.body.to, [OWNER_TO], "to the owner only");
@@ -245,7 +262,7 @@ test("one of each: ten sends through the same send as every email, [Test] first,
     assert.match(s.headers.get("idempotency-key") ?? "", /^eeeeeeee-/);
     assert.equal(s.headers.get("authorization"), "Bearer re_test");
   }
-  assert.equal(new Set(sent.map((s) => s.headers.get("idempotency-key"))).size, 10, "each its own Idempotency-Key");
+  assert.equal(new Set(sent.map((s) => s.headers.get("idempotency-key"))).size, 12, "each its own Idempotency-Key");
   assert.deepEqual(db.calls, [{ fn: "admin_email_test", args: {} }], "the database asked once");
 });
 
@@ -257,5 +274,5 @@ test("one of each: out of time, the rest are said not tried", async () => {
   });
   const j = await r.json();
   assert.equal(sent.length, 3);
-  assert.deepEqual(j.results.slice(3).map((x: { result: string; error?: string }) => [x.result, x.error]), Array(7).fill(["retry", "not tried, out of time"]));
+  assert.deepEqual(j.results.slice(3).map((x: { result: string; error?: string }) => [x.result, x.error]), Array(9).fill(["retry", "not tried, out of time"]));
 });

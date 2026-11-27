@@ -164,7 +164,9 @@ const SECTIONS: LegalSection[] = [
           Only TapTurf&rsquo;s team sees these. Once we confirm your claim, the
           turf&rsquo;s page says &ldquo;Managed by @your-username&rdquo; if you have a username and
           &ldquo;Let others find and tag me&rdquo; is on, with the verified tick if you have it. Your name,
-          number and email never show there. Turning the switch off takes it off within a minute or so.
+          number and email never show there. Turning the switch off takes it off within a minute or so. While
+          you run a claimed turf we email you reminders to update its free slots (see &ldquo;Emails we send
+          you&rdquo; below, which also says how to turn them off).
         </p>
         <p id="usernames" className="scroll-mt-24">
           <strong>Your username and public profile.</strong> TapTurf gives every account a username, made
@@ -273,11 +275,16 @@ const SECTIONS: LegalSection[] = [
           day before a game and about 3 hours before it starts. Each email goes only to you, from TapTurf through
           Resend, and says what it is about: the game, its day, time and venue, the host&rsquo;s first name, and
           for a host the names of the players who asked to join. Turn off each kind (Join requests and answers,
-          Game changes, Reminders) on the Me tab, or with the link in any email. We keep a record of each email
+          Game changes, Reminders) on the Me tab, or with the link in any email. If you run a claimed turf on
+          myTapturf, we also email you a reminder to update its free slots once they have not been updated for
+          48 hours: at 9 AM India time, every 2 days at most, and no more after 5 in a row until you next
+          update them. It names your turf, how long ago its slots were updated and, if there were any, how many
+          times players asked for a slot there in the last 7 days. Turn it off on the Me tab (Reminders to
+          update your free slots), on myTapturf&rsquo;s Slots tab, or with the link in that email. We keep a record of each email
           (its kind and when it was sent, never its words) with your account. If an email
           to your address bounces or you mark one as spam, we stop emailing that address. We don&rsquo;t track
           whether you open an email or tap its links, and we never send ads. We never email about booking
-          requests or turf claims.
+          requests or the answer to a turf claim.
         </p>
         <p id="tools" className="scroll-mt-24">
           <strong>When you use our free tools.</strong> Each time you start or finish something in a free tool
@@ -355,8 +362,8 @@ const SECTIONS: LegalSection[] = [
         <li>To send those notifications to your phone, if you turn that on.</li>
         <li>
           To email you about your account and your games, if your account has an email Google confirmed: the
-          six kinds under &ldquo;Emails we send you&rdquo; above. Turn each kind off on the Me tab or with the
-          link in the email.
+          six kinds under &ldquo;Emails we send you&rdquo; above, and for people who run a claimed turf the
+          reminder to update its free slots. Turn each kind off on the Me tab or with the link in the email.
         </li>
         <li>To show hosts who wants to join their game, and to show players how to reach the host.</li>
         <li>To publish reviews and venue corrections you submit.</li>

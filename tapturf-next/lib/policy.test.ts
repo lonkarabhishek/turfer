@@ -46,10 +46,19 @@ test("policy notice: emails, and where the policy says it", () => {
   assert.match(para, /never its words/);
   assert.match(para, /If an email to your address bounces or you mark one as spam, we stop emailing that address/);
   assert.match(para, /We don&rsquo;t track whether you open an email or tap its links, and we never send ads/);
-  assert.match(para, /We never email about booking requests or turf claims/);
+  assert.match(para, /We never email about booking requests or the answer to a turf claim\./);
+  // 27 Nov 2026 (20261129_slot_reminders.sql): reminders to update free slots, to people who run a claimed turf.
+  assert.match(para, /If you run a claimed turf on myTapturf, we also email you a reminder to update its free slots once they have not been updated for 48 hours: at 9 AM India time, every 2 days at most, and no more after 5 in a row until you next update them\./, "who, when, how often, and that it stops");
+  assert.match(para, /It names your turf, how long ago its slots were updated and, if there were any, how many times players asked for a slot there in the last 7 days\./, "what it says");
+  assert.match(para, /Turn it off on the Me tab \(Reminders to update your free slots\), on myTapturf&rsquo;s Slots tab, or with the link in that email\./, "how to turn it off");
+  // It reaches only people who run a turf and collects nothing new: no new site-wide notice, and the last one's words stay true.
+  assert.match(PRIVACY_NOTICE.text, /we never email about booking requests\.$/);
+  assert.equal(para.split("booking request").length - 1, 1, "the paragraph speaks of booking requests once: to say we never email about them");
   const page = privacyPage.replace(/\s+/g, " ");
   assert.match(page, /<li>Resend, which sends our emails\.<\/li>/, "Resend, in the list of who handles data");
-  assert.match(page, /To email you about your account and your games, if your account has an email Google confirmed/, "a purpose");
+  assert.match(page, /To email you about your account and your games, if your account has an email Google confirmed: the six kinds under &ldquo;Emails we send you&rdquo; above, and for people who run a claimed turf the reminder to update its free slots\./, "a purpose");
+  const owners = page.slice(page.indexOf('id="owners"'), page.indexOf("</p>", page.indexOf('id="owners"')));
+  assert.match(owners, /While you run a claimed turf we email you reminders to update its free slots \(see &ldquo;Emails we send you&rdquo; below, which also says how to turn them off\)\./, "the claims paragraph points to it");
   assert.match(page, /The record of each email we sent you \(its kind and when, never its words\) and your email switches stay with your account/, "how long");
   const email = page.slice(page.indexOf('id="email"'), page.indexOf("</p>", page.indexOf('id="email"')));
   assert.match(email, /Once Google has confirmed your email, we email you about your games there/, "the #email paragraph");
