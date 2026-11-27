@@ -5,10 +5,6 @@ import type { Post } from "../types";
 // source (app/tools/cricket-live-scorer, app/tools/live-scoreboard) or on the
 // live pages; the only third-party script is Google Analytics (since 27 Oct
 // 2026 loaded only after Accept on the cookie banner, lib/consent.ts).
-// 28 Nov 2026: the site now loads Google AdSense after Accept, but never on
-// those pages (lib/ads.ts NO_ADS_PROMISED: the scorer, the scoreboard, a turf
-// session, /live/<code>; lib/ads.test.ts pins it to this post's words). Put
-// ads on them and this post's title, "0 ads" and "show no ads" must go first.
 // TapTurf features below match free-cricket-live-scorer-and-live-scoreboard.
 
 export const post: Post = {

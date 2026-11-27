@@ -29,11 +29,6 @@ const CHOICE =
  * first. Cookie settings (the menu, the footer, the privacy page) opens
  * it again, moves focus to it and says what the choice is now; Esc or ×
  * closes it then. PolicyNotice waits while it is on screen.
- *
- * Its words say everything Accept turns on: analytics, maps and, since
- * 28 Nov 2026, ads from Google AdSense (lib/ads.ts). Change what Accept
- * covers and change these words, the settings line, the privacy page and
- * lib/consent.ts CONSENT_VERSION together (lib/ads.test.ts pins the words).
  */
 export function CookieBanner() {
   const shown = useCookieBanner();
@@ -66,7 +61,7 @@ export function CookieBanner() {
   const now = !reopened
     ? null
     : consent === "granted"
-      ? "Now: accepted. Google Analytics, Google maps and ads from Google are on."
+      ? "Now: accepted. Google Analytics and Google maps are on."
       : consent === "denied"
         ? storedChoice() === "rejected"
           ? "Now: rejected. They stay off."
@@ -99,10 +94,9 @@ export function CookieBanner() {
           )}
         </div>
         <p id="tt-cookie-text" className="mt-1 text-[13.5px] leading-snug text-primary-700">
-          We&rsquo;d like to use Google Analytics and similar tools to see how TapTurf is used, to show maps from
-          Google, and to show ads from Google AdSense, which uses cookies to show and measure ads and may personalise
-          them. They load only if you accept. TapTurf&rsquo;s own anonymous counts run either way and keep nothing on
-          your device.{" "}
+          We&rsquo;d like to use Google Analytics and similar tools to see how TapTurf is used, and to show maps from
+          Google. They load only if you accept. TapTurf&rsquo;s own anonymous counts run either way and keep nothing
+          on your device.{" "}
           <Link href="/privacy#cookies" className="font-semibold text-primary-900 underline underline-offset-2">
             Privacy
           </Link>

@@ -10,8 +10,6 @@ import { AskPanel } from "@/components/ask/AskPanel";
 import { AppMain } from "@/components/layout/AppMain";
 import { AuthWrapper } from "@/components/auth/AuthWrapper";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
-import { GoogleAdSense } from "@/components/analytics/GoogleAdSense";
-import { ADSENSE_CLIENT, ADSENSE_META_NAME } from "@/lib/ads";
 import { PWALifecycle } from "@/components/pwa/PWALifecycle";
 import { RouteProgress } from "@/components/nav/RouteProgress";
 import { CityPrePaint } from "@/components/city/CityPrePaint";
@@ -104,17 +102,13 @@ export default function RootLayout({
         <link rel="preconnect" href="https://lh3.googleusercontent.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://drive.google.com" />
         <link rel="dns-prefetch" href="https://lh3.googleusercontent.com" />
-        {/* Tells Google AdSense whose site this is. It loads nothing: the ad script itself is
-            added by the browser only after Accept on the cookie banner (lib/ads.ts). */}
-        <meta name={ADSENSE_META_NAME} content={ADSENSE_CLIENT} />
       </head>
       <body className={`${inter.variable} antialiased`}>
         {/* First in the page so the keyboard reaches it first; it shows itself only
             after hydration, when no cookie choice is stored (lib/consent.ts). */}
         <CookieBanner />
-        {/* Google Analytics, Google AdSense's script and the visit note wait for Accept on that banner. */}
+        {/* Google Analytics and the visit note wait for Accept on that banner. */}
         <GoogleAnalytics />
-        <GoogleAdSense />
         <VisitTracker />
         {/* TapTurf's own page view count runs either way: it keeps nothing on the device and renders nothing (lib/traffic). */}
         <TrafficCounter />
