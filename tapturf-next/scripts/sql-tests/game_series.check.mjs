@@ -316,7 +316,9 @@ await stop(OMAR, om3.series.id, true);
 const om4 = await create(OMAR, { ...GAME, date: START }, weekly(daysAll));
 eq([om4.r, om4.made], ["ok", 2], "the next puts up only 2: 30 series games a day, cancelled ones counted");
 eq(await fill(om4.series.id), 0, "and no more today");
-eq(await fill(om4.series.id, new Date(Date.now() + 26 * 3600000).toISOString()), 6, "a day on, the rest of its 8");
+// "A day on" is just past the 24 hours the limit counts, so still India's next day whatever the clock says now:
+// 26 hours on from a run between 10 PM and midnight in India is two India days on, when one more game is due (7).
+eq(await fill(om4.series.id, new Date(Date.now() + 24 * 3600000 + 5000).toISOString()), 6, "a day on, the rest of its 8");
 await q(`update private.game_series set created_at = created_at - interval '25 hours' where host_id = $1`, [OMAR]);
 const runningOmar = (await one(`select count(*)::int n from private.game_series where host_id = $1`, [OMAR])).n;
 eq((await create(OMAR, { ...GAME, date: START }, weekly([W]))).r, "limit", "with today's 30 series games used up, a new repeat is refused (it could put up no first game)");
