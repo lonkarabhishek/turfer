@@ -357,13 +357,11 @@ export default async function TurfDetailPage({
         </div>
 
         {/* Image gallery: alt text from the turf's own name, type and place; the cover (as the share card picks it) says so. */}
-        {/* The box is only for the two labels laid over the gallery, each read in the browser once the page is idle, never in
-            this HTML and with no room of its own: top left, "Trending #3 on TapTurf" for a turf among the most viewed (the
-            map's own answer); bottom left, "On at this turf" for a turf a live tournament that is on has as its venue. */}
+        {/* The box is only for the chip laid over the gallery's top left corner: "Trending #3 on TapTurf" for a turf among the
+            most viewed (the map's own answer, read in the browser once the page is idle; never in this HTML, no room of its own). */}
         <div className="relative">
           <TurfImageGallery images={turf.images} alt={meta.photoAlt} cover={turfPhotos(turf)[0] ?? null} />
           <TurfTrendChip id={turf.id} slug={turf.slug} bare={orderPhotos(turf.images).length === 0} />
-          <TurfEventsCard id={turf.id} slug={turf.slug} photos={orderPhotos(turf.images).length} />
         </div>
 
         {/* Main content + sidebar */}
@@ -385,6 +383,11 @@ export default async function TurfDetailPage({
             {/* The owner's ground sizes, drawn and benchmarked (none: nothing). */}
             {turf.ground_sizes && <GroundSize turf={turf} sizes={turf.ground_sizes} peers={peers} renderedAt={page.renderedAt} hasContact={hasContact} />}
             <TurfPricing turf={turf} claimed={claimed} contact={contact} playerPrice={playerPrice} priceNote={priceNote} ownerLine={prompts.pricingLine} />
+
+            {/* "On at this turf": the live tournaments with this turf as their venue, a sibling of the games section right
+                above it. Read in the browser once the page is idle and shown only while its place is off screen; here it is an
+                empty, zero-height div, and a turf with nothing on never gets more. */}
+            <TurfEventsCard id={turf.id} />
 
             {/* Upcoming games here, with "Host a game here" right below. */}
             <TurfGames

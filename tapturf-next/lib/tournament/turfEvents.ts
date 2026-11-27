@@ -15,6 +15,17 @@ import type { Format, Playoffs, Slot, Stage } from "./types";
  * matches being scored right now as a "Live now" row linking to the live
  * scorecard. Never who organises it.
  *
+ * Where: a section of the page's body, "On at this turf", right before
+ * "Games at this turf" and built as its sibling, one card a tournament
+ * (components/turf/TurfEventsCard.tsx). It was a card laid over the photos
+ * until the site owner saw it there (27 Nov 2026: "fix the tournament
+ * view on turf page, i dont like it. Show it like a games at this turf
+ * section, only visible when the tournament is live"). The section exists
+ * only for a turf this list names: one with nothing on has no section, no
+ * heading and no empty state. It arrives after the page has loaded, so it
+ * is shown only while its place is off the screen (the rule Free slots
+ * has, components/turf/whenOffScreen.ts): nothing in view ever moves.
+ *
  * A live match that is no tournament's fixture has only a venue name
  * someone typed, never a turf's id (two turfs can share a name), so it is
  * not shown: a match reaches a turf's page only through the tournament it
@@ -33,7 +44,7 @@ import type { Format, Playoffs, Slot, Stage } from "./types";
  * ones Trending by views has). A failed read shows nothing.
  *
  * This file is the list read back without trusting it, the tab's kept
- * copy, and every word the card says. It imports nothing that runs but
+ * copy, and every word the section says. It imports nothing that runs but
  * the kept-answer rules, so the turf page does not carry the tournament
  * page's code: the format's words, the progress line, "Started 16 Nov",
  * the next match and the link's words are the tournament page's own,
@@ -344,12 +355,24 @@ export type EventItem = {
   linkSays: string;
 };
 
-export type EventsCard = { heading: string; items: EventItem[] };
+/** The line under the heading, as the games section has one: whose these are. "A tournament with this turf as its venue." */
+export function venueWords(n: number): string {
+  return n === 1 ? "A tournament with this turf as its venue." : "Tournaments with this turf as their venue.";
+}
+
+export type EventsCard = {
+  /** "On at this turf", or "Coming up at this turf" when every tournament listed is still to start. */
+  heading: string;
+  /** "A tournament with this turf as its venue." */
+  sub: string;
+  /** One card each, three at most. */
+  items: EventItem[];
+};
 
 /**
- * Everything the card on a turf's page says, for the moment `now`; null
- * when nothing is on at this turf, and the page then looks exactly as it
- * always did.
+ * Everything the section on a turf's page says, for the moment `now`;
+ * null when nothing is on at this turf: there is then no section at all,
+ * and the page looks exactly as it always did.
  */
 export function eventsCard(list: readonly TurfTournament[] | null | undefined, now: number): EventsCard | null {
   if (!list?.length) return null;
@@ -369,7 +392,7 @@ export function eventsCard(list: readonly TurfTournament[] | null | undefined, n
       linkSays: `${link}: ${t.name}`,
     };
   });
-  // "Coming up" only when nothing listed has started; one that is on makes the card "On at this turf", and each still says its own start.
+  // "Coming up" only when nothing listed has started; one that is on makes the section "On at this turf", and each still says its own start.
   const shown = list.slice(0, TURF_EVENTS_MAX_EACH);
-  return { heading: shown.every((t) => comingUp(t, now)) ? EVENTS_HEADING_SOON : EVENTS_HEADING, items };
+  return { heading: shown.every((t) => comingUp(t, now)) ? EVENTS_HEADING_SOON : EVENTS_HEADING, sub: venueWords(items.length), items };
 }

@@ -324,14 +324,15 @@ test("policy: a tournament with a TapTurf turf as its venue is listed on that tu
   assert.deepEqual(body.match(/.*user_id.*/g)?.map((l) => l.trim()), ["and t.user_id is not null"], "only a tournament kept with an account, and the account goes no further");
   assert.deepEqual([...body.matchAll(/^\s+'(\w+)', (?:k\.|\(select count|to_char)/gm)].map((m) => m[1]), ["code", "name", "format", "legs", "matches", "playoffs", "started", "starts", "played", "total", "live"], "of a tournament: its code, name, format, dates, counts and live matches (and its next match)");
   assert.match(body, /where t\.status = 'on'/, "only a tournament that is on");
-  // The organiser is told where they choose it, and the card is never in the server HTML or a search snippet.
+  // The organiser is told where they choose it, and the section is never in the server HTML or a search snippet.
   const picker = fs.readFileSync(path.join(process.cwd(), "components/tournament/VenuePicker.tsx"), "utf8");
   assert.match(picker, /export const VENUE_SHOWS_NOTE = "This tournament will show on the turf's page while it is on\.";/);
   assert.match(picker, /export const VENUE_SHOWS_SIGN_IN_NOTE = "Sign in and this tournament will show on the turf's page while it is on\.";/);
   assert.match(picker, /\{user \? VENUE_SHOWS_NOTE : VENUE_SHOWS_SIGN_IN_NOTE\}/, "someone not signed in is told to sign in for it");
   const card = fs.readFileSync(path.join(process.cwd(), "components/turf/TurfEventsCard.tsx"), "utf8");
-  assert.match(card, /data-nosnippet/);
-  assert.match(card, /if \(!card\) return null;/);
+  assert.match(card, /<div ref=\{anchor\} data-nosnippet="">\s*\{shown && \(/, "the server renders an empty div; the section is drawn in the browser only for a turf the list names");
+  assert.match(card, /const \[shown, setShown\] = useState<EventsCard \| null>\(card\);/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "components/turf/useTurfEvents.ts"), "utf8"), /const serverSnapshot = \(\) => null;/, "which is nothing in the server's render and its hydration");
   // No new site-wide notice was added with it; the policy's date moves to the day it ships.
   assert.equal(PRIVACY_NOTICE.id, "2026-11-12-emails");
   assert.equal(PRIVACY_UPDATED, "2026-11-28");

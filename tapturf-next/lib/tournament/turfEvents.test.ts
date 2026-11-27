@@ -36,6 +36,7 @@ import {
   startedWords,
   tableLinkWords,
   toTurfEvents,
+  venueWords,
   type TurfNext,
   type TurfTournament,
 } from "./turfEvents";
@@ -67,6 +68,7 @@ test("the card for a turf with one tournament and a match being scored now", () 
   const card = eventsCard(eventsAt(eventsNow(answer(), T0), T(1)), T0);
   assert.deepEqual(card, {
     heading: "On at this turf",
+    sub: "A tournament with this turf as its venue.",
     items: [
       {
         code: C(1),
@@ -98,6 +100,7 @@ test("a tournament still to start is Coming up, with its start day and how many 
   const soon = league({ code: C(7), name: "Premier League", playoffs: "final", started: "2026-11-27", starts: "2026-12-12", played: 0, total: 7, next: { ...NEXT, n: 1, home: "Googly Gang", away: "Super Lions", day: "2026-12-12", time: "08:00" } });
   assert.deepEqual(eventsCard([soon], T0), {
     heading: "Coming up at this turf",
+    sub: "A tournament with this turf as its venue.",
     items: [
       {
         code: C(7),
@@ -140,7 +143,15 @@ test("a tournament still to start is Coming up, with its start day and how many 
   assert.equal(matchesWords(0), "No matches yet");
 });
 
-test("nothing on at this turf is no card at all", () => {
+test("the line under the heading says whose these are, one or several", () => {
+  assert.equal(venueWords(1), "A tournament with this turf as its venue.");
+  assert.equal(venueWords(2), "Tournaments with this turf as their venue.");
+  assert.equal(venueWords(3), "Tournaments with this turf as their venue.");
+  assert.equal(eventsCard(eventsAt(eventsNow(answer(), T0), T(1)), T0)?.sub, "A tournament with this turf as its venue.");
+  assert.equal(eventsCard(eventsAt(eventsNow(answer(), T0), T(2)), T0)?.sub, "Tournaments with this turf as their venue.");
+});
+
+test("nothing on at this turf is no section at all", () => {
   const now = eventsNow(answer(), T0);
   assert.equal(eventsCard(eventsAt(now, T(9)), T0), null, "a turf not in the list");
   assert.equal(eventsCard(null, T0), null);
@@ -470,18 +481,38 @@ test("never read on the admin, myTapturf, an owner's report or the email pages, 
 
 const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
 
-test("the turf page adds no server read: the card is a browser-only overlay on the gallery, never in the HTML, hidden from snippets", () => {
+test("the turf page adds no server read: a browser-only section right before the games section, never in the HTML, shown only while its place is off screen", () => {
   const page = read("app/turf/[id]/page.tsx");
-  assert.match(page, /<div className="relative">\s*<TurfImageGallery [^>]*\/>\s*<TurfTrendChip [^>]*\/>\s*<TurfEventsCard id=\{turf\.id\} slug=\{turf\.slug\} photos=\{orderPhotos\(turf\.images\)\.length\} \/>\s*<\/div>/, "laid over the gallery, beside the Trending chip");
+  assert.match(page, /<TurfEventsCard id=\{turf\.id\} \/>\s*\{\/\* Upcoming games here[^\n]*\*\/\}\s*<TurfGames\s/, "directly before Games at this turf, as its sibling");
+  assert.equal(page.match(/<TurfEventsCard /g)?.length, 1, "once, and nowhere else");
+  // The card laid over the photos is gone (the site owner, 27 Nov): the gallery's box holds the gallery and the Trending chip only.
+  assert.match(page, /<div className="relative">\s*<TurfImageGallery [^>]*\/>\s*<TurfTrendChip [^>]*\/>\s*<\/div>/);
   assert.doesNotMatch(page, /turfEvents|turf-events|turf_events/, "the page itself knows nothing of the list: no server read, no fetch");
   assert.match(page, /export const revalidate = 604800;/, "still a week");
   const card = read("components/turf/TurfEventsCard.tsx");
   assert.match(card, /^"use client";/);
-  assert.match(card, /data-nosnippet/);
-  assert.match(card, /className=\{`absolute /, "it takes no room of its own, so nothing on the page moves when it arrives");
-  assert.match(card, /if \(!card\) return null;/, "a turf with nothing on renders nothing at all");
-  assert.match(card, /prefetch=\{false\}/, "its links are never fetched ahead");
+  // The server's render and the first paint: an empty div, marked for no snippet, and nothing in it until the list names this turf.
+  assert.match(card, /<div ref=\{anchor\} data-nosnippet="">\s*\{shown && \(\s*<section className="section-divider" aria-labelledby="turf-events" data-turf-events>/, "no section, no heading and no empty state for a turf with nothing on");
+  assert.match(card, /const \[shown, setShown\] = useState<EventsCard \| null>\(card\);/, "it starts as what is known at the first draw: nothing in the server's HTML and its hydration, the tab's answer on a move inside the site");
+  // What is on the page follows what the list says only through the off-screen rule: it never appears, changes or goes in view.
+  assert.equal(card.match(/setShown\(/g)?.length, 1, "one way onto the page");
+  assert.match(card, /return whenOffScreen\(anchor\.current, \(\) => setShown\(card\)\);/);
+  assert.doesNotMatch(card, /\babsolute\b|useTrending|trendRankOf|\bphotos[:=}]/, "nothing of it is laid over the gallery, and it no longer asks about the Trending chip");
+  // A sibling of the games section: the same divider, heading and grid.
+  const games = read("components/turf/TurfGames.tsx");
+  for (const cls of ['className="section-divider"', "text-[22px] font-bold text-primary-900 font-display", "text-[14px] text-primary-500 mb-5", "grid grid-cols-1 sm:grid-cols-2 gap-3"]) {
+    assert.ok(games.includes(cls), `the games section has ${cls}`);
+    assert.ok(card.includes(cls), `and so has this one: ${cls}`);
+  }
+  assert.equal(card.match(/min-h-\[44px\]/g)?.length, 2, "the Live now row and the button are 44 px tall at least");
+  assert.equal(card.match(/prefetch=\{false\}/g)?.length, 2, "its links are never fetched ahead");
   assert.doesNotMatch(card, /Date\.now\(|new Date\(/, "what it says is of the moment the list was read");
+  // The rule itself, shared with Free slots: below the screen, or above it where the browser keeps the view still.
+  const rule = read("components/turf/whenOffScreen.ts");
+  assert.match(rule, /if \(!e \|\| e\.isIntersecting\) return;/, "never while its place is on screen");
+  assert.match(rule, /if \(r\.top >= window\.innerHeight \|\| \(r\.bottom <= 0 && anchored\)\) \{\s*io\.disconnect\(\);\s*show\(\);/);
+  assert.match(rule, /CSS\.supports\?\.\("overflow-anchor", "auto"\)/);
+  assert.match(read("components/turf/FreeSlotsCard.tsx"), /return whenOffScreen\(anchor\.current, \(\) => setRevealed\(true\)\);/, "Free slots waits by the same function");
   const hook = read("components/turf/useTurfEvents.ts");
   assert.match(hook, /const serverSnapshot = \(\) => null;/, "never in the server render or the hydration pass");
   assert.match(hook, /later: whenIdleAndShown,/, "the same wait as Trending by views: loaded, idle and on screen");

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import dynamic from "next/dynamic";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { OwnerMark } from "@/components/turf/OwnerMark";
+import { whenOffScreen } from "@/components/turf/whenOffScreen";
 import { logContactClick, type ContactKind } from "@/lib/analytics/contactClicks";
 import { buildWhatsAppLink } from "@/lib/utils/whatsapp";
 import { availabilityPath } from "@/lib/availability/route";
@@ -148,7 +149,7 @@ export function FreeSlotsCard({
   }, [avail, now, hours]);
   const ready = days.length > 0;
 
-  // Appear only where it pushes nothing on screen: the anchor below the screen, or above it with scroll anchoring.
+  // Appear only where it pushes nothing on screen: the anchor below the screen, or above it with scroll anchoring (whenOffScreen.ts).
   // At #free-slots, at once (the page moves to it next).
   useEffect(() => {
     if (!ready || revealed || !anchor.current) return;
@@ -156,20 +157,7 @@ export function FreeSlotsCard({
       setRevealed(true);
       return;
     }
-    if (typeof IntersectionObserver === "undefined") return;
-    const el = anchor.current;
-    const anchored = typeof CSS !== "undefined" && CSS.supports?.("overflow-anchor", "auto");
-    const io = new IntersectionObserver((entries) => {
-      const e = entries[entries.length - 1];
-      if (!e || e.isIntersecting) return;
-      const r = e.boundingClientRect;
-      if (r.top >= window.innerHeight || (r.bottom <= 0 && anchored)) {
-        io.disconnect();
-        setRevealed(true);
-      }
-    });
-    io.observe(el);
-    return () => io.disconnect();
+    return whenOffScreen(anchor.current, () => setRevealed(true));
   }, [ready, revealed]);
 
   const picked = pick ? days.findIndex((d) => dayKey(d) === pick) : -1;
