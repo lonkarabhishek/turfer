@@ -1,0 +1,11 @@
+{
+  "about": "A stand-in for the model on a tournament's page, for the tournament-* questions of questions.json whose expect.kind is other: per question (lower case), the reply it gives. Some are honest phrasings of the facts, which the guard (lib/ask/tournament.ts tournamentReplyOk) passes; some invent a name, a number, a result or a forecast, which it must refuse, so the player gets the code-built answer. Used offline by npm run test:ask (lib/ask/tournament.test.ts) and by a stand-in server's /v1/messages.",
+  "replies": {
+    "who is the best fielder": "I can't tell that from this tournament's scorecards. They do show Sameer and Manoj level on 3 wickets.",
+    "who was the best captain": "Sachin was the best captain, leading Lions with 120 runs.",
+    "which team looks strongest for next season": "Lions should win again next season.",
+    "was it a close tournament": "Yes, Eagles beat Lions by 3 runs in the final.",
+    "what was the weather like": "I can't tell that from this tournament's scorecards. Titans lead the table with 4 points from 2 matches.",
+    "who is the captain of titans": "I can't tell that from this tournament's scorecards. Titans are 1st in the table with 4 points."
+  }
+}

@@ -35,7 +35,11 @@ export function AskPanel() {
   const onArticle = !!pageContext.blog;
   // A live score page: the chat is about that match, with its own chips, and asking takes a sign-in.
   const liveCtx = pageContext.live ?? null;
-  const onLive = !!liveCtx;
+  // A tournament's page: the same, about that tournament (lib/ask/tournament.ts).
+  const tournamentCtx = pageContext.tournament ?? null;
+  // Either page: its own chips, and asking takes a sign-in.
+  const onLive = !!liveCtx || !!tournamentCtx;
+  const about: "match" | "tournament" = tournamentCtx ? "tournament" : "match";
 
   // Opening chips follow the city on screen (or the visitor's city):
   // its own area and turfs, and a games chip only when it has open games.
@@ -106,7 +110,7 @@ export function AskPanel() {
   // On a turf page the chat opens with what players say about it.
   const next = last?.res?.followups?.length ? last.res.followups : fresh ? openingChips(welcome, !!where) : [];
   // On a live score page, the match's own questions, unless the last answer was about it (its chips are).
-  const here = liveCtx && last?.res?.intent !== "live" ? liveCtx.chips : next;
+  const here = tournamentCtx ? (last?.res?.intent !== "tournament" ? tournamentCtx.chips : next) : liveCtx && last?.res?.intent !== "live" ? liveCtx.chips : next;
   const chips = offerSummary && !fresh ? [SUMMARY_CHIP, ...here.filter((c) => c !== SUMMARY_CHIP)] : here;
   // Signed out with no free answers left, or on a live page: Try again would be refused, so the sign-in card stands in.
   const gated = !signedIn && (freeLeft === 0 || onLive);
@@ -135,7 +139,7 @@ export function AskPanel() {
           </button>
           <div className="min-w-0 flex-1 px-1 md:px-2.5">
             <p className="font-display text-[17px] text-primary-900 leading-tight">Ask TapTurf</p>
-            <p className="text-[12px] text-primary-500 truncate">{where ? `About ${where}` : blog ? "About this article" : onLive ? "About this match" : "Turfs, games, prices and comparisons"}</p>
+            <p className="text-[12px] text-primary-500 truncate">{where ? `About ${where}` : blog ? "About this article" : onLive ? `About this ${about}` : "Turfs, games, prices and comparisons"}</p>
           </div>
           {turns.length > 0 && (
             <button
@@ -163,7 +167,7 @@ export function AskPanel() {
         <div ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain" aria-live="polite">
           {/* A parked message shows its sign-in card even when the thread is empty. */}
           {turns.length === 0 && !(gated && pending) ? (
-            <Welcome where={where} article={where ? null : blog} match={onLive ? { signIn: signedIn ? null : signIn } : null} chips={chips} onPick={(c) => void send(c)} />
+            <Welcome where={where} article={where ? null : blog} match={onLive ? { signIn: signedIn ? null : signIn, about } : null} chips={chips} onPick={(c) => void send(c)} />
           ) : (
             <div className="px-4 py-5 space-y-7">
               {turns.map((t, i) => (
@@ -185,7 +189,7 @@ export function AskPanel() {
                   onCards={() => toNewest(true)}
                 />
               ))}
-              {gated && <SignInCard pending={pending} onSignIn={signIn} match={onLive && freeLeft !== 0} />}
+              {gated && <SignInCard pending={pending} onSignIn={signIn} match={onLive && freeLeft !== 0 ? about : null} />}
             </div>
           )}
         </div>
@@ -240,7 +244,7 @@ export function AskPanel() {
                     : blog
                       ? "Ask anything about this article"
                       : onLive
-                        ? "Ask about this match"
+                        ? `Ask about this ${about}`
                         : turns.length
                           ? "Ask a follow-up"
                           : "Ask for a turf, a game, or compare two"
@@ -293,8 +297,8 @@ function Welcome({
 }: {
   where: string | null;
   article: PageContext["blog"];
-  /** On a live score page; signIn while signed out (asking there takes a sign-in). */
-  match: { signIn: (() => void) | null } | null;
+  /** On a live score page or a tournament's (about); signIn while signed out (asking there takes a sign-in). */
+  match: { signIn: (() => void) | null; about: "match" | "tournament" } | null;
   chips: string[];
   onPick: (c: string) => void;
 }) {
@@ -303,20 +307,22 @@ function Welcome({
     <div className="min-h-full flex flex-col justify-center px-5 py-8 ask-message-in">
       <Orb size={44} />
       <h2 className="mt-4 font-display text-[26px] leading-tight text-primary-900">
-        {where ? <>Ask about {where}</> : article ? <>Short on time?</> : match ? <>Ask about this match</> : <>What are you playing today?</>}
+        {where ? <>Ask about {where}</> : article ? <>Short on time?</> : match ? <>Ask about this {match.about}</> : <>What are you playing today?</>}
       </h2>
       <p className="mt-1.5 text-[15px] leading-snug text-primary-500">
         {where
           ? "What players say, prices, timings, facilities, or how it compares with another turf."
           : article
             ? articleWelcome(!!article.charts)
-            : match
-              ? "The score, who's batting or ahead, how many are needed. I answer from this live scorecard as it updates."
+            : match?.about === "tournament"
+              ? "Who's ahead, a result, the next match, and players' numbers where matches were scored ball by ball. I answer from this page's table and scorecards."
+              : match
+                ? "The score, who's batting or ahead, how many are needed. I answer from this live scorecard as it updates."
               : "Turfs, open games, prices and comparisons. Hinglish chalega."}
       </p>
       {match?.signIn && (
         <div className="mt-5 rounded-2xl bg-primary-900 text-white px-4 py-3.5">
-          <p className="text-[14px] leading-snug">Sign in to ask about this match. It&rsquo;s free and takes ten seconds.</p>
+          <p className="text-[14px] leading-snug">Sign in to ask about this {match.about}. It&rsquo;s free and takes ten seconds.</p>
           <button
             type="button"
             onClick={match.signIn}
@@ -380,13 +386,13 @@ function From() {
   );
 }
 
-/** Inline sign-in step: the thread stays, the parked message goes once they're in. match: asked on a live score page, which takes a sign-in. */
-function SignInCard({ pending, onSignIn, match = false }: { pending: string | null; onSignIn: () => void; match?: boolean }) {
+/** Inline sign-in step: the thread stays, the parked message goes once they're in. match: asked on a live score page or a tournament's, which take a sign-in. */
+function SignInCard({ pending, onSignIn, match = null }: { pending: string | null; onSignIn: () => void; match?: "match" | "tournament" | null }) {
   return (
     <div className="ask-message-in rounded-2xl bg-primary-900 text-white px-4 py-4">
       <p className="text-[15px] leading-snug">
         {match
-          ? "Sign in to ask about this match. It’s free and takes ten seconds, and I’ll answer as soon as you’re in."
+          ? `Sign in to ask about this ${match}. It’s free and takes ten seconds, and I’ll answer as soon as you’re in.`
           : "Sign in to keep chatting. It’s free and takes ten seconds, and I’ll pick up right where we are."}
       </p>
       {pending && <p className="mt-1.5 text-[13px] text-white/70">Next up: &ldquo;{pending}&rdquo;</p>}
@@ -546,6 +552,10 @@ function Subline({ res, className = "" }: { res: Turn["res"] & object; className
       case "live":
         // When the score it was read from came in: the page goes on updating, the answer does not.
         if (res.live?.asOf && (res.live.state === "live" || res.live.state === "done")) text = `From the live scorecard, updated ${res.live.asOf}.`;
+        break;
+      case "tournament":
+        // Where the answer came from: the page goes on updating, the answer does not.
+        if (res.tournament?.state === "on") text = res.tournament.scored ? "From this page's table and scorecards." : "From this page's table and results.";
         break;
     }
   if (!text) return null;

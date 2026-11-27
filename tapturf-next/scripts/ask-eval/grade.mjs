@@ -14,6 +14,10 @@
 //     "free": [turf ids whose owners' free hours players see now (public.free_slots_now, read when the replies are saved)] }
 // (hours and allDay: scripts/ask-eval/hours-truth.mjs adds them.) Without it
 // those facts are skipped (said as such). Exit code 1 when any check fails.
+// The tournament-* questions (their `tournament` names a fixture of
+// lib/ask/tournament.fixtures.ts) are asked on a tournament's page; npm run
+// test:ask runs them offline (lib/ask/tournament.test.ts) through the
+// route's own reading with tournament-model.json standing in for the model.
 // npm run test:ask tests the checks themselves (grade.test.mjs).
 import fs from "node:fs";
 import path from "node:path";
@@ -67,12 +71,16 @@ export function openOn(encoded, day, minute) {
   return !!(today?.some(([o, c]) => o <= minute && minute < c) || before?.some(([, c]) => c > 1440 && minute + 1440 < c));
 }
 
-/** The reading as the reply carries it: the memo (snake_case, as the schema), its intent, and the chips' filters for what the memo lacks. */
+/** The reading as the reply carries it: the memo (snake_case, as the schema), its intent, and the chips' filters for what the memo lacks. kind: on a tournament's page, which of the usual questions it was read as ("other": the model phrased the facts). */
 function reading(j) {
   const m = j.memo ?? {};
   const f = j.filters ?? {};
-  return { ...m, intent: j.intent, players: m.players ?? f.players ?? null };
+  return { ...m, intent: j.intent, players: m.players ?? f.players ?? null, ...(j.tournament ? { kind: j.tournament.kind ?? null } : {}) };
 }
+
+// A tournament answer never says what will happen (lib/ask/tournament.ts): only how it stands.
+const FORECAST = /\b(?:will|should|going to|gonna|likely to|bound to|set to|sure to|expected to)\s+(?:\w+\s+){0,3}(?:win|lift|qualify|top|finish|beat|lose|go through|make it|reach)\b|\bfavou?rites?\b|\bprobably\b|\blikely\b/i;
+const NO_GUESS = /\b(?:can't|cannot|can not) say\b/i;
 
 /** Each fact: null when it holds, else why not; "skip" when it can't be checked here. (j: the reply, arg: after the colon, q: the question.) */
 export const FACTS = {
@@ -202,6 +210,19 @@ export const FACTS = {
     return /(?:^|\. )No\b|hasn't marked|couldn't check/i.test(r) ? null : `no free cards, but the reply reads "${r}"`;
   },
   // Not a free hours question (a facility, a price, players): answered as asked, never from the marked hours.
+  // On a tournament's page (lib/ask/tournament.ts). no_model: one of the usual questions, a sentence built in code.
+  no_model: (j) => (j.source === "keywords" ? null : `a model wrote this reply: "${j.reply}"`),
+  // by_model: the model's own words were shown (they passed the guard).
+  by_model: (j) => (j.source === "claude" ? null : `the model's reply was not shown: "${j.reply}"`),
+  // Never a forecast, unless it is the sentence that says it can't make one.
+  no_forecast: (j) => {
+    const bad = String(j.reply ?? "").split(/(?<=[.!?])\s+/).find((s) => FORECAST.test(s) && !NO_GUESS.test(s));
+    return bad ? `a forecast: "${bad}"` : null;
+  },
+  // Players' words never say "book".
+  no_book_word: (j) => (/\bbook(?:s|ed|ing|ings)?\b/i.test(say(j)) ? `says book: "${j.reply}"` : null),
+  // A turf or game search typed on a tournament's page goes on to the usual Ask.
+  not_tournament: (j) => (j.intent === "tournament" ? `answered as a tournament question: "${j.reply}"` : null),
   // A player's search or question never gets the owners' answer (lib/ask/ownerHelp.ts).
   not_owner_help: (j) => (j.intent === "owner" || j.memo?.owner_help === true || j.owner ? `answered as a turf owner's question: "${j.reply}"` : null),
   not_free_hours: (j) => (j.memo?.free_hours === true || Object.keys(j.freeSlots ?? {}).length ? `answered as free hours: "${j.reply}"` : null),

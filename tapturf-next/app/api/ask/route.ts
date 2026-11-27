@@ -86,6 +86,9 @@ import {
   type LiveFacts,
 } from "@/lib/ask/live";
 import { answerLive } from "@/lib/ai/liveAnswer";
+import { answerTournament } from "@/lib/ai/tournamentAnswer";
+import { tournamentAskChips, tournamentAskGate, tournamentCodeOf, tournamentFallback, tournamentFollowups, tournamentRead, tournamentReply } from "@/lib/ask/tournament";
+import { tournamentFactsFor } from "@/lib/ask/tournament.server";
 import { verifyLiveCode } from "@/lib/live/codes";
 import { getLive, liveWriteKey } from "@/lib/live/server";
 import { getFreeSlots } from "@/lib/queries/freeSlots";
@@ -135,8 +138,8 @@ const BLOG_DEADLINE_MS = 40_000;
 // model: a slow reading on top would run past the chat's wait.
 const BLOG_LATE_MS = 20_000;
 
-/** How the sentence was read: a ready answer, a cached reading, Claude now, or keywords; blog: answered from the article on screen; live: from the live score on screen; owner: a turf owner's question, answered from lib/ask/ownerHelp.ts. */
-type Via = "quick" | "cache" | "claude" | "keywords" | "blog" | "live" | "owner";
+/** How the sentence was read: a ready answer, a cached reading, Claude now, or keywords; blog: answered from the article on screen; live: from the live score on screen; tournament: from the tournament on screen; owner: a turf owner's question, answered from lib/ask/ownerHelp.ts. */
+type Via = "quick" | "cache" | "claude" | "keywords" | "blog" | "live" | "tournament" | "owner";
 
 function ipHash(req: Request): string {
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
@@ -147,20 +150,21 @@ const card = (t: Turf & { distanceKm?: number }) => ({ ...forCard(t), ...(t.dist
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** What page the player is on, trimmed. blog: the slug of the article on screen. live: a live score page's link code (lib/ask/live.ts). */
-function parseContext(raw: string | null): AskContext & { blog: string | null; live: string | null } {
-  if (!raw) return { blog: null, live: null };
+/** What page the player is on, trimmed. blog: the slug of the article on screen. live: a live score page's link code (lib/ask/live.ts). tournament: a tournament page's code (lib/ask/tournament.ts). */
+function parseContext(raw: string | null): AskContext & { blog: string | null; live: string | null; tournament: string | null } {
+  if (!raw) return { blog: null, live: null, tournament: null };
   try {
-    const o = JSON.parse(raw) as { turf?: unknown; turfId?: unknown; city?: unknown; blog?: unknown; live?: unknown };
+    const o = JSON.parse(raw) as { turf?: unknown; turfId?: unknown; city?: unknown; blog?: unknown; live?: unknown; tournament?: unknown };
     return {
       turf: typeof o.turf === "string" ? o.turf.slice(0, 80) : null,
       turfId: typeof o.turfId === "string" && UUID.test(o.turfId) ? o.turfId : null,
       city: isCity(typeof o.city === "string" ? o.city : null) ? (o.city as AskContext["city"]) : null,
       blog: typeof o.blog === "string" ? o.blog.slice(0, 120) : null,
       live: liveCodeOf(o.live),
+      tournament: tournamentCodeOf(o.tournament),
     };
   } catch {
-    return { blog: null, live: null };
+    return { blog: null, live: null, tournament: null };
   }
 }
 
@@ -278,8 +282,8 @@ export async function GET(req: Request) {
   const choice = routerChoice(process.env, req.headers.get(EVAL_HEADER));
   const version = choice.version;
   const history = parseHistory(searchParams.get("h"), version);
-  // live is taken out with blog: the reading below never sees it, so every other page asks exactly as before.
-  const { blog: blogSlug, live: liveCode, ...ctx } = parseContext(searchParams.get("ctx"));
+  // live and tournament are taken out with blog: the reading below never sees them, so every other page asks exactly as before.
+  const { blog: blogSlug, live: liveCode, tournament: tournamentCode, ...ctx } = parseContext(searchParams.get("ctx"));
   // Signed-in players send their account id; visitors a browser id and
   // get three answers a day before sign-in. Phone users have no server
   // session, so both are trusted ids; the per-IP budget caps abuse.
@@ -290,6 +294,8 @@ export async function GET(req: Request) {
   if (!userId && !anonId) return NextResponse.json({ error: "sign_in" }, { status: 401 });
   // On a live score page asking takes an account: no visitor answers there (live: the chat keeps its free answers elsewhere).
   if (liveAskGate(liveCode, userId) === "sign_in") return NextResponse.json({ error: "sign_in", live: true }, { status: 401 });
+  // The same on a tournament's page (live: true is the chat's word for "this page's rule", so the free answers elsewhere stay).
+  if (tournamentAskGate(tournamentCode, userId) === "sign_in") return NextResponse.json({ error: "sign_in", live: true }, { status: 401 });
 
   const started = Date.now();
   const supabase = createReadOnlyClient();
@@ -435,6 +441,61 @@ export async function GET(req: Request) {
         intent: "live",
       });
       return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store", "Server-Timing": timingOf(ms, "live") } });
+    }
+  }
+
+  // On a tournament's page a question about the tournament is answered from
+  // the tournament itself, read as followers get it (lib/ask/tournament.ts):
+  // the table, the results, what is on and next, and the scorecards of the
+  // matches scored ball by ball. The usual questions are sentences built in
+  // code; any other goes to the model with those facts as its only source,
+  // and its reply is shown only when it adds nothing to them. A turf or
+  // game search goes on to the reading below, as on a live score page.
+  if (tournamentCode) {
+    const t0 = performance.now();
+    const turfs = await turfsLoad.catch(() => [] as Turf[]);
+    const areas = areasFromTurfs(turfs);
+    const facts = await tournamentFactsFor(tournamentCode);
+    const read = tournamentRead(q, facts, { places: livePlaces(areas, LIVE_CITY_NAMES), quickIntent: () => quickAnswer(q, { areas, turfs }, { prefCity, city: ctx.city, turf: ctx.turf }, version)?.intent ?? null });
+    if (!read.goesOn) {
+      const kind = read.kind;
+      const said: { reply: string; via: "claude" | "keywords"; refused?: string } =
+        kind !== "other" || facts.state !== "on"
+          ? { reply: kind === "other" ? tournamentFallback(facts, q) : tournamentReply(kind, facts, q), via: "keywords" }
+          : await answerTournament(q, facts, history.map((h) => ({ user: h.user, reply: h.reply })), usage, started + LIVE_DEADLINE_MS);
+      ms.handler = Math.round(performance.now() - t0);
+      ms.total = Date.now() - started;
+      const source = said.via;
+      const body = {
+        query: q,
+        intent: "tournament",
+        summary: `Tournament: ${facts.name ?? "this tournament"}`.slice(0, 120),
+        reply: said.reply,
+        followups: tournamentFollowups(tournamentAskChips(facts.has), q),
+        source,
+        via: "tournament",
+        ...(version === 10 ? { router: 10 } : {}),
+        filters: { city: null, sport: null, areas: [], maxPrice: null, time: null, when: null, skill: null, open24x7: false, wantsNearby: false, needs: [], players: null, sort: "rating" },
+        needsLocation: false,
+        freeLeft,
+        // A follow-up is a fresh question about the tournament, or a fresh search.
+        memo: { intent: "other", top: [] },
+        relaxed: [],
+        total: 0,
+        // scored: it has a ball-by-ball scorecard, so the chat can say what the answer was read from.
+        tournament: { code: tournamentCode, state: facts.state, kind, scored: facts.has.scored > 0 },
+      };
+      logFinish(supabase, logId, {
+        // The intent, the kind and the code, as a live answer is logged; refused: why a model's reply was not shown.
+        filters: { intent: "tournament", code: tournamentCode, kind, state: facts.state, ...(said.refused ? { refused: said.refused } : {}), ...(choice.eval ? { _eval: true } : {}), _src: "tournament", _t: ms, ...(usage.calls ? { _usage: usage } : {}) },
+        // 1 for an answer from a tournament that was read: admin counts 0 as an ask that found nothing.
+        results: facts.state === "on" ? 1 : 0,
+        ms: Date.now() - started,
+        source,
+        reply: said.reply,
+        intent: "tournament",
+      });
+      return NextResponse.json(body, { headers: { "Cache-Control": "private, no-store", "Server-Timing": timingOf(ms, "tournament") } });
     }
   }
 

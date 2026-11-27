@@ -262,7 +262,7 @@ const healed = new Set<string>();
  * result the fixture does not have yet (the scorer's write that finished
  * it could not pass it on) sends it, after the reply.
  */
-async function liveOf(t: Tournament, f: Tournament["fixtures"][number], now: number): Promise<LiveNow | null> {
+export async function liveOf(t: Tournament, f: Tournament["fixtures"][number], now: number): Promise<LiveNow | null> {
   const code = f.live;
   if (!code) return null;
   const home = t.teams.find((x) => x.id === f.home)?.name ?? "";

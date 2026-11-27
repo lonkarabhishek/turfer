@@ -5,15 +5,17 @@ import { useAsk } from "./AskProvider";
 
 /**
  * In-page way into the chat on screens where the floating pill is
- * hidden because a fixed Call / Join bar owns the bottom edge.
+ * hidden because a fixed Call / Join bar owns the bottom edge. wide: on
+ * every width, for a page whose entry sits in its own content (a
+ * tournament's).
  */
-export function AskAboutButton({ label = "Ask about this turf" }: { label?: string }) {
+export function AskAboutButton({ label = "Ask about this turf", wide = false }: { label?: string; wide?: boolean }) {
   const { openPanel } = useAsk();
   return (
     <button
       type="button"
       onClick={() => openPanel()}
-      className="press-tight inline-flex items-center gap-2 h-10 px-4 rounded-full bg-primary-900 text-white text-[14px] font-semibold hover:bg-accent-600 transition-colors cursor-pointer md:hidden"
+      className={`press-tight inline-flex items-center gap-2 h-10 px-4 rounded-full bg-primary-900 text-white text-[14px] font-semibold hover:bg-accent-600 transition-colors cursor-pointer ${wide ? "" : "md:hidden"}`}
     >
       <Sparkles className="w-4 h-4 text-accent-400" strokeWidth={2.25} />
       {label}

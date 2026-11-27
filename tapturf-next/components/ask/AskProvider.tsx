@@ -12,7 +12,7 @@ import type { AskVisuals, CardPrices } from "@/lib/ask/visuals";
 
 export type AskResponse = {
   query: string;
-  intent: "find_turf" | "find_game" | "compare" | "question" | "create_game" | "tool" | "other" | "blog" | "live" | "owner";
+  intent: "find_turf" | "find_game" | "compare" | "question" | "create_game" | "tool" | "other" | "blog" | "live" | "tournament" | "owner";
   summary: string;
   reply: string;
   followups: string[];
@@ -79,6 +79,8 @@ export type AskResponse = {
   owner?: { kind: string; about: string; steps: string[]; notes: string[]; links: { label: string; href: string; primary?: boolean }[] };
   /** For live: the live score it was answered from (lib/ask/live.ts), and its last update in India's time ("7:41 pm"). */
   live?: { code: string; state: string; asOf: string | null };
+  /** For tournament: the tournament it was answered from (lib/ask/tournament.ts), which of the usual questions it was read as ("other": the model phrased the facts), and whether it has a ball-by-ball scorecard. */
+  tournament?: { code: string; state: string; kind: string; scored?: boolean };
 };
 
 /** `retry`: the error offers Try again (too slow, no connection, server error). `tries`: times Try again was pressed. */
@@ -96,6 +98,13 @@ export type PageContext = {
    * for the match as it stands (lib/ask/live.ts liveAskChips).
    */
   live?: { code: string; chips: string[] } | null;
+  /**
+   * A tournament's page (/tournament/<code>): questions are about that
+   * tournament, answered from its table and scorecards, and asking takes
+   * a sign-in as on a live score page. chips: what to ask, from what the
+   * tournament has (lib/ask/tournamentKind.ts tournamentAskChips).
+   */
+  tournament?: { code: string; chips: string[] } | null;
 };
 
 type Ctx = {
@@ -244,9 +253,10 @@ export function AskProvider({ children }: { children: ReactNode }) {
           params.set("lng", at.lng.toFixed(4));
         }
         if (history.length) params.set("h", JSON.stringify(history));
-        // live only on a live score page, so every other page sends what it always did.
+        // live only on a live score page and tournament only on a tournament's, so every other page sends what it always did.
         const live = pageContext.live?.code ?? null;
-        if (pageContext.turf || pageContext.city || pageContext.blog || live)
+        const tournament = pageContext.tournament?.code ?? null;
+        if (pageContext.turf || pageContext.city || pageContext.blog || live || tournament)
           params.set(
             "ctx",
             JSON.stringify({
@@ -255,6 +265,7 @@ export function AskProvider({ children }: { children: ReactNode }) {
               city: pageContext.city ?? null,
               blog: pageContext.blog?.slug ?? null,
               ...(live ? { live } : {}),
+              ...(tournament ? { tournament } : {}),
             }),
           );
         let r: Response;
@@ -298,8 +309,8 @@ export function AskProvider({ children }: { children: ReactNode }) {
     [pageContext, user],
   );
 
-  // On a live score page asking takes a sign-in: no free answers there (the server says the same).
-  const onLive = !!pageContext.live;
+  // On a live score page, and on a tournament's, asking takes a sign-in: no free answers there (the server says the same).
+  const onLive = !!pageContext.live || !!pageContext.tournament;
   const send = useCallback(
     async (text: string, loc?: Coords | null) => {
       const q = text.trim();
