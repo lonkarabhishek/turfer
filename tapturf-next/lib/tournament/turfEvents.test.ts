@@ -10,6 +10,10 @@ import { formatLabel } from "./standings";
 import type { Format, Playoffs } from "./types";
 import {
   EVENTS_HEADING,
+  EVENTS_HEADING_SOON,
+  comingUp,
+  matchesWords,
+  startsWords,
   LIVE_LABEL,
   TURF_EVENTS_KEEP_MS,
   TURF_EVENTS_MAX_EACH,
@@ -87,6 +91,53 @@ test("the card for a turf with two tournaments and nothing live: each one's fact
     ["Walk-in League", "League · Started 16 Nov · 4 of 6 matches played", "Next: Match 5 · Strikers v Kings · Sat 28 Nov, 7:30 pm", `/tournament/${C(3)}`, "Points table and fixtures", 0],
     ["Titans v Strikers", "3-match series · Started 16 Nov · 1 of 3 matches played", "Next: Match 2 · Titans v Strikers", `/tournament/${C(2)}`, "Series score and fixtures", 0],
   ]);
+});
+
+test("a tournament still to start is Coming up, with its start day and how many matches; one that is on makes the card On", () => {
+  // Set up today for 12 Dec, nothing played, nothing live (the first real one on a turf's page, 27 Nov 2026).
+  const soon = league({ code: C(7), name: "Premier League", playoffs: "final", started: "2026-11-27", starts: "2026-12-12", played: 0, total: 7, next: { ...NEXT, n: 1, home: "Googly Gang", away: "Super Lions", day: "2026-12-12", time: "08:00" } });
+  assert.deepEqual(eventsCard([soon], T0), {
+    heading: "Coming up at this turf",
+    items: [
+      {
+        code: C(7),
+        name: "Premier League",
+        live: [],
+        facts: ["League + final", "Starts Sat 12 Dec", "7 matches"],
+        next: "Next: Match 1 · Googly Gang v Super Lions · Sat 12 Dec, 8 am",
+        href: `/tournament/${C(7)}`,
+        link: "Points table and fixtures",
+        linkSays: "Points table and fixtures: Premier League",
+      },
+    ],
+  });
+  assert.equal(EVENTS_HEADING_SOON, "Coming up at this turf");
+  // Beside one that is on, the card is "On at this turf" and the one to come still says when it starts.
+  const mixed = eventsCard([league(), soon], T0);
+  assert.equal(mixed?.heading, "On at this turf");
+  assert.deepEqual(mixed?.items.map((i) => i.facts[1]), ["Started 16 Nov", "Starts Sat 12 Dec"]);
+  assert.equal(eventsCard([soon, { ...soon, code: C(8) }], T0)?.heading, "Coming up at this turf");
+  // Coming up needs a start date after today in India and nothing played or being scored.
+  const up = (o: Partial<TurfTournament>) => comingUp({ ...soon, ...o }, T0);
+  assert.equal(up({}), true);
+  assert.equal(up({ starts: "2026-11-28" }), true, "tomorrow");
+  assert.equal(up({ starts: "2026-11-27" }), false, "it starts today: it is on");
+  assert.equal(up({ starts: "2026-11-20" }), false, "its start date has passed");
+  assert.equal(up({ starts: null }), false, "no start date of its own: it is on from the day it was put up");
+  assert.equal(up({ played: 1 }), false, "a result is in");
+  assert.equal(up({ live: [{ code: L(1), home: "Titans", away: "Kings" }] }), false, "a match is being scored");
+  // India's day, not UTC's: at 11:30 pm in India on the 27th the 28th is still to come, half an hour later it is today.
+  assert.equal(comingUp({ ...soon, starts: "2026-11-28" }, Date.parse("2026-11-27T23:30:00+05:30")), true);
+  assert.equal(comingUp({ ...soon, starts: "2026-11-28" }, Date.parse("2026-11-28T00:00:00+05:30")), false);
+  assert.equal(eventsCard([{ ...soon, starts: "2026-11-27" }], T0)?.heading, "On at this turf");
+  assert.deepEqual(eventsCard([{ ...soon, starts: "2026-11-27" }], T0)?.items[0].facts, ["League + final", "Started today", "0 of 7 matches played"]);
+  // The words.
+  assert.equal(startsWords("2026-11-28", T0), "Starts tomorrow");
+  assert.equal(startsWords("2026-12-12", T0), "Starts Sat 12 Dec");
+  assert.equal(startsWords("2027-01-03", T0), "Starts Sun 3 Jan 2027");
+  assert.equal(matchesWords(7), "7 matches");
+  assert.equal(matchesWords(1), "1 match");
+  assert.equal(matchesWords(0), "No matches yet");
 });
 
 test("nothing on at this turf is no card at all", () => {

@@ -10,7 +10,8 @@ import { useTurfEvents } from "./useTurfEvents";
 
 /**
  * On a turf's own page, over the bottom left corner of its photos: "On at
- * this turf", only for a turf that a live tournament that is on has as its
+ * this turf" ("Coming up at this turf" when every tournament listed is
+ * still to start), only for a turf that a live tournament that is on has as its
  * venue (useTurfEvents: GET /api/turf-events, read in the browser once the
  * page is idle). For each tournament, three at most: a "Live now" row for
  * every match of it being scored right now ("Titans v Kings", a link to

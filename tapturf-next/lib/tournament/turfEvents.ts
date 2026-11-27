@@ -224,6 +224,8 @@ export function createTurfEventsReader(d: KeptDeps): TurfEventsReader {
 /* ------------------------------------------------------------------ */
 
 export const EVENTS_HEADING = "On at this turf";
+/** The heading when every tournament listed is still to start (the site owner, 27 Nov 2026, of one set up two weeks ahead). */
+export const EVENTS_HEADING_SOON = "Coming up at this turf";
 export const LIVE_LABEL = "Live now";
 
 const IST_MS = 330 * 60_000;
@@ -259,6 +261,30 @@ export function startedWords(t: Pick<TurfTournament, "started" | "starts">, now:
   const d = new Date(`${t.started}T00:00:00Z`);
   const y = d.getUTCFullYear();
   return `${verb} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}${y === Number(today.slice(0, 4)) ? "" : ` ${y}`}`;
+}
+
+/**
+ * Still to start: the organiser gave it a start date after today in India,
+ * and nothing of it has been played or is being scored. One with no start
+ * date of its own, or with a result or a match on, is on.
+ */
+export function comingUp(t: Pick<TurfTournament, "starts" | "played" | "live">, now: number): boolean {
+  return !!t.starts && t.starts > indiaDay(now) && t.played === 0 && t.live.length === 0;
+}
+
+/** "Starts tomorrow", "Starts Sat 12 Dec" (with the year when it is not this one), by India's calendar. */
+export function startsWords(starts: string, now: number): string {
+  const today = indiaDay(now);
+  if (dayNumber(starts) - dayNumber(today) === 1) return "Starts tomorrow";
+  const d = new Date(`${starts}T00:00:00Z`);
+  const y = d.getUTCFullYear();
+  return `Starts ${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}${y === Number(today.slice(0, 4)) ? "" : ` ${y}`}`;
+}
+
+/** "7 matches", "1 match", "No matches yet": how many one still to start has. */
+export function matchesWords(total: number): string {
+  if (total <= 0) return "No matches yet";
+  return `${total} ${total === 1 ? "match" : "matches"}`;
 }
 
 /** "4 of 6 matches played", "1 of 1 match played", "No matches yet" (lib/tournament/about.ts progressWords). */
@@ -306,7 +332,7 @@ export type EventItem = {
   name: string;
   /** Its matches being scored right now. */
   live: EventLive[];
-  /** "League + final", "Started 16 Nov", "4 of 6 matches played" */
+  /** "League + final", "Started 16 Nov", "4 of 6 matches played"; for one still to start, "League + final", "Starts Sat 12 Dec", "7 matches" */
   facts: string[];
   /** "Next: Match 5 · Strikers v Kings · Sat 28 Nov, 7:30 pm": only while nothing of it is being scored, and there is a match to come. */
   next: string | null;
@@ -336,12 +362,14 @@ export function eventsCard(list: readonly TurfTournament[] | null | undefined, n
         const sides = sidesWords(l);
         return { href: `/live/${l.code}`, sides, says: `${LIVE_LABEL}: ${sides}, ${t.name}. Open the live scorecard` };
       }),
-      facts: [formatWords(t), startedWords(t, now), playedWords(t.played, t.total)],
+      facts: t.starts && comingUp(t, now) ? [formatWords(t), startsWords(t.starts, now), matchesWords(t.total)] : [formatWords(t), startedWords(t, now), playedWords(t.played, t.total)],
       next: t.next && !t.live.length ? nextWords(t.next) : null,
       href: `/tournament/${t.code}`,
       link,
       linkSays: `${link}: ${t.name}`,
     };
   });
-  return { heading: EVENTS_HEADING, items };
+  // "Coming up" only when nothing listed has started; one that is on makes the card "On at this turf", and each still says its own start.
+  const shown = list.slice(0, TURF_EVENTS_MAX_EACH);
+  return { heading: shown.every((t) => comingUp(t, now)) ? EVENTS_HEADING_SOON : EVENTS_HEADING, items };
 }
