@@ -18,8 +18,8 @@ import { TREND_STORE_KEY, TREND_URL, createTrendReader, trendPath, type TrendNow
 
 type IdleWindow = Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
 
-/** Run once the page has loaded, the browser is idle and the tab is on screen: the read is never in the page's way. */
-function whenIdleAndShown(run: () => void): void {
+/** Run once the page has loaded, the browser is idle and the tab is on screen: the read is never in the page's way. (What is on at a turf waits the same way: useTurfEvents.ts.) */
+export function whenIdleAndShown(run: () => void): void {
   const w = window as IdleWindow;
   const idle = () => {
     if (w.requestIdleCallback) w.requestIdleCallback(go, { timeout: 4000 });

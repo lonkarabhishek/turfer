@@ -85,6 +85,12 @@ export const TAG_PLAYED_ASK = "game_tag_played_ask";
  */
 export const TOURNAMENT_HOST_SHOWN = "tournament_host_shown";
 
+/**
+ * An organiser is told once that their tournament now shows on the page of the turf they picked as its venue
+ * (20261128_turf_events_notice.sql; metadata {code}: the tournament, whose Manage has the venue).
+ */
+export const TOURNAMENT_ON_TURF_PAGE = "tournament_on_turf_page";
+
 /** Where tapping a notification goes, and what its small link says: a game (by its id: the page 308s to its readable URL, lib/utils/gamePath.ts), a claim decision's turf, or a booking request. Null: nowhere (it marks read). */
 export function notificationLink(type: string, metadata: unknown): { href: string; label: string | null } | null {
   const m = metadata && typeof metadata === "object" && !Array.isArray(metadata) ? (metadata as Record<string, unknown>) : {};
@@ -99,6 +105,8 @@ export function notificationLink(type: string, metadata: unknown): { href: strin
   if (type === TAG_PLAYED_ASK) return { href: "/dashboard?tab=passport", label: "Open your Passport" };
   // The way to hide the name is the profile's own switch.
   if (type === TOURNAMENT_HOST_SHOWN) return { href: "/dashboard?tab=profile#find-and-tag", label: "Open that switch" };
+  // The way to take it off the turf's page is the tournament's own venue, under Manage on its page.
+  if (type === TOURNAMENT_ON_TURF_PAGE) return typeof m.code === "string" && /^[a-z0-9]{12}$/.test(m.code) ? { href: `/tournament/${m.code}`, label: "Open the tournament" } : null;
   // Older rows stored either { gameId } or { game_id }.
   const game = typeof m.gameId === "string" ? m.gameId : typeof m.game_id === "string" ? m.game_id : null;
   return game ? { href: gamePath({ id: game }), label: null } : null;

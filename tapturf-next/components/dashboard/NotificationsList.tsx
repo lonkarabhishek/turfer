@@ -8,7 +8,7 @@ import { quietToken } from "@/lib/account/client";
 import { getUserNotifications, markAsRead, markAllAsRead } from "@/lib/queries/notifications";
 import { answerTag } from "@/lib/queries/games";
 import { tagButtons } from "@/lib/games/confirmed";
-import { CLAIM_APPROVED, CLAIM_REJECTED, TAG_PLAYED_ASK, TOURNAMENT_HOST_SHOWN, notificationLink } from "@/lib/my/claimNotice";
+import { CLAIM_APPROVED, CLAIM_REJECTED, TAG_PLAYED_ASK, TOURNAMENT_HOST_SHOWN, TOURNAMENT_ON_TURF_PAGE, notificationLink } from "@/lib/my/claimNotice";
 import { ALERTS_MAX, ALERTS_PAGE, alertsLimit, alertsMerge, alertsNext, alertsPage, unreadLess } from "@/lib/dashboard/alerts";
 import type { Notification } from "@/types/notification";
 
@@ -31,6 +31,8 @@ const ICON_MAP: Record<string, typeof Bell> = {
   game_update_posted: Megaphone,
   // 20261123_tournament_host.sql: an organiser's name now shows on the tournaments they started.
   [TOURNAMENT_HOST_SHOWN]: Trophy,
+  // 20261128_turf_events_notice.sql: an organiser's tournament now shows on the page of the turf picked as its venue.
+  [TOURNAMENT_ON_TURF_PAGE]: Trophy,
   // A turf claim TapTurf decided (20261106_owner_claims_clarity.sql admin_answer_owner_claim).
   [CLAIM_APPROVED]: Store,
   [CLAIM_REJECTED]: Info,

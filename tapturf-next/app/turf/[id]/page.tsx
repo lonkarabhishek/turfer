@@ -28,6 +28,7 @@ import { dailyHoursSummary } from "@/lib/utils/hours";
 import { labelFor, isCity } from "@/lib/city";
 import { TurfImageGallery } from "@/components/turf/TurfImageGallery";
 import { TurfTrendChip } from "@/components/turf/TurfTrendChip";
+import { TurfEventsCard } from "@/components/turf/TurfEventsCard";
 import { TurfPricing, slotRatesHint } from "@/components/turf/TurfPricing";
 import { TurfDetails } from "@/components/turf/TurfDetails";
 import { FreeSlotsCard } from "@/components/turf/FreeSlotsCard";
@@ -356,11 +357,13 @@ export default async function TurfDetailPage({
         </div>
 
         {/* Image gallery: alt text from the turf's own name, type and place; the cover (as the share card picks it) says so. */}
-        {/* The box is only for the chip laid over the gallery's top left corner: "Trending #3 on TapTurf" for a turf among the
-            most viewed (the map's own answer, read in the browser once the page is idle; never in this HTML, no room of its own). */}
+        {/* The box is only for the two labels laid over the gallery, each read in the browser once the page is idle, never in
+            this HTML and with no room of its own: top left, "Trending #3 on TapTurf" for a turf among the most viewed (the
+            map's own answer); bottom left, "On at this turf" for a turf a live tournament that is on has as its venue. */}
         <div className="relative">
           <TurfImageGallery images={turf.images} alt={meta.photoAlt} cover={turfPhotos(turf)[0] ?? null} />
           <TurfTrendChip id={turf.id} slug={turf.slug} bare={orderPhotos(turf.images).length === 0} />
+          <TurfEventsCard id={turf.id} slug={turf.slug} photos={orderPhotos(turf.images).length} />
         </div>
 
         {/* Main content + sidebar */}

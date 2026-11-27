@@ -1,3 +1,4 @@
+import { createKeptReader, type KeptDeps, type KeptReader } from "../keptAnswer";
 import { enoughTrending, parseTrendWindow, parseTrending, trendSpan, type TrendWindow, type TrendWire } from "./trendWire";
 
 /**
@@ -114,104 +115,19 @@ export function trendMeaning(rank: number, w: TrendWindow): string {
   return `Number ${rank} by page views in ${trendSpan(w)}`;
 }
 
-/** What the rules need from the browser (the tests hand in their own). */
-export type TrendDeps = {
-  now: () => number;
-  /** The kept text; may throw (storage blocked). */
-  load: () => string | null;
-  /** Keep the text; may throw. */
-  save: (text: string) => void;
-  /** GET the route: its JSON, or a rejection for any failure (a status that is not 2xx, the network, bad JSON). */
-  get: () => Promise<unknown>;
-  /** Run once the page is loaded, idle and on screen. */
-  later: (run: () => void) => void;
-  /** This page may show it: not a quiet path (trendPath), not a crawler. */
-  allowed: () => boolean;
-  /** The page is going away: a read cut off by that is not kept as "nobody is trending". */
-  leaving?: () => boolean;
-};
+/** What the rules need from the browser (the tests hand in their own): lib/keptAnswer.ts KeptDeps. */
+export type TrendDeps = KeptDeps;
 
-export type TrendReader = {
-  /** What is known right now, or null (nothing read yet, or not here). The same object until a read replaces it. */
-  now: () => TrendNow | null;
-  /** Something on the page shows it: read it once it is due. Never throws, never waits. */
-  want: () => void;
-  subscribe: (l: () => void) => () => void;
-};
+/** now: what is known right now, or null; want: read it once it is due; subscribe. */
+export type TrendReader = KeptReader<TrendNow>;
 
 /**
  * One reader per page. `want` asks the route only when nothing fresh is in
  * memory or in storage, and only once however many cards ask; an answer
  * older than TREND_KEEP_MS stays on screen until the next one replaces it.
+ * The rules themselves are lib/keptAnswer.ts, shared with what is on at a
+ * turf (lib/tournament/turfEvents.ts).
  */
 export function createTrendReader(d: TrendDeps): TrendReader {
-  let mem: TrendNow | null = null;
-  let looked = false;
-  let busy = false;
-  const listeners = new Set<() => void>();
-
-  const known = (): TrendNow | null => {
-    if (mem || looked) return mem;
-    // Storage is read once per page, not on every card's render.
-    looked = true;
-    try {
-      mem = readKept(d.load(), d.now());
-    } catch {
-      mem = null;
-    }
-    return mem;
-  };
-
-  const read = () => {
-    void (async () => {
-      let next: TrendNow;
-      let ok = true;
-      try {
-        next = trendNow(await d.get(), d.now());
-      } catch {
-        ok = false;
-        next = noTrend(d.now());
-      }
-      mem = next;
-      busy = false;
-      try {
-        // A good answer always; a failure too, so a route that is down is not asked again by every page (but not one the page's own leaving cut off).
-        if (ok || !d.leaving?.()) d.save(keepText(next));
-      } catch {
-        /* storage blocked: memory only */
-      }
-      for (const l of listeners) {
-        try {
-          l();
-        } catch {
-          /* one listener never stops the rest */
-        }
-      }
-    })();
-  };
-
-  return {
-    now: () => {
-      try {
-        return d.allowed() ? known() : null;
-      } catch {
-        return null;
-      }
-    },
-    want: () => {
-      try {
-        if (busy || !d.allowed() || trendFresh(known(), d.now())) return;
-        busy = true;
-        d.later(read);
-      } catch {
-        busy = false;
-      }
-    },
-    subscribe: (l) => {
-      listeners.add(l);
-      return () => {
-        listeners.delete(l);
-      };
-    },
-  };
+  return createKeptReader<TrendNow>(d, { fromJson: trendNow, none: noTrend, text: keepText, readKept, fresh: trendFresh });
 }

@@ -220,7 +220,12 @@ const SECTIONS: LegalSection[] = [
           Manager into a live one, what you type is sent to our server so others can follow it: the
           tournament&rsquo;s and teams&rsquo; names and short codes, the venue you picked from TapTurf&rsquo;s
           turfs, the dates, the points and overs, the fixtures and their results, and for a match you score
-          live, its live link&rsquo;s code and its result when it ends. We also keep a one-way hash of your
+          live, its live link&rsquo;s code and its result when it ends. A tournament whose organiser picks a
+          TapTurf turf as its venue is listed on that turf&rsquo;s page while it is on, with its name, format,
+          progress and links to its page and to any of its matches being scored live, never who organises it;
+          change or remove the venue under Manage and it leaves that page within about ten minutes. This also
+          applies to tournaments that were on before 27 November 2026: if yours is one and you were signed in,
+          we sent you a notice in the app. We also keep a one-way hash of your
           network address (never the address itself) so one network cannot make tournaments in bulk. No login
           is needed to run one. If you are signed in, the tournament is kept with your account so you can
           manage it from another phone. A tournament you start while signed in shows your name, photo and a
@@ -236,7 +241,8 @@ const SECTIONS: LegalSection[] = [
         <p>
           A turf session&rsquo;s live link puts the team names and match results on a page anyone with the link
           can see; player names stay on your phone. A session started from a game is also shown on that
-          game&rsquo;s page to anyone who can see the game.
+          game&rsquo;s page to anyone who can see the game, and, when the game is at a turf listed on TapTurf, on
+          that turf&rsquo;s page while it is on, as any live tournament with that venue is.
         </p>
         <p id="push" className="scroll-mt-24">
           <strong>Notifications on your phone.</strong> If you turn on &ldquo;Notifications on this phone&rdquo;
@@ -374,7 +380,9 @@ const SECTIONS: LegalSection[] = [
         </p>
         <p>
           <strong>Live scores.</strong> Anyone with a live link can see that score, names included.
-          Links are not listed anywhere on TapTurf and are hidden from search engines, but anyone who has one
+          Links are hidden from search engines and are not listed anywhere on TapTurf, except that a match of
+          a tournament listed on its venue&rsquo;s page (see &ldquo;Live tournaments&rdquo;) is linked from that
+          page while it is being scored. Anyone who has a link
           can forward it, so ask your players before you add or tag them. Turn the link off in the scorer at
           any time, or email <Email /> and we will take it down.
         </p>
@@ -382,8 +390,9 @@ const SECTIONS: LegalSection[] = [
           <strong>Live tournaments.</strong> Anyone with a tournament&rsquo;s link can see it, team names and
           results included, and who started it when that person&rsquo;s profile is public. A live score that is
           one of a tournament&rsquo;s matches names the tournament and links to it, as the tournament links to
-          that score, so anyone with either link can reach the other. Like live links, tournaments are not
-          listed anywhere on TapTurf and are hidden from search engines. Take it down from its page at any time, or email <Email /> and we will.
+          that score, so anyone with either link can reach the other. Like live links, tournaments are hidden
+          from search engines, and they are not listed anywhere on TapTurf, with one exception: a tournament
+          whose organiser picked a TapTurf turf as its venue is listed on that turf&rsquo;s page while it is on. Take it down from its page at any time, or email <Email /> and we will.
         </p>
         <p>
           <strong>Your profile.</strong> If you pick a username, your username, name, photo and join month are

@@ -7,10 +7,15 @@ import type { Venue } from "@/lib/tournament/types";
 
 type Hit = { id: string; slug: string | null; name: string; area: string | null; city: string | null };
 
+/** Said under a picked venue, in the create sheet and under Manage: the turf's page lists the tournament (lib/tournament/turfEvents.ts). */
+export const VENUE_SHOWS_NOTE = "This tournament will show on the turf's page while it is on.";
+
 /**
  * The tournament's ground, picked from TapTurf's turfs by name (the
  * listing's own search, GET /api/turfs/list?q=), so its page links to the
- * turf. Optional; none picked is fine.
+ * turf, and the turf's page lists the tournament while it is on (one quiet
+ * line under the picked turf says so; the X takes the venue off).
+ * Optional; none picked is fine.
  */
 export function VenuePicker({ value, onChange }: { value: Venue | null; onChange: (v: Venue | null) => void }) {
   const [q, setQ] = useState("");
@@ -44,15 +49,18 @@ export function VenuePicker({ value, onChange }: { value: Venue | null; onChange
 
   if (value) {
     return (
-      <div className="flex items-center gap-3 rounded-xl border border-accent-500/40 bg-accent-50 px-3 py-2.5">
-        <MapPin className="w-4 h-4 text-accent-700 shrink-0" aria-hidden />
-        <span className="min-w-0 flex-1">
-          <span className="block text-[15px] font-semibold text-primary-900 truncate">{value.name}</span>
-          {value.area && <span className="block text-[12px] text-primary-500 truncate">{value.area}</span>}
-        </span>
-        <button type="button" onClick={() => onChange(null)} aria-label="Remove the venue" className="w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-full text-primary-500 hover:bg-white">
-          <X className="w-4 h-4" />
-        </button>
+      <div>
+        <div className="flex items-center gap-3 rounded-xl border border-accent-500/40 bg-accent-50 px-3 py-2.5">
+          <MapPin className="w-4 h-4 text-accent-700 shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold text-primary-900 truncate">{value.name}</span>
+            {value.area && <span className="block text-[12px] text-primary-500 truncate">{value.area}</span>}
+          </span>
+          <button type="button" onClick={() => onChange(null)} aria-label="Remove the venue" className="w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-full text-primary-500 hover:bg-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <p className="mt-1.5 text-[12px] leading-snug text-primary-500">{VENUE_SHOWS_NOTE}</p>
       </div>
     );
   }

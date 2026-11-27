@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BOOKING_TO_OWNER, BOOKING_TO_PLAYER, CLAIM_APPROVED, CLAIM_REJECTED, KIND_LINE_MAX, TAG_PLAYED_ASK, TOURNAMENT_HOST_SHOWN, claimDecisionNotice, kindLine, notificationLink } from "./claimNotice";
+import fs from "node:fs";
+import path from "node:path";
+import { BOOKING_TO_OWNER, BOOKING_TO_PLAYER, CLAIM_APPROVED, CLAIM_REJECTED, KIND_LINE_MAX, TAG_PLAYED_ASK, TOURNAMENT_HOST_SHOWN, TOURNAMENT_ON_TURF_PAGE, claimDecisionNotice, kindLine, notificationLink } from "./claimNotice";
 import { BOOKINGS_LINE, claimCopyProblem } from "../turfPage/claimPrompts";
 
 test("approved: their turf is on myTapturf now", () => {
@@ -98,4 +100,14 @@ test("notificationLink: an organiser told their name now shows goes to the switc
   assert.equal(TOURNAMENT_HOST_SHOWN, "tournament_host_shown");
   assert.deepEqual(notificationLink(TOURNAMENT_HOST_SHOWN, { code: "abcdefghijkl" }), { href: "/dashboard?tab=profile#find-and-tag", label: "Open that switch" });
   assert.deepEqual(notificationLink(TOURNAMENT_HOST_SHOWN, null), { href: "/dashboard?tab=profile#find-and-tag", label: "Open that switch" });
+});
+
+test("notificationLink: an organiser told their tournament shows on a turf's page goes to that tournament, where Manage has the venue", () => {
+  assert.equal(TOURNAMENT_ON_TURF_PAGE, "tournament_on_turf_page");
+  assert.deepEqual(notificationLink(TOURNAMENT_ON_TURF_PAGE, { code: "abcdefghijkl" }), { href: "/tournament/abcdefghijkl", label: "Open the tournament" });
+  // A code that is not one goes nowhere (the notification just marks read): never a made-up path.
+  for (const bad of [null, {}, { code: "ABCDEFGHIJKL" }, { code: "abc" }, { code: "abcdefghijkl/../admin" }, { code: 12 }]) assert.equal(notificationLink(TOURNAMENT_ON_TURF_PAGE, bad), null);
+  // The type and the words are the migration's own.
+  const sql = fs.readFileSync(path.join(process.cwd(), "supabase/migrations/20261128_turf_events_notice.sql"), "utf8");
+  assert.ok(sql.includes("       'tournament_on_turf_page',\n       'Your tournament now shows on the turf''s page',\n       x.name || ' now shows on ' || x.turf_name || '''s page on TapTurf, because you picked that turf as its venue. To take it off, change the venue under Manage.',\n       jsonb_build_object('code', x.code),"));
 });
