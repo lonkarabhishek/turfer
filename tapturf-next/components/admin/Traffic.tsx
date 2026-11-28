@@ -4,6 +4,7 @@ import { adminTraffic } from "@/lib/queries/adminTraffic";
 import {
   KIND_LABEL,
   SOURCE_LABEL,
+  VISITS_NOT_PEOPLE,
   changeFrom,
   dayLabel,
   fullDaysCounted,
@@ -133,6 +134,14 @@ export async function TrafficSection() {
       </div>
       <p className="-mt-2 px-1 text-[12px] leading-snug text-primary-500">
         &ldquo;Last 7 days&rdquo; is yesterday and the 6 days before (today is still going). Counted since {dayLabel(u.since)}.
+      </p>
+      {/* Visits are not people: the fold that counts people is linked (its hash opens it, components/admin/Fold.tsx). */}
+      <p className="-mt-3 px-1 text-[12px] leading-snug text-primary-500" data-visits-not-people>
+        {VISITS_NOT_PEOPLE.before}
+        <a href={VISITS_NOT_PEOPLE.href} className="font-semibold text-accent-700 underline decoration-accent-300 underline-offset-2 hover:decoration-accent-700">
+          {VISITS_NOT_PEOPLE.link}
+        </a>
+        {VISITS_NOT_PEOPLE.after}
       </p>
 
       {/* The 30 full days (the same days as the 30 days tab), then today, lighter, on the right. */}

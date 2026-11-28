@@ -9,6 +9,12 @@ import {
   getMinimumPrice,
   getNumericPriceMentions,
   hasRealPrices,
+  listedPriceAt,
+  nightOf,
+  weekendDate,
+  BAND_TIMES,
+  LATE_NIGHT_UNTIL,
+  SLOT_TIMES,
   playerPriceRange,
   positivePrice,
   priceRangeText,
@@ -200,4 +206,91 @@ test("price bands for the client table: no source notes, and the month they were
   assert.equal(bandsCheckedOn([band(800)]), null);
   assert.equal(bandsCheckedOn([band(800, { source: "checked 2026-13-01" })]), null);
   assert.deepEqual(bandRows(null), []);
+});
+
+// ── The listed price at a time ──
+
+test("the two tables' times are written once: the rows the page draws are the hours listedPriceAt reads", () => {
+  // The labels the turf page has always shown (TurfPricing.tsx and PriceBands.tsx read them from here).
+  assert.deepEqual(SLOT_TIMES.map((s) => [s.slot, s.name, s.time, s.from, s.to]), [
+    ["morning", "Morning", "6AM – 12PM", 6, 12],
+    ["afternoon", "Afternoon", "12PM – 5PM", 12, 17],
+    ["evening", "Evening", "5PM – Close", 17, 24],
+  ]);
+  assert.deepEqual(BAND_TIMES.map((b) => [b.band, b.name, b.time, b.from, b.to]), [
+    ["morning", "Morning", "5 am to 12 pm", 5, 12],
+    ["day", "Afternoon", "12 to 5 pm", 12, 17],
+    ["evening", "Evening", "5 to 9 pm", 17, 21],
+    ["night", "Night", "after 9 pm", 21, 24],
+  ]);
+  // Each row starts where the one before ends, so an hour is in one row at most.
+  for (const rows of [SLOT_TIMES, BAND_TIMES]) for (let i = 1; i < rows.length; i++) assert.equal(rows[i].from, rows[i - 1].to);
+  assert.equal(LATE_NIGHT_UNTIL, 2);
+});
+
+test("whose night an hour is, and which days are the weekend", () => {
+  assert.equal(nightOf("2026-12-01", 0), "2026-11-30", "12 am is the night of the day before");
+  assert.equal(nightOf("2026-12-01", 1), "2026-11-30", "and 1 am");
+  assert.equal(nightOf("2026-12-01", 2), "2026-12-01", "2 am is its own date");
+  assert.equal(nightOf("2026-03-01", 0), "2026-02-28", "across a month");
+  assert.equal(nightOf("2026-11-28", 19), "2026-11-28");
+  assert.deepEqual(["2026-11-27", "2026-11-28", "2026-11-29", "2026-11-30"].map(weekendDate), [false, true, true, false], "Friday, Saturday, Sunday, Monday");
+});
+
+test("the six columns: the price of the row and day type the page's table shows for that hour", () => {
+  const t = turf({ morning_price: 600, afternoon_price: 700, evening_price: 900, weekend_morning_price: 800, weekend_evening_price: 1200 });
+  const at = (hour: number, weekend = false) => listedPriceAt(t, { weekend, hour });
+  assert.deepEqual(at(6), { min: 600, max: 600, from: "time" }, "6 AM is Morning");
+  assert.deepEqual(at(11), { min: 600, max: 600, from: "time" });
+  assert.deepEqual(at(12), { min: 700, max: 700, from: "time" }, "12 PM is Afternoon");
+  assert.deepEqual(at(16), { min: 700, max: 700, from: "time" });
+  assert.deepEqual(at(17), { min: 900, max: 900, from: "time" }, "5 PM is Evening");
+  assert.deepEqual(at(23), { min: 900, max: 900, from: "time" });
+  assert.deepEqual(at(0), { min: 900, max: 900, from: "time" }, "12 am and 1 am are the evening they end");
+  assert.deepEqual(at(1), { min: 900, max: 900, from: "time" });
+  assert.deepEqual(at(19, true), { min: 1200, max: 1200, from: "time" }, "a weekend reads the weekend column");
+  assert.deepEqual(at(7, true), { min: 800, max: 800, from: "time" });
+  // The table has no price there: the turf's lowest to highest listed price, said as a range.
+  assert.deepEqual(at(13, true), { min: 600, max: 1200, from: "range" }, "no weekend afternoon price: the range");
+  assert.deepEqual(at(5), { min: 600, max: 1200, from: "range" }, "5 AM is before the Morning row starts");
+  assert.deepEqual(at(3), { min: 600, max: 1200, from: "range" }, "3 AM is in no row");
+  assert.deepEqual([at(13, true)?.min, at(13, true)?.max], [getMinimumPrice(t), getMaximumPrice(t)], "the range is the page's own lowest and highest");
+});
+
+test("no listed price per hour: null, never a guess", () => {
+  assert.equal(listedPriceAt(turf(), { weekend: false, hour: 19 }), null, "no price listed");
+  assert.equal(listedPriceAt(turf({ evening_price: 0 }), { weekend: false, hour: 19 }), null, "0 is no price");
+  assert.equal(listedPriceAt(turf({ evening_price: 500, price_unit: "per_person" }), { weekend: false, hour: 19 }), null, "a price per person is not a price per hour");
+  assert.equal(listedPriceAt(turf({ evening_price: 1500, price_unit: "per_slot", slot_minutes: 90 }), { weekend: false, hour: 19 }), null, "nor a price per slot");
+  assert.deepEqual(listedPriceAt(turf({ evening_price: 900, price_unit: "per_hour" }), { weekend: false, hour: 19 }), { min: 900, max: 900, from: "time" });
+  // Prices from reviews are never read.
+  assert.equal(listedPriceAt(turf({ price_mentions: [{ price_inr: 700, context: "per hour" }] }), { weekend: false, hour: 19 }), null);
+});
+
+test("the listed bands, where the page shows those: the band and day type of the hour, one price for each format", () => {
+  const t = turf({
+    evening_price: 500,
+    pricing_bands: [
+      band(800, { band: "morning", days: "weekday", format: "5-a-side" }),
+      band(1000, { band: "evening", days: "weekday", format: "5-a-side" }),
+      band(1400, { band: "evening", days: "weekday", format: "7-a-side" }),
+      band(1600, { band: "evening", days: "weekend", format: "5-a-side" }),
+      band(1100, { band: "night", days: "all", format: "5-a-side" }),
+    ],
+  });
+  assert.equal(showsPriceBands(t), true);
+  const at = (hour: number, weekend = false) => listedPriceAt(t, { weekend, hour });
+  assert.deepEqual(at(5), { min: 800, max: 800, from: "time" }, "the bands' morning starts at 5 am");
+  assert.deepEqual(at(19), { min: 1000, max: 1400, from: "time" }, "two formats at one time: the lowest and the highest, never the six columns' 500");
+  assert.deepEqual(at(19, true), { min: 1600, max: 1600, from: "time" });
+  assert.deepEqual(at(21), { min: 1100, max: 1100, from: "time" }, "9 pm is Night, listed for all days");
+  assert.deepEqual(at(22, true), { min: 1100, max: 1100, from: "time" });
+  assert.deepEqual(at(0), { min: 1100, max: 1100, from: "time" }, "12 am is the night it ends");
+  assert.deepEqual(at(13), { min: 800, max: 1600, from: "range" }, "no afternoon band: the bands' own lowest to highest");
+  assert.deepEqual(at(8, true), { min: 800, max: 1600, from: "range" }, "no weekend morning band");
+  assert.deepEqual(at(3), { min: 800, max: 1600, from: "range" }, "3 am is in no band");
+  // The owner's own prices win over the bands, as on the page.
+  const owner = turf({ ...t, price_owner_confirmed: true });
+  assert.equal(showsPriceBands(owner), false);
+  assert.deepEqual(listedPriceAt(owner, { weekend: false, hour: 19 }), { min: 500, max: 500, from: "time" });
 });

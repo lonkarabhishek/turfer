@@ -4,6 +4,8 @@ import {
   APP_NAMES,
   KIND_LABEL,
   SOURCE_LABEL,
+  VISITS_NOT_PEOPLE,
+  VISITS_NOT_PEOPLE_TEXT,
   addDays,
   changeFrom,
   changeText,
@@ -159,4 +161,12 @@ test("siteLabel: a website by its host, an app by its name or package, marked as
 test("every kind and source has its words", () => {
   for (const k of TRAFFIC_KINDS) assert.ok(KIND_LABEL[k], k);
   for (const s of TRAFFIC_SOURCES) assert.ok(SOURCE_LABEL[s], s);
+});
+
+test("visits are not people: the one line under the visits numbers", () => {
+  assert.equal(VISITS_NOT_PEOPLE_TEXT, "Visits are arrivals, not people: someone who comes back is a new visit. For people, see People, contacts and bookings below.");
+  assert.equal(`${VISITS_NOT_PEOPLE.before}${VISITS_NOT_PEOPLE.link}${VISITS_NOT_PEOPLE.after}`, VISITS_NOT_PEOPLE_TEXT, "the link is a part of the sentence");
+  assert.equal(VISITS_NOT_PEOPLE.href, "#people-contacts-bookings", "and jumps to the fold that counts people");
+  assert.ok(!/[—–;]/.test(VISITS_NOT_PEOPLE_TEXT), "plain: no long dash, no semicolon");
+  assert.ok(!/unique visitors|users/i.test(VISITS_NOT_PEOPLE_TEXT), "it never calls a visit a person");
 });

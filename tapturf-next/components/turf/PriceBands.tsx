@@ -1,16 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { formatPrice, type BandRow } from "@/lib/utils/prices";
+import { BAND_TIMES, formatPrice, type BandRow } from "@/lib/utils/prices";
 import { formatLabel } from "@/lib/utils/formats";
 
-const BAND_ORDER = ["morning", "day", "evening", "night"] as const;
-const BAND_LABEL: Record<BandRow["band"], { name: string; time: string }> = {
-  morning: { name: "Morning", time: "5 am to 12 pm" },
-  day: { name: "Afternoon", time: "12 to 5 pm" },
-  evening: { name: "Evening", time: "5 to 9 pm" },
-  night: { name: "Night", time: "after 9 pm" },
-};
+// The bands, their order and their times are BAND_TIMES (lib/utils/prices.ts), which listedPriceAt reads too.
+const BAND_ORDER = BAND_TIMES.map((b) => b.band);
+const BAND_LABEL = Object.fromEntries(BAND_TIMES.map((b) => [b.band, { name: b.name, time: b.time }])) as Record<BandRow["band"], { name: string; time: string }>;
 
 /**
  * Listed per-hour prices by format and time of day. Formats become

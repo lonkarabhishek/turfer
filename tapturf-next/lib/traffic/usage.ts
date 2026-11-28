@@ -289,3 +289,20 @@ export function siteLabel(s: SiteRow): { label: string; sub?: string } {
   if (s.app) return { label: APP_NAMES[s.host] ?? s.host, sub: "App" };
   return { label: s.host };
 }
+
+/**
+ * One quiet line under the Traffic section's visits numbers (the site
+ * owner, 28 Nov 2026: "visits should not be confused with unique users"):
+ * a visit is an arrival, and nothing is kept on a device to tell that the
+ * same person came back. `link` is the title of the admin's fold that does
+ * count people (lib/admin/growth.ts GROWTH_TITLE, whose test pins the two
+ * together) and `href` its anchor on /admin.
+ */
+export const VISITS_NOT_PEOPLE = {
+  before: "Visits are arrivals, not people: someone who comes back is a new visit. For people, see ",
+  link: "People, contacts and bookings",
+  href: "#people-contacts-bookings",
+  after: " below.",
+} as const;
+/** The whole sentence, as it reads. */
+export const VISITS_NOT_PEOPLE_TEXT = `${VISITS_NOT_PEOPLE.before}${VISITS_NOT_PEOPLE.link}${VISITS_NOT_PEOPLE.after}`;
