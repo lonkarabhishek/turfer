@@ -5,6 +5,7 @@ import { MapPin, Map as MapIcon } from "lucide-react";
 import { useConsent } from "@/lib/consent";
 import { mapEmbedSrc, mapsSearchUrl } from "@/lib/utils/maps";
 import { MapPlaceholder } from "@/components/consent/MapPlaceholder";
+import { ShareLocationButton } from "@/components/ui/ShareLocationButton";
 
 interface TurfMapProps {
   /** DB "Gmap Embed link" — may be an iframe snippet or a plain URL. */
@@ -16,6 +17,8 @@ interface TurfMapProps {
   address?: string | null;
   /** Turf name — nicer label on the directions link. */
   name?: string | null;
+  /** The "Share location" message (lib/utils/shareLocation.ts); with it the foot has that button beside Get directions. */
+  shareText?: string | null;
 }
 
 function buildDirectionsHref({
@@ -42,7 +45,7 @@ function buildDirectionsHref({
   return null;
 }
 
-export function TurfMap({ embedLink, lat, lng, address, name }: TurfMapProps) {
+export function TurfMap({ embedLink, lat, lng, address, name, shareText }: TurfMapProps) {
   // The Maps iframe pulls ~1.7 MB of JS, more than the rest of the page.
   // Load it on tap; the directions link works without it. Until the visitor
   // accepts cookies (lib/consent.ts) the placeholder also says the map is
@@ -97,16 +100,21 @@ export function TurfMap({ embedLink, lat, lng, address, name }: TurfMapProps) {
           </span>
         </button>
       )}
-      {directionsHref && (
-        <a
-          href={directionsHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-primary-700 hover:bg-primary-100 transition-colors"
-        >
-          <MapPin className="w-4 h-4" />
-          Get directions
-        </a>
+      {(directionsHref || shareText) && (
+        <div className="flex divide-x divide-primary-100">
+          {directionsHref && (
+            <a
+              href={directionsHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-1 items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-primary-700 hover:bg-primary-100 transition-colors"
+            >
+              <MapPin className="w-4 h-4" />
+              Get directions
+            </a>
+          )}
+          {shareText && <ShareLocationButton name={name ?? "this turf"} text={shareText} from="turf_map" look="row" />}
+        </div>
       )}
     </div>
   );

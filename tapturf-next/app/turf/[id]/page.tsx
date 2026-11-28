@@ -36,6 +36,8 @@ import { GroundSize } from "@/components/turf/GroundSize";
 import { getGroundPeers } from "@/lib/queries/groundSizes";
 import { TurfAmenities } from "@/components/turf/TurfAmenities";
 import { TurfMap } from "@/components/turf/TurfMap";
+import { ShareLocationButton } from "@/components/ui/ShareLocationButton";
+import { turfLocationText } from "@/lib/utils/shareLocation";
 import { TurfOnMapCard } from "@/components/turf/TurfOnMapCard";
 import { TurfJsonLd } from "@/components/turf/TurfJsonLd";
 import { TurfReviews } from "@/components/turf/TurfReviews";
@@ -176,6 +178,8 @@ export default async function TurfDetailPage({
   // (lib/turfPage/claimPrompts.ts).
   const prompts = claimPrompts({ claimed, hasNumber: hasContact, noPrices: showsNoPrices(turf) });
   const sidebarPrice = summarisePagePrice(turf);
+  // "Share location": the turf's name, address, a Maps link that opens the place, and this page (one tap, components/ui/ShareLocationButton.tsx).
+  const locationText = turfLocationText({ name: turf.name, address: turf.address, lat: turf.lat, lng: turf.lng, placeId: turf.google_place_id }, turfUrl(turf));
   // Rates players shared (From players): the Pricing section points to
   // them when the turf lists none.
   const playerPrice = sidebarPrice.kind === "unknown" ? playerPriceRange(page.suggestions) : null;
@@ -286,6 +290,11 @@ export default async function TurfDetailPage({
               {/* The listed name only when the H1 dropped or changed words, not just their case. */}
               {normPlace(meta.name) !== normPlace(listedName) ? `${listedName}, ${turf.address}` : turf.address}
             </span>
+          </div>
+
+          {/* One tap sends where the turf is: its name, address, a Maps link and this page (lib/utils/shareLocation.ts). */}
+          <div className="mt-3 empty:hidden">
+            <ShareLocationButton name={turf.name} text={locationText} from="turf_top" />
           </div>
 
           {/* Price and hours up front: on a phone the booking card is at
@@ -423,6 +432,7 @@ export default async function TurfDetailPage({
                   lng={turf.lng}
                   address={turf.address}
                   name={turf.name}
+                  shareText={locationText}
                 />
                 {/* TapTurf's own map, with the turfs around it: drawn in the HTML, the real map only on a tap. */}
                 <TurfOnMapCard turf={turf} />

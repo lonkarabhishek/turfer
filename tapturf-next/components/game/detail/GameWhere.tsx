@@ -4,6 +4,7 @@ import type { SportFamily } from "@/lib/utils/sport";
 import { GameDistance } from "../GameDistance";
 import { GameMap } from "../GameMap";
 import { GamePhoto } from "./GamePhoto";
+import { ShareLocationButton } from "@/components/ui/ShareLocationButton";
 
 /**
  * Where you'll play: the turf (its page has photos, prices, reviews and
@@ -11,7 +12,8 @@ import { GamePhoto } from "./GamePhoto";
  * cookie choice, as before). A venue the host typed because it isn't on
  * TapTurf (no href) has no page to link: its name, a quiet "Not on
  * TapTurf", its address and place, and Open in Maps (the host's own Google
- * Maps link, else a search for it).
+ * Maps link, else a search for it). Under the address of either, "Share
+ * location": one tap sends the place (lib/utils/shareLocation.ts).
  */
 export function GameWhere({
   href,
@@ -25,6 +27,7 @@ export function GameWhere({
   mapSrc,
   mapNote,
   mapHref,
+  shareText,
 }: {
   /** The turf's page; none for a venue not on TapTurf. */
   href?: string | null;
@@ -40,6 +43,8 @@ export function GameWhere({
   /** Under the map: how far to trust it (a typed venue's map is a search for its words). */
   mapNote?: string;
   mapHref: string | null;
+  /** The "Share location" message; none draws no button. */
+  shareText?: string | null;
 }) {
   return (
     <section aria-labelledby="where-h">
@@ -80,9 +85,11 @@ export function GameWhere({
               Open in Maps
             </a>
           )}
+          <ShareLocationButton name={name} text={shareText ?? null} from="game" look="block" className="mt-2" />
         </div>
       )}
       {href && address && <p className="mt-3 text-[15px] text-primary-700 leading-relaxed">{address}</p>}
+      {href && <ShareLocationButton name={name} text={shareText ?? null} from="game" look="block" className="mt-3" />}
       <div className="mt-3 empty:hidden">
         <GameDistance lat={lat} lng={lng} tone="dark" />
       </div>

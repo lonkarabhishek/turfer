@@ -57,8 +57,9 @@ import { gameShareText } from "@/lib/utils/gameShare";
 import type { VenueOption } from "@/lib/utils/gameVenue";
 import type { Game, GameRequest, GameParticipant } from "@/types/game";
 import { mapEmbedSrc, mapsSearchUrl } from "@/lib/utils/maps";
+import { locationShareText, turfLocationText } from "@/lib/utils/shareLocation";
 import { LiveScorerPromo } from "@/components/tools/LiveScorerPromo";
-import { turfPath } from "@/lib/utils/turfPath";
+import { turfPath, turfUrl } from "@/lib/utils/turfPath";
 import { CONTACT_EMAIL } from "@/lib/contact";
 import { ViewportOverlay } from "@/components/ui/ViewportOverlay";
 import { GameHero, type HeroChip } from "./detail/GameHero";
@@ -736,6 +737,7 @@ export function GameDetailClient({
                 lng={game.turfs.lng}
                 mapSrc={mapSrc}
                 mapHref={mapsSearchUrl({ lat: game.turfs.lat, lng: game.turfs.lng, name: game.turfs.name, address: game.turfs.address })}
+                shareText={turfLocationText(game.turfs, turfUrl(game.turfs))}
               />
             ) : where && !where.listed ? (
               // A venue its host typed: no turf page to link; Open in Maps goes to the host's own Google Maps link, else a search for it.
@@ -750,6 +752,7 @@ export function GameDetailClient({
                 mapSrc={mapSrc}
                 mapNote={mapSrc ? "Approximate: Google's match for the address the host typed." : undefined}
                 mapHref={where.mapsHref}
+                shareText={locationShareText({ name: where.name, address: [where.address, venuePlace(where)].filter(Boolean).join(", "), mapUrl: where.mapsHref })}
               />
             ) : null}
 
