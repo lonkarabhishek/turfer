@@ -6,8 +6,6 @@ import { gaEvent } from "@/lib/analytics/ga";
 import { SHARE_LOCATION } from "@/lib/utils/shareLocation";
 
 const LOOKS = {
-  /** Under a turf's address: a quiet outlined pill, a full tap target. */
-  pill: "inline-flex min-h-11 items-center gap-2 rounded-full border border-primary-200 bg-white px-4 text-[14px] font-semibold text-primary-800 hover:bg-primary-50 transition-colors",
   /** In the map's foot, beside Get directions. */
   row: "flex flex-1 items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-primary-700 hover:bg-primary-100 transition-colors",
   /** On a game's page, as its Open in Maps button is. */
@@ -27,12 +25,12 @@ export function ShareLocationButton({
   name,
   text,
   from,
-  look = "pill",
+  look = "block",
   className,
 }: {
   name: string;
   text: string | null;
-  from: "turf_top" | "turf_map" | "game";
+  from: "turf_map" | "game";
   look?: keyof typeof LOOKS;
   className?: string;
 }) {

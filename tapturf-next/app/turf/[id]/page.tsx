@@ -36,7 +36,6 @@ import { GroundSize } from "@/components/turf/GroundSize";
 import { getGroundPeers } from "@/lib/queries/groundSizes";
 import { TurfAmenities } from "@/components/turf/TurfAmenities";
 import { TurfMap } from "@/components/turf/TurfMap";
-import { ShareLocationButton } from "@/components/ui/ShareLocationButton";
 import { turfLocationText } from "@/lib/utils/shareLocation";
 import { TurfOnMapCard } from "@/components/turf/TurfOnMapCard";
 import { TurfJsonLd } from "@/components/turf/TurfJsonLd";
@@ -178,7 +177,7 @@ export default async function TurfDetailPage({
   // (lib/turfPage/claimPrompts.ts).
   const prompts = claimPrompts({ claimed, hasNumber: hasContact, noPrices: showsNoPrices(turf) });
   const sidebarPrice = summarisePagePrice(turf);
-  // "Share location": the turf's name, address, a Maps link that opens the place, and this page (one tap, components/ui/ShareLocationButton.tsx).
+  // "Share location": the turf's name, address, a Maps link that opens the place, and this page; the button is in the map's foot, beside Get directions (TurfMap).
   const locationText = turfLocationText({ name: turf.name, address: turf.address, lat: turf.lat, lng: turf.lng, placeId: turf.google_place_id }, turfUrl(turf));
   // Rates players shared (From players): the Pricing section points to
   // them when the turf lists none.
@@ -292,11 +291,6 @@ export default async function TurfDetailPage({
             </span>
           </div>
 
-          {/* One tap sends where the turf is: its name, address, a Maps link and this page (lib/utils/shareLocation.ts). */}
-          <div className="mt-3 empty:hidden">
-            <ShareLocationButton name={turf.name} text={locationText} from="turf_top" />
-          </div>
-
           {/* Price and hours up front: on a phone the booking card is at
               the bottom of the page, and these are what a searcher came for. */}
           <p className="mt-2 text-[14px] text-primary-600 lg:hidden">
@@ -323,10 +317,6 @@ export default async function TurfDetailPage({
             {hoursLine && <> · {hoursLine.replace(/\d{1,2}:\d{2} [AP]M – \d{1,2}:\d{2} [AP]M/g, (r) => r.replace(/ /g, "\u00a0"))}</>}
           </p>
 
-          <div className="mt-3 md:hidden">
-            <AskAboutButton />
-          </div>
-
           {/* Members-only clubs: say so up front, with the access rules. */}
           {(membersOnly || accessNotes) && (
             <div className="mt-4 flex items-start gap-3 rounded-2xl bg-amber-50 border border-amber-200/70 px-4 py-3">
@@ -341,6 +331,22 @@ export default async function TurfDetailPage({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Image gallery: alt text from the turf's own name, type and place; the cover (as the share card picks it) says so. */}
+        {/* The box is only for the chip laid over the gallery's top left corner: "Trending #3 on TapTurf" for a turf among the
+            most viewed (the map's own answer, read in the browser once the page is idle; never in this HTML, no room of its own). */}
+        <div className="relative">
+          <TurfImageGallery images={turf.images} alt={meta.photoAlt} cover={turfPhotos(turf)[0] ?? null} />
+          <TurfTrendChip id={turf.id} slug={turf.slug} bare={orderPhotos(turf.images).length === 0} />
+        </div>
+
+        {/* Under the photos (the site owner, 28 Nov 2026: "photos first and then below that ask about the turf and all"):
+            Ask about this turf on a phone, the sport tags and the owner's hint. The name, rating, address, price and hours stay above. */}
+        <div className="mt-4 empty:hidden">
+          <div className="md:hidden">
+            <AskAboutButton />
+          </div>
 
           {/* Sport tags */}
           {turf.sports.length > 0 && (
@@ -363,14 +369,6 @@ export default async function TurfDetailPage({
 
           {/* An unclaimed turf with a number: one quiet line for its owner or manager, down to the invite. */}
           {prompts.hint && <ClaimHint />}
-        </div>
-
-        {/* Image gallery: alt text from the turf's own name, type and place; the cover (as the share card picks it) says so. */}
-        {/* The box is only for the chip laid over the gallery's top left corner: "Trending #3 on TapTurf" for a turf among the
-            most viewed (the map's own answer, read in the browser once the page is idle; never in this HTML, no room of its own). */}
-        <div className="relative">
-          <TurfImageGallery images={turf.images} alt={meta.photoAlt} cover={turfPhotos(turf)[0] ?? null} />
-          <TurfTrendChip id={turf.id} slug={turf.slug} bare={orderPhotos(turf.images).length === 0} />
         </div>
 
         {/* Main content + sidebar */}

@@ -4,7 +4,7 @@ import { mapsSearchUrl } from "./maps";
  * "Share location" (the site owner, 28 Nov 2026: "give an easy option to
  * share location of turf in the game and turf ... Simple. One tap"): the
  * message a player sends their friends so they can find the turf. One
- * button on a turf's page (under its address and under its map) and on a
+ * button on a turf's page (under its map, beside Get directions) and on a
  * game's page (Where you'll play), drawn by
  * components/ui/ShareLocationButton.tsx: a tap opens the phone's share
  * sheet with this text, or copies it where there is none.
