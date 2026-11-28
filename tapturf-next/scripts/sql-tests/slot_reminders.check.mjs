@@ -121,6 +121,10 @@ create table cron.job (jobid bigserial primary key, jobname text unique, schedul
 create function cron.schedule(job_name text, schedule text, command text) returns bigint language sql as
   $$ insert into cron.job (jobname, schedule, command) values (job_name, schedule, command)
      on conflict (jobname) do update set schedule = excluded.schedule, command = excluded.command, active = true returning jobid $$;
+-- pg_cron has a second cron.schedule (schedule, command), so a guard that looks the name up bare finds none (the
+-- file's guard did, on production, 28 Nov 2026: it names the arguments now).
+create function cron.schedule(schedule text, command text) returns bigint language sql as
+  $$ select cron.schedule('job-' || md5(command), schedule, command) $$;
 create function cron.alter_job(job_id bigint, schedule text default null, command text default null, database text default null, username text default null, active boolean default null)
   returns void language sql as
   $$ update cron.job j set schedule = coalesce(alter_job.schedule, j.schedule), command = coalesce(alter_job.command, j.command), active = coalesce(alter_job.active, j.active) where j.jobid = job_id $$;`;
@@ -531,10 +535,11 @@ await q(`update private.email_settings set value = 'owner_only' where name = 'mo
 // From here the real clock: email_claim and email_job read now().
 await q(`update private.email_outbox set status = 'expired' where status in ('queued', 'sending')`);
 const realNine = (() => {
-  // The latest 9:00 AM in India that has passed.
+  // 9:00 AM in India today, whether it has passed or is still to come. Never yesterday's: the rows below are set
+  // by the real clock, and a run a day before them finds claims too new and turfs not stale yet (the check failed
+  // that way before 9 AM in India, 28 Nov 2026).
   const ist = new Date(Date.now() + 330 * 60000);
-  const d = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate(), 9, 0, 3) - 330 * 60000);
-  return new Date(d.getTime() > Date.now() ? d.getTime() - 86400000 : d.getTime()).toISOString();
+  return new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate(), 9, 0, 3) - 330 * 60000).toISOString();
 })();
 // Rows from the fake days above are moved well back, so today's run is spaced from them.
 await q(`update private.email_outbox set created_at = created_at - interval '40 days' where refs ->> 'about' = 'slots' or dedupe_key like 'cap-test:%'`);

@@ -192,7 +192,8 @@ begin
      or to_regprocedure('private.call_phone10(text)') is null
      or to_regprocedure('private.slots_guard(text,uuid)') is null
      or to_regprocedure('private.game_in(uuid)') is null
-     or to_regproc('cron.schedule') is null
+     -- By its arguments: pg_cron has two functions of this name, and a bare name that is shared reads as none.
+     or to_regprocedure('cron.schedule(text,text,text)') is null
      or to_regclass('cron.job') is null
      or (select count(*) from information_schema.columns c
           where c.table_schema = 'public' and c.table_name = 'turfs'
