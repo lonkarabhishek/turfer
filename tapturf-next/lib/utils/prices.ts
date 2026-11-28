@@ -3,6 +3,13 @@ import { cleanPriceMentions } from "./bookingApps";
 
 type NumericMention = PriceMention & { price_inr: number };
 
+/** The price columns the listed-price rules read: a turf row, or just these of one (the admin's estimate, lib/admin/growth.ts). */
+export type PricedTurf = Pick<
+  Turf,
+  "morning_price" | "afternoon_price" | "evening_price" | "weekend_morning_price" | "weekend_afternoon_price" | "weekend_evening_price" | "price_unit" | "slot_minutes"
+> &
+  Pick<Partial<Turf>, "pricing_bands" | "price_owner_confirmed">;
+
 const PRICE_FIELDS = [
   "morning_price",
   "afternoon_price",
@@ -43,12 +50,12 @@ export function playerPriceRange(
  * turfs (26 Oct) have every price column NULL; this returns [] for
  * those. Never defaults to a fake number.
  */
-function realPrices(turf: Turf): number[] {
+function realPrices(turf: PricedTurf): number[] {
   return PRICE_FIELDS.map((f) => positivePrice(turf[f])).filter((p): p is number => p != null);
 }
 
 /** True when the turf has at least one real price column set. */
-export function hasRealPrices(turf: Turf): boolean {
+export function hasRealPrices(turf: PricedTurf): boolean {
   return realPrices(turf).length > 0;
 }
 
@@ -56,7 +63,7 @@ export function hasRealPrices(turf: Turf): boolean {
  * Minimum real price in ₹, or null when no price column is set.
  * Callers MUST handle null — do not coerce to a default.
  */
-export function getMinimumPrice(turf: Turf): number | null {
+export function getMinimumPrice(turf: PricedTurf): number | null {
   const p = realPrices(turf);
   return p.length ? Math.min(...p) : null;
 }
@@ -64,7 +71,7 @@ export function getMinimumPrice(turf: Turf): number | null {
 /**
  * Maximum real price in ₹, or null when no price column is set.
  */
-export function getMaximumPrice(turf: Turf): number | null {
+export function getMaximumPrice(turf: PricedTurf): number | null {
   const p = realPrices(turf);
   return p.length ? Math.max(...p) : null;
 }
@@ -207,7 +214,7 @@ export function summarisePrice(turf: Turf): PriceSummary {
 }
 
 /** True when the owner saved prices on myTapturf: theirs show first. */
-export function ownerSetPrices(turf: Turf): boolean {
+export function ownerSetPrices(turf: PricedTurf): boolean {
   return turf.price_owner_confirmed === true && hasRealPrices(turf);
 }
 
@@ -248,7 +255,7 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
  * (by format and time band, the richest we have) rather than the six
  * slot columns. The owner's own prices win over the bands.
  */
-export function showsPriceBands(turf: Turf): boolean {
+export function showsPriceBands(turf: PricedTurf): boolean {
   return getBandPriceRange(turf) != null && !ownerSetPrices(turf);
 }
 
@@ -279,4 +286,100 @@ export function summarisePagePrice(turf: Turf): PriceSummary {
     return { label: min === max ? `₹${min}/hr` : `₹${min} – ₹${max}/hr`, kind: "real", min, max, unit: "/hr" };
   }
   return summarisePrice(turf);
+}
+
+// ── The listed price at a time ─────────────────────────────
+
+/**
+ * The turf page's Pricing table of six columns, the one place its three
+ * rows and their times are written: the table draws its labels from here
+ * (components/turf/TurfPricing.tsx) and listedPriceAt reads the same hours,
+ * so the two cannot drift. `from` and `to` are hours of the day; Evening
+ * runs "to close", which here is up to LATE_NIGHT_UNTIL the next morning.
+ */
+export const SLOT_TIMES = [
+  { slot: "morning", name: "Morning", emoji: "🌅", time: "6AM – 12PM", from: 6, to: 12 },
+  { slot: "afternoon", name: "Afternoon", emoji: "☀️", time: "12PM – 5PM", from: 12, to: 17 },
+  { slot: "evening", name: "Evening", emoji: "🌙", time: "5PM – Close", from: 17, to: 24 },
+] as const;
+
+/**
+ * The listed price bands' times, the one place they are written: the bands
+ * table draws its labels from here (components/turf/PriceBands.tsx) and
+ * listedPriceAt reads the same hours. Night is "after 9 pm", up to
+ * LATE_NIGHT_UNTIL the next morning.
+ */
+export const BAND_TIMES = [
+  { band: "morning", name: "Morning", time: "5 am to 12 pm", from: 5, to: 12 },
+  { band: "day", name: "Afternoon", time: "12 to 5 pm", from: 12, to: 17 },
+  { band: "evening", name: "Evening", time: "5 to 9 pm", from: 17, to: 21 },
+  { band: "night", name: "Night", time: "after 9 pm", from: 21, to: 24 },
+] as const satisfies readonly { band: PriceBand["band"]; name: string; time: string; from: number; to: number }[];
+
+/**
+ * 12 am and 1 am are the late night of the day before, as the site's own
+ * hour choices have it (5 AM to 1 AM: "Did you get a slot?" and Ask for a
+ * slot). Later hours before the first row starts are in no row of either
+ * table.
+ */
+export const LATE_NIGHT_UNTIL = 2;
+
+/**
+ * Whose night an hour is: 12 am and 1 am of a calendar date belong to the
+ * evening of the date before. Give it the calendar date of the start.
+ */
+export function nightOf(date: string, hour: number): string {
+  return hour < LATE_NIGHT_UNTIL ? new Date(Date.parse(`${date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10) : date;
+}
+
+/** Saturday or Sunday: the day the weekend prices are for. */
+export function weekendDate(date: string): boolean {
+  const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return dow === 0 || dow === 6;
+}
+
+/** A listed price per hour for a time: one price (min = max) or a lowest and highest. `from` says whether the table has that time ("time") or only the turf's whole range could be read ("range"). */
+export type ListedAt = { min: number; max: number; from: "time" | "range" };
+
+const rowAt = <T extends { from: number; to: number }>(rows: readonly T[], hour: number): T | null => {
+  // 12 am and 1 am read the last row (the evening or the night they end).
+  const h = hour < LATE_NIGHT_UNTIL ? 23 : hour;
+  return rows.find((r) => h >= r.from && h < r.to) ?? null;
+};
+
+/**
+ * The turf's listed price per hour at a time, by the page's own Pricing
+ * table and nothing else: the listed bands where the page shows those
+ * (showsPriceBands), else the six columns. `weekend` is for the day whose
+ * night the hour is (nightOf, weekendDate); `hour` is 0 to 23.
+ *
+ * "time": the table has a price for that time and day type. With bands it
+ * can be a lowest and highest, one per format (5-a-side, 7-a-side), since
+ * the time alone does not say which ground. "range": the table has no
+ * price there (a weekend with only weekday prices, an hour in no row), so
+ * this is the turf's lowest to highest listed price, the range its page
+ * and card show. Null: no listed price per hour at all (none listed, or
+ * listed per slot or per person). Reported prices from reviews are never
+ * read.
+ */
+export function listedPriceAt(turf: PricedTurf, at: { weekend: boolean; hour: number }): ListedAt | null {
+  const day = at.weekend ? "weekend" : "weekday";
+  if (showsPriceBands(turf)) {
+    const band = rowAt(BAND_TIMES, at.hour)?.band;
+    const here = (turf.pricing_bands ?? [])
+      .filter((b) => b?.band === band && (b.days === day || b.days === "all"))
+      .map((b) => positivePrice(b.price_per_hour))
+      .filter((p): p is number => p != null);
+    if (here.length) return { min: Math.min(...here), max: Math.max(...here), from: "time" };
+    const all = getBandPriceRange(turf);
+    return all ? { ...all, from: "range" } : null;
+  }
+  // The six columns are per hour unless the listing says per slot or per person.
+  if (turf.price_unit === "per_slot" || turf.price_unit === "per_person") return null;
+  const slot = rowAt(SLOT_TIMES, at.hour)?.slot;
+  const cell = slot ? positivePrice(turf[`${at.weekend ? "weekend_" : ""}${slot}_price`]) : null;
+  if (cell != null) return { min: cell, max: cell, from: "time" };
+  const min = getMinimumPrice(turf);
+  const max = getMaximumPrice(turf);
+  return min != null && max != null ? { min, max, from: "range" } : null;
 }

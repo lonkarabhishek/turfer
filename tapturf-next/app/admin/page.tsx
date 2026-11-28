@@ -46,6 +46,8 @@ import { ReviewFlags } from "@/components/admin/ReviewFlags";
 import { EmailsCard } from "@/components/admin/EmailsCard";
 import { OwnerOutreach } from "@/components/admin/OwnerOutreach";
 import { OutcomeTotals } from "@/components/admin/OutcomeTotals";
+import { GrowthNumbers } from "@/components/admin/GrowthNumbers";
+import { GROWTH_ID, GROWTH_INTRO, GROWTH_LINE, GROWTH_TITLE } from "@/lib/admin/growth";
 import { MapSection, mapSummary } from "@/components/admin/MapUsage";
 import { TrafficSection, trafficSummary } from "@/components/admin/Traffic";
 
@@ -108,6 +110,12 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <AdminSection id="traffic" title="Traffic" height={140} summary={trafficSummary}>
         <TrafficSection />
       </AdminSection>
+
+      {/* People, contacts and bookings (20261130_growth_numbers.sql): unique turf contacts, repeat users, the bookings TapTurf can see and an estimate of their value; people are accounts, never visits (read in the browser, once opened). */}
+      <Fold id={GROWTH_ID} title={GROWTH_TITLE} line={GROWTH_LINE}>
+        <p className="text-[13px] text-primary-500 mb-3">{GROWTH_INTRO}</p>
+        <GrowthNumbers />
+      </Fold>
 
       {/* The people who signed up and what each did, open: the chart above the list folds away (SignupsTrend). */}
       <AdminSection id="signups" title="Users and what they did" height={420} summary={signupsSummary} open>

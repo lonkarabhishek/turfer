@@ -136,7 +136,8 @@ function toWindow(key: WindowKey, raw: unknown): OutcomeWindow {
   };
 }
 
-function turfRef(x: Record<string, unknown>, idKey: "id" | "turf"): TurfRef | null {
+/** A turf as an owner function sends it ({id or turf, name, city, slug, active}) as the cards name and link it; null without a turf id. */
+export function turfRef(x: Record<string, unknown>, idKey: "id" | "turf"): TurfRef | null {
   const id = x[idKey];
   if (typeof id !== "string" || !UUID.test(id)) return null;
   const name = str(x.name);

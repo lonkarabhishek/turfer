@@ -12,6 +12,7 @@ import {
   reportedMentions,
   showsNoPrices,
   showsPriceBands,
+  SLOT_TIMES,
 } from "@/lib/utils/prices";
 import { CLAIM_COPY } from "@/lib/turfPage/claimPrompts";
 import { publicLink } from "@/lib/utils/bookingApps";
@@ -77,11 +78,8 @@ export function TurfPricing({
 
   // Only real, positive prices make a row or a cell; a missing slot is a
   // dash with no unit, never "N/A/hr" or ₹0.
-  const rows = [
-    { slot: "Morning", emoji: "🌅", time: "6AM – 12PM", weekday: turf.morning_price, weekend: turf.weekend_morning_price },
-    { slot: "Afternoon", emoji: "☀️", time: "12PM – 5PM", weekday: turf.afternoon_price, weekend: turf.weekend_afternoon_price },
-    { slot: "Evening", emoji: "🌙", time: "5PM – Close", weekday: turf.evening_price, weekend: turf.weekend_evening_price },
-  ]
+  // The rows and their times are SLOT_TIMES (lib/utils/prices.ts), which listedPriceAt reads too.
+  const rows = SLOT_TIMES.map((s) => ({ slot: s.name, emoji: s.emoji, time: s.time, weekday: turf[`${s.slot}_price`], weekend: turf[`weekend_${s.slot}_price`] }))
     .map((r) => ({ ...r, weekday: positivePrice(r.weekday), weekend: positivePrice(r.weekend) }))
     .filter((r) => r.weekday != null || r.weekend != null);
   // Weekend-only turfs (20 on 26 Oct) get a Weekend column alone, not a

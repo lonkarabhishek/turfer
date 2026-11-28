@@ -261,8 +261,8 @@ export function OutcomeTotals() {
   );
 }
 
-/** A turf's name, linked to its page when it has one; long names wrap. */
-function TurfName({ t }: { t: TurfRef }) {
+/** A turf's name, linked to its page when it has one; long names wrap. (GrowthNumbers.tsx lists turfs with it too.) */
+export function TurfName({ t }: { t: TurfRef }) {
   const state = turfState(t);
   const cls = "text-[14px] font-semibold leading-snug text-primary-900 [overflow-wrap:anywhere]";
   return (

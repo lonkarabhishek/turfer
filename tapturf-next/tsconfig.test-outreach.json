@@ -12,5 +12,5 @@
     "types": ["node"],
     "paths": { "@/*": ["./*"] }
   },
-  "files": ["lib/report/report.test.ts", "lib/admin/outreach.test.ts", "lib/admin/outcomeTotals.test.ts"]
+  "files": ["lib/report/report.test.ts", "lib/admin/outreach.test.ts", "lib/admin/outcomeTotals.test.ts", "lib/admin/growth.test.ts"]
 }
